@@ -1,0 +1,20 @@
+[
+  {
+    "packageName": "com.tjplugins.multimovies",
+    "name": "MultiMovies Next",
+    "version": "2.0.0",
+    "author": "Skywave22",
+    "baseUrl": "https://multimovies.cyou",
+    "domains": [
+      {
+        "name": "multimovies.cyou",
+        "url": "https://multimovies.cyou"
+      },
+      {
+        "name": "multimovie.bond",
+        "url": "https://multimovie.bond"
+      }
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.tjplugins.multimovies.sky"
+  }
+]
