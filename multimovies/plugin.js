@@ -164,15 +164,26 @@
                 // DOOPLAY FALLBACK
                 const html = await fetchHtml(`${baseUrl}/?s=${encodeURIComponent(query)}`);
                 const results = [];
-                let regex = /<div class="result-item">.*?<div class="image">\s*<div class="thumbnail">\s*<a href="([^"]+)"><img[^>]*src="([^"]+)"[^>]*>.*?<div class="title">\s*<a href="[^"]+">([^<]+)<\/a>/gs;
+                let regex = /<div class="result-item">.*?<div class="image">\s*<div class="thumbnail[^>]*>\s*<a href="([^"]+)"><img[^>]*data-src="([^"]+)"[^>]*>.*?<div class="title">\s*<a href="[^"]+">([^<]+)<\/a>/gs;
                 let m;
                 while ((m = regex.exec(html)) !== null) {
                     results.push(new MultimediaItem({
                         title: String(m[3].trim()),
                         url: String(m[1]),
-                        posterUrl: String(m[2]),
+                        posterUrl: String(m[2]).replace("w92", "w342"),
                         type: m[1].includes("movies") ? 'movie' : 'series'
                     }));
+                }
+                if (results.length === 0) {
+                    regex = /<div class="result-item">.*?<div class="image">\s*<div class="thumbnail[^>]*>\s*<a href="([^"]+)"><img[^>]*src="([^"]+)"[^>]*>.*?<div class="title">\s*<a href="[^"]+">([^<]+)<\/a>/gs;
+                    while ((m = regex.exec(html)) !== null) {
+                        results.push(new MultimediaItem({
+                            title: String(m[3].trim()),
+                            url: String(m[1]),
+                            posterUrl: String(m[2]).replace("w92", "w342"),
+                            type: m[1].includes("movies") ? 'movie' : 'series'
+                        }));
+                    }
                 }
                 return cb({ success: true, data: results });
             }
@@ -236,11 +247,11 @@
 
                 let posterMatch = /<div class="poster">\s*<img[^>]*src="([^"]+)"/.exec(html) || /<meta property="og:image" content="([^"]+)"/.exec(html);
                 let posterUrl = posterMatch ? posterMatch[1] : "";
-                if(posterUrl) posterUrl = posterUrl.replace("w185", "w780").replace("w300", "w780").replace(/(\r\n|\n|\r)/gm, "");
+                if(posterUrl) posterUrl = posterUrl.replace("w185", "w780").replace("w300", "w780");
 
                 let bannerMatch = /<div class='g-item'>\s*<a[^>]*href='([^']+)'/.exec(html) || /<div class="g-item">\s*<a[^>]*href="([^"]+)"/.exec(html) || /<img[^>]*src="([^"]+)"[^>]*class="wp-post-image"/.exec(html);
                 let bannerUrl = bannerMatch ? bannerMatch[1] : posterUrl;
-                if(bannerUrl) bannerUrl = bannerUrl.replace("w185", "w1280").replace("w300", "w1280").replace("w780", "w1280").replace(/(\r\n|\n|\r)/gm, "");
+                if(bannerUrl) bannerUrl = bannerUrl.replace("w185", "w1280").replace("w300", "w1280").replace("w780", "w1280");
 
                 let descMatch = /<div class="wp-content">\s*<p>([\s\S]*?)<\/p>/.exec(html);
                 let description = descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim() : "";
