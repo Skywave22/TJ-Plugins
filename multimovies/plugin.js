@@ -247,11 +247,11 @@
 
                 let posterMatch = /<div class="poster">\s*<img[^>]*src="([^"]+)"/.exec(html) || /<meta property="og:image" content="([^"]+)"/.exec(html);
                 let posterUrl = posterMatch ? posterMatch[1] : "";
-                if(posterUrl) posterUrl = posterUrl.replace("w185", "w780").replace("w300", "w780");
+                if(posterUrl) posterUrl = posterUrl.replace("w185", "w780").replace("w300", "w780").replace(/(\r\n|\n|\r)/gm, "");
 
                 let bannerMatch = /<div class='g-item'>\s*<a[^>]*href='([^']+)'/.exec(html) || /<div class="g-item">\s*<a[^>]*href="([^"]+)"/.exec(html) || /<img[^>]*src="([^"]+)"[^>]*class="wp-post-image"/.exec(html);
                 let bannerUrl = bannerMatch ? bannerMatch[1] : posterUrl;
-                if(bannerUrl) bannerUrl = bannerUrl.replace("w185", "w1280").replace("w300", "w1280").replace("w780", "w1280");
+                if(bannerUrl) bannerUrl = bannerUrl.replace("w185", "w1280").replace("w300", "w1280").replace("w780", "w1280").replace(/(\r\n|\n|\r)/gm, "");
 
                 let descMatch = /<div class="wp-content">\s*<p>([\s\S]*?)<\/p>/.exec(html);
                 let description = descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim() : "";
