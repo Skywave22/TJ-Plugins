@@ -236,20 +236,23 @@
 
                 let posterMatch = /<div class="poster">\s*<img[^>]*src="([^"]+)"/.exec(html) || /<meta property="og:image" content="([^"]+)"/.exec(html);
                 let posterUrl = posterMatch ? posterMatch[1] : "";
-                if(posterUrl) posterUrl = posterUrl.replace("w185", "w780").replace("w300", "w780");
+                if(posterUrl) posterUrl = posterUrl.replace("w185", "w780").replace("w300", "w780").replace(/(\r\n|\n|\r)/gm, "");
 
-                let bannerMatch = /<div class='g-item'>\s*<a href='([^']+)'/.exec(html) || /<img[^>]*src="([^"]+)"[^>]*class="wp-post-image"/.exec(html);
+                let bannerMatch = /<div class='g-item'>\s*<a[^>]*href='([^']+)'/.exec(html) || /<div class="g-item">\s*<a[^>]*href="([^"]+)"/.exec(html) || /<img[^>]*src="([^"]+)"[^>]*class="wp-post-image"/.exec(html);
                 let bannerUrl = bannerMatch ? bannerMatch[1] : posterUrl;
-                if(bannerUrl) bannerUrl = bannerUrl.replace("w185", "w1280").replace("w300", "w1280").replace("w780", "w1280");
+                if(bannerUrl) bannerUrl = bannerUrl.replace("w185", "w1280").replace("w300", "w1280").replace("w780", "w1280").replace(/(\r\n|\n|\r)/gm, "");
 
                 let descMatch = /<div class="wp-content">\s*<p>([\s\S]*?)<\/p>/.exec(html);
                 let description = descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim() : "";
-                if(!description || description.includes("Multimovies")) description = "";
+                if(!description || description.includes("Multimovies")) {
+                    let descMatchAlt = /<meta property="og:description" content="([^"]+)"/.exec(html);
+                    description = descMatchAlt ? descMatchAlt[1].replace("Multimovies Official Multimovies Website: Your Premier Hub for Streaming Movies, TV Shows, and Cartoons.", "").trim() : "";
+                }
 
-                let yearMatch = /<span class="date">.*?(\d{4}).*?<\/span>/.exec(html);
+                let yearMatch = /<span class="date">.*?(\d{4}).*?<\/span>/.exec(html) || /<span class="date">\s*(\d{4})\s*<\/span>/.exec(html) || /<span class="wdate">(\d{4})<\/span>/.exec(html);
                 let year = yearMatch ? parseInt(yearMatch[1]) : undefined;
                 
-                let ratingMatch = /<span class="valor">\s*<strong>([^<]+)<\/strong>/.exec(html) || /<b id="repimdb">\s*<strong>([^<]+)<\/strong>/.exec(html);
+                let ratingMatch = /<span class="valor">\s*<strong>([^<]+)<\/strong>/.exec(html) || /<b id="repimdb">.*?<strong>([^<]+)<\/strong>/.exec(html);
                 let score = ratingMatch ? parseFloat(ratingMatch[1]) : undefined;
 
                 const episodes = [];
