@@ -1,10 +1,20 @@
 [
   {
-    "packageName": "com.tjplugins.multimovies",
-    "name": "MultiMovies Next",
-    "version": "2.0.0",
-    "author": "Skywave22",
+    "packageName": "com.tjplugins.repo.multimovies",
+    "name": "MultiMovies",
+    "version": 1,
     "baseUrl": "https://multimovies.cyou",
+    "description": "MultiMovies Next.js parser for SkyStream Gen 2",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "TV Shows"
+    ],
     "domains": [
       {
         "name": "multimovies.cyou",
@@ -15,6 +25,6 @@
         "url": "https://multimovie.bond"
       }
     ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.tjplugins.multimovies.sky"
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.tjplugins.repo.multimovies.sky"
   }
 ]
