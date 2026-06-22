@@ -2,8 +2,8 @@
   {
     "packageName": "com.tjplugins.repo.multimovies",
     "name": "MultiMovies",
-    "version": 2,
-    "baseUrl": "https://multimovies.cyou",
+    "version": 3,
+    "baseUrl": "https://multimovies.makeup",
     "description": "MultiMovies parsing engine (NextJS & Dooplay)",
     "authors": [
       "Skywave22"
