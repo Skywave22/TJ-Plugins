@@ -99,9 +99,13 @@
                 const data = {};
                 const html = await fetchHtml(baseUrl);
                 if (!html) return cb({ success: false, message: "Site blocked or down." });
-                
+                if (html.length < 5000 && html.includes("Cloudflare")) {
+                    return cb({ success: false, message: "Cloudflare challenge detected. Please try another mirror." });
+                }
+
                 const items = [];
-                const regex = /<article[^>]*>.*?<div class="poster">\s*<img src="([^"]+)"[^>]*>.*?<div class="data">\s*<h3><a href="([^"]+)">([^<]+)<\/a><\/h3>/gs;
+                // MultiMovies makeup recently updated to Lazy Load images using data-src instead of src.
+                let regex = /<article[^>]*>.*?<div class="poster">\s*<img[^>]*data-src="([^"]+)"[^>]*>.*?<div class="data">\s*<h3><a href="([^"]+)">([^<]+)<\/a><\/h3>/gs;
                 let m;
                 while ((m = regex.exec(html)) !== null) {
                     const posterUrl = m[1];
@@ -114,6 +118,23 @@
                         posterUrl: posterUrl,
                         type: isMovie ? 'movie' : 'series'
                     }));
+                }
+                
+                // Fallback for standard src if lazy load didn't catch
+                if (items.length === 0) {
+                    regex = /<article[^>]*>.*?<div class="poster">\s*<img[^>]*src="([^"]+)"[^>]*>.*?<div class="data">\s*<h3><a href="([^"]+)">([^<]+)<\/a><\/h3>/gs;
+                    while ((m = regex.exec(html)) !== null) {
+                        const posterUrl = m[1];
+                        const itemUrl = m[2];
+                        const title = m[3].trim();
+                        const isMovie = itemUrl.includes("movies");
+                        items.push(new MultimediaItem({
+                            title: title,
+                            url: itemUrl,
+                            posterUrl: posterUrl,
+                            type: isMovie ? 'movie' : 'series'
+                        }));
+                    }
                 }
                 
                 if (items.length > 0) {
@@ -150,7 +171,7 @@
                 // DOOPLAY FALLBACK
                 const html = await fetchHtml(`${baseUrl}/?s=${encodeURIComponent(query)}`);
                 const results = [];
-                const regex = /<div class="result-item">.*?<div class="image">\s*<div class="thumbnail">\s*<a href="([^"]+)"><img src="([^"]+)"[^>]*>.*?<div class="title">\s*<a href="[^"]+">([^<]+)<\/a>.*?<span class="year">([^<]*)<\/span>/gs;
+                const regex = /<div class="result-item">.*?<div class="image">\s*<div class="thumbnail">\s*<a href="([^"]+)"><img[^>]*src="([^"]+)"[^>]*>.*?<div class="title">\s*<a href="[^"]+">([^<]+)<\/a>.*?<span class="year">([^<]*)<\/span>/gs;
                 let m;
                 while ((m = regex.exec(html)) !== null) {
                     const itemUrl = m[1];
@@ -216,15 +237,15 @@
                 // DOOPLAY FALLBACK
                 const html = await fetchHtml(url);
                 if (!html) return cb({ success: false, message: "Site blocked." });
-                const titleMatch = /<div class="sheader">\s*<div class="data">\s*<h1>([^<]+)<\/h1>/.exec(html);
+                const titleMatch = /<h1>([^<]+)<\/h1>/.exec(html);
                 const title = titleMatch ? titleMatch[1].trim() : "Unknown";
                 
                 // Parse episodes if it's a TV show
                 const episodes = [];
                 if (url.includes("tvshows")) {
-                    const seasonBlocks = html.split('class="episodios"');
+                    const seasonBlocks = html.split("class='episodios'");
                     for (let s = 1; s < seasonBlocks.length; s++) {
-                        const epRegex = /<div class="episodiotitle">\s*<a href="([^"]+)">([^<]+)<\/a>/g;
+                        const epRegex = /<div class='episodiotitle'>\s*<a href='([^']+)'>([^<]+)<\/a>/g;
                         let epMatch;
                         let eNum = 1;
                         while ((epMatch = epRegex.exec(seasonBlocks[s])) !== null) {
