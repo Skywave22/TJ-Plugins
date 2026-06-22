@@ -56,12 +56,16 @@
 
     // --- HTML / DOOPLAY FALLBACK SCRAPING ---
     async function fetchHtml(url) {
-        if (typeof http_get !== 'undefined') {
-            const res = await http_get(url, { "User-Agent": USER_AGENT });
-            return res.body || "";
-        } else if (typeof fetch !== 'undefined') {
-            const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
-            return await res.text();
+        try {
+            if (typeof http_get !== 'undefined') {
+                const res = await http_get(url, { "User-Agent": USER_AGENT });
+                return res.body || "";
+            } else if (typeof fetch !== 'undefined') {
+                const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+                return await res.text();
+            }
+        } catch (e) {
+            throw new Error("Connection Failed: " + e.message);
         }
         return "";
     }
@@ -70,7 +74,6 @@
         try {
             const baseUrl = manifest.baseUrl;
 
-            // If the mirror is .cyou or .bond, it uses NextJS. Otherwise it uses Dooplay.
             if (baseUrl.includes(".cyou") || baseUrl.includes(".bond")) {
                 const fullText = await fetchNextHydration(baseUrl);
                 if (!fullText) return cb({ success: false, message: "Site blocked or Cloudflare challenge active." });
@@ -104,35 +107,25 @@
                 }
 
                 const items = [];
-                // MultiMovies makeup recently updated to Lazy Load images using data-src instead of src.
                 let regex = /<article[^>]*>.*?<div class="poster">\s*<img[^>]*data-src="([^"]+)"[^>]*>.*?<div class="data">\s*<h3><a href="([^"]+)">([^<]+)<\/a><\/h3>/gs;
                 let m;
                 while ((m = regex.exec(html)) !== null) {
-                    const posterUrl = m[1];
-                    const itemUrl = m[2];
-                    const title = m[3].trim();
-                    const isMovie = itemUrl.includes("movies");
                     items.push(new MultimediaItem({
-                        title: title,
-                        url: itemUrl,
-                        posterUrl: posterUrl,
-                        type: isMovie ? 'movie' : 'series'
+                        title: String(m[3].trim()),
+                        url: String(m[2]),
+                        posterUrl: String(m[1]),
+                        type: m[2].includes("movies") ? 'movie' : 'series'
                     }));
                 }
                 
-                // Fallback for standard src if lazy load didn't catch
                 if (items.length === 0) {
                     regex = /<article[^>]*>.*?<div class="poster">\s*<img[^>]*src="([^"]+)"[^>]*>.*?<div class="data">\s*<h3><a href="([^"]+)">([^<]+)<\/a><\/h3>/gs;
                     while ((m = regex.exec(html)) !== null) {
-                        const posterUrl = m[1];
-                        const itemUrl = m[2];
-                        const title = m[3].trim();
-                        const isMovie = itemUrl.includes("movies");
                         items.push(new MultimediaItem({
-                            title: title,
-                            url: itemUrl,
-                            posterUrl: posterUrl,
-                            type: isMovie ? 'movie' : 'series'
+                            title: String(m[3].trim()),
+                            url: String(m[2]),
+                            posterUrl: String(m[1]),
+                            type: m[2].includes("movies") ? 'movie' : 'series'
                         }));
                     }
                 }
@@ -171,18 +164,14 @@
                 // DOOPLAY FALLBACK
                 const html = await fetchHtml(`${baseUrl}/?s=${encodeURIComponent(query)}`);
                 const results = [];
-                const regex = /<div class="result-item">.*?<div class="image">\s*<div class="thumbnail">\s*<a href="([^"]+)"><img[^>]*src="([^"]+)"[^>]*>.*?<div class="title">\s*<a href="[^"]+">([^<]+)<\/a>.*?<span class="year">([^<]*)<\/span>/gs;
+                let regex = /<div class="result-item">.*?<div class="image">\s*<div class="thumbnail">\s*<a href="([^"]+)"><img[^>]*src="([^"]+)"[^>]*>.*?<div class="title">\s*<a href="[^"]+">([^<]+)<\/a>/gs;
                 let m;
                 while ((m = regex.exec(html)) !== null) {
-                    const itemUrl = m[1];
-                    const posterUrl = m[2];
-                    const title = m[3].trim();
-                    const isMovie = itemUrl.includes("movies");
                     results.push(new MultimediaItem({
-                        title: title,
-                        url: itemUrl,
-                        posterUrl: posterUrl,
-                        type: isMovie ? 'movie' : 'series'
+                        title: String(m[3].trim()),
+                        url: String(m[1]),
+                        posterUrl: String(m[2]),
+                        type: m[1].includes("movies") ? 'movie' : 'series'
                     }));
                 }
                 return cb({ success: true, data: results });
@@ -237,10 +226,32 @@
                 // DOOPLAY FALLBACK
                 const html = await fetchHtml(url);
                 if (!html) return cb({ success: false, message: "Site blocked." });
-                const titleMatch = /<h1>([^<]+)<\/h1>/.exec(html);
-                const title = titleMatch ? titleMatch[1].trim() : "Unknown";
                 
-                // Parse episodes if it's a TV show
+                let titleMatch = /<h1>([^<]+)<\/h1>/.exec(html);
+                let title = titleMatch ? titleMatch[1].trim() : "";
+                if(!title || title === "Unknown") {
+                    titleMatch = /<title>([^<]+)<\/title>/.exec(html);
+                    title = titleMatch ? titleMatch[1].split("-")[0].replace("Multimovies", "").replace("|", "").trim() : "Unknown";
+                }
+
+                let posterMatch = /<div class="poster">\s*<img[^>]*src="([^"]+)"/.exec(html) || /<meta property="og:image" content="([^"]+)"/.exec(html);
+                let posterUrl = posterMatch ? posterMatch[1] : "";
+                if(posterUrl) posterUrl = posterUrl.replace("w185", "w780").replace("w300", "w780");
+
+                let bannerMatch = /<div class='g-item'>\s*<a href='([^']+)'/.exec(html) || /<img[^>]*src="([^"]+)"[^>]*class="wp-post-image"/.exec(html);
+                let bannerUrl = bannerMatch ? bannerMatch[1] : posterUrl;
+                if(bannerUrl) bannerUrl = bannerUrl.replace("w185", "w1280").replace("w300", "w1280").replace("w780", "w1280");
+
+                let descMatch = /<div class="wp-content">\s*<p>([\s\S]*?)<\/p>/.exec(html);
+                let description = descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim() : "";
+                if(!description || description.includes("Multimovies")) description = "";
+
+                let yearMatch = /<span class="date">.*?(\d{4}).*?<\/span>/.exec(html);
+                let year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+                
+                let ratingMatch = /<span class="valor">\s*<strong>([^<]+)<\/strong>/.exec(html) || /<b id="repimdb">\s*<strong>([^<]+)<\/strong>/.exec(html);
+                let score = ratingMatch ? parseFloat(ratingMatch[1]) : undefined;
+
                 const episodes = [];
                 if (url.includes("tvshows")) {
                     const seasonBlocks = html.split("class='episodios'");
@@ -250,8 +261,8 @@
                         let eNum = 1;
                         while ((epMatch = epRegex.exec(seasonBlocks[s])) !== null) {
                             episodes.push(new Episode({
-                                name: epMatch[2].trim(),
-                                url: epMatch[1],
+                                name: String(epMatch[2].trim()),
+                                url: String(epMatch[1]),
                                 season: s,
                                 episode: eNum++
                             }));
@@ -260,8 +271,13 @@
                 }
 
                 cb({ success: true, data: new MultimediaItem({
-                    title: title,
-                    url: url,
+                    title: String(title),
+                    url: String(url),
+                    posterUrl: String(posterUrl),
+                    bannerUrl: String(bannerUrl),
+                    description: String(description),
+                    year: year,
+                    score: score,
                     type: url.includes("tvshows") ? 'series' : 'movie',
                     episodes: episodes.length > 0 ? episodes : undefined
                 })});
@@ -283,7 +299,6 @@
                     })
                 ] });
             } else {
-                // Dooplay streams fallback using magic WebView
                 cb({ success: true, data: [
                     new StreamResult({
                         url: url,
