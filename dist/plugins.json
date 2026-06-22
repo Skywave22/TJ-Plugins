@@ -2,9 +2,9 @@
   {
     "packageName": "com.tjplugins.repo.multimovies",
     "name": "MultiMovies",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://multimovies.cyou",
-    "description": "MultiMovies Next.js parser for SkyStream Gen 2",
+    "description": "MultiMovies parsing engine (NextJS & Dooplay)",
     "authors": [
       "Skywave22"
     ],
@@ -17,12 +17,8 @@
     ],
     "domains": [
       {
-        "name": "multimovies.cyou",
-        "url": "https://multimovies.cyou"
-      },
-      {
-        "name": "multimovie.bond",
-        "url": "https://multimovie.bond"
+        "name": "multimovies.makeup",
+        "url": "https://multimovies.makeup"
       }
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.tjplugins.repo.multimovies.sky"
