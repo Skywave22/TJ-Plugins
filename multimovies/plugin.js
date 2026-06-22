@@ -70,8 +70,7 @@
         try {
             const baseUrl = manifest.baseUrl;
 
-            // MultiMovies has different branches running on different domains.
-            // If the mirror is .cyou or .bond, it uses NextJS. If it is .makeup or .in, it uses Dooplay.
+            // If the mirror is .cyou or .bond, it uses NextJS. Otherwise it uses Dooplay.
             if (baseUrl.includes(".cyou") || baseUrl.includes(".bond")) {
                 const fullText = await fetchNextHydration(baseUrl);
                 if (!fullText) return cb({ success: false, message: "Site blocked or Cloudflare challenge active." });
@@ -96,11 +95,12 @@
             } 
             
             else {
-                // DOOPLAY FALLBACK (For multimovies.makeup)
+                // DOOPLAY FALLBACK
                 const data = {};
                 const html = await fetchHtml(baseUrl);
+                if (!html) return cb({ success: false, message: "Site blocked or down." });
+                
                 const items = [];
-                // Fallback Regex for Dooplay (like multimovies.makeup)
                 const regex = /<article[^>]*>.*?<div class="poster">\s*<img src="([^"]+)"[^>]*>.*?<div class="data">\s*<h3><a href="([^"]+)">([^<]+)<\/a><\/h3>/gs;
                 let m;
                 while ((m = regex.exec(html)) !== null) {
@@ -213,16 +213,36 @@
                 }
                 return cb({ success: true, data: item });
             } else {
-                // DOOPLAY FALLBACK (Assuming URL is absolute because of getHome logic)
+                // DOOPLAY FALLBACK
                 const html = await fetchHtml(url);
+                if (!html) return cb({ success: false, message: "Site blocked." });
                 const titleMatch = /<div class="sheader">\s*<div class="data">\s*<h1>([^<]+)<\/h1>/.exec(html);
                 const title = titleMatch ? titleMatch[1].trim() : "Unknown";
                 
-                // Extremely simple fallback.
+                // Parse episodes if it's a TV show
+                const episodes = [];
+                if (url.includes("tvshows")) {
+                    const seasonBlocks = html.split('class="episodios"');
+                    for (let s = 1; s < seasonBlocks.length; s++) {
+                        const epRegex = /<div class="episodiotitle">\s*<a href="([^"]+)">([^<]+)<\/a>/g;
+                        let epMatch;
+                        let eNum = 1;
+                        while ((epMatch = epRegex.exec(seasonBlocks[s])) !== null) {
+                            episodes.push(new Episode({
+                                name: epMatch[2].trim(),
+                                url: epMatch[1],
+                                season: s,
+                                episode: eNum++
+                            }));
+                        }
+                    }
+                }
+
                 cb({ success: true, data: new MultimediaItem({
                     title: title,
                     url: url,
-                    type: url.includes("movies") ? 'movie' : 'series'
+                    type: url.includes("tvshows") ? 'series' : 'movie',
+                    episodes: episodes.length > 0 ? episodes : undefined
                 })});
             }
         } catch(e) {
