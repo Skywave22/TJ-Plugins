@@ -30,5 +30,24 @@
       }
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.tjplugins.repo.multimovies.sky"
+  },
+  {
+    "packageName": "dev.skystream.screenscape",
+    "name": "Screenscape",
+    "version": 1,
+    "baseUrl": "https://main.screenscape.me",
+    "description": "Screenscape - Movies & TV Shows. TMDB-powered browsing with the official Screenscape embed player.",
+    "authors": [
+      "Developer"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "Movies",
+      "TV Shows"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.skystream.screenscape.sky"
   }
 ]
