@@ -240,7 +240,13 @@
     }
 
     // Inlined HubCloud extractor (ported from skystream-extractors hub_cloud.ts).
-    // Resolves a hubcloud "drive" page into direct server download links.
+    // Resolves a hubcloud "drive" page into direct, PLAYABLE server links.
+    // HubCloud exposes several "servers", but only some are directly playable:
+    //   - FSL / FSLv2 (cloudflarestorage.com, cdn.fsl-buckets, cdn.*.buzz) = direct .mkv  (KEEP, priority)
+    //   - Server:10Gbps (pixel.hubcloud.cx / *.workers.dev)                = often 500/redirect (try, else drop)
+    //   - Buzz Server (bzzhr.co)                                           = shortlink page (try to resolve)
+    //   - PixelServer (pixeldrain.dev/u/..)                                = frequently dead/decoy (drop unless valid)
+    //   - "Download From Telegram" (hubcloud.cx/tg/go)                     = not a video (drop)
     async function hubCloudExtract(url) {
         const results = [];
         const res = await http_get(url, headers);
@@ -248,7 +254,8 @@
 
         let finalBody = res.body;
 
-        // Step 1: follow the "Generate Direct Download Link" button if present.
+        // Step 1: follow the "Generate Direct Download Link" button to the final
+        // page (usually gamerxyt.com/hubcloud.php) that lists the real servers.
         const dl = await parse_html(res.body, "a#download", "href");
         if (dl && dl.length && dl[0].attr) {
             let nextUrl = dl[0].attr;
@@ -259,19 +266,89 @@
             if (nextRes && nextRes.status === 200) finalBody = nextRes.body;
         }
 
-        // Step 2: extract the server download links (a.btn) from the final page.
+        // Step 2: read every server link (a.btn) with its label.
         const serverLinks = await parse_html(finalBody, "a.btn", "href");
+        const candidates = [];
         for (const link of serverLinks) {
-            const href = link.attr;
-            const text = (link.text || "HubCloud Server").trim();
-            if (!href || href.startsWith("/") || href.includes("winexch") || href.includes("tinyurl")) continue;
-            results.push({
-                url: href,
-                source: text.replace(/download/ig, "").replace(/[\[\]]/g, "").trim() || "HubCloud",
-                headers: { Referer: "https://hubcloud.club" }
-            });
+            let href = link.attr;
+            const label = (link.text || "").replace(/downl?oad/ig, "").replace(/[\[\]]/g, "").trim();
+            if (!href || href.startsWith("/")) continue;
+            // Drop known non-playable servers outright.
+            if (/winexch|tinyurl|\/tg\/go|t\.me|telegram/i.test(href)) continue;
+            candidates.push({ href, label });
         }
+
+        // Step 3: classify + resolve. Direct-file hosts are ranked first.
+        const isDirect = (u) =>
+            /cloudflarestorage\.com|fsl-buckets|fukggl|\.buzz\/|\/[^?]+\.(mkv|mp4|avi|mov)(\?|$)/i.test(u);
+
+        for (const c of candidates) {
+            let finalUrl = c.href;
+            let ok = false;
+
+            if (isDirect(finalUrl)) {
+                ok = true;                                   // FSL / FSLv2 â€” already a direct file
+            } else if (/bzzhr\.co/i.test(finalUrl)) {
+                const r = await resolveBuzz(finalUrl);       // Buzz shortlink -> direct file
+                if (r) { finalUrl = r; ok = true; }
+            } else if (/pixel\.hubcloud|workers\.dev/i.test(finalUrl)) {
+                const r = await resolveRedirect(finalUrl);   // 10Gbps -> follow redirect if alive
+                if (r && isDirect(r)) { finalUrl = r; ok = true; }
+            } else if (/pixeldrain/i.test(finalUrl)) {
+                const r = await resolvePixeldrain(finalUrl); // pixeldrain -> /api/file/<id>?download
+                if (r) { finalUrl = r; ok = true; }
+            }
+
+            if (ok) {
+                results.push({
+                    url: finalUrl,
+                    source: c.label || "HubCloud",
+                    _direct: isDirect(finalUrl),
+                    headers: { Referer: "https://hubcloud.club", "User-Agent": headers["User-Agent"] }
+                });
+            }
+        }
+
+        // Direct-file servers first (most reliable for the player).
+        results.sort((a, b) => (b._direct ? 1 : 0) - (a._direct ? 1 : 0));
+        results.forEach(r => { delete r._direct; });
         return results;
+    }
+
+    // Resolve a bzzhr.co "Buzz" shortlink page to a direct file URL.
+    async function resolveBuzz(url) {
+        try {
+            const res = await http_get(url, { ...headers, Referer: "https://hubcloud.club" });
+            if (!res || !res.body) return null;
+            const m = res.body.match(/https?:\/\/[^"'\s]+\.(?:mkv|mp4|avi|mov)[^"'\s]*/i) ||
+                      res.body.match(/(?:window\.location(?:\.href)?\s*=\s*|href=)["']([^"']+)["']/i);
+            if (m) return m[1] || m[0];
+        } catch (e) {}
+        return null;
+    }
+
+    // Follow a redirecting "server" page (10Gbps) one hop; return final URL if alive.
+    async function resolveRedirect(url) {
+        try {
+            const res = await http_get(url, { ...headers, Referer: "https://hubcloud.club" });
+            if (!res) return null;
+            const loc = res.headers && (res.headers.location || res.headers.Location);
+            if (loc) return loc;
+            const m = (res.body || "").match(/https?:\/\/[^"'\s]+\.(?:mkv|mp4)[^"'\s]*/i);
+            return m ? m[0] : null;
+        } catch (e) { return null; }
+    }
+
+    // Convert a pixeldrain view URL to its direct download endpoint (validate first).
+    async function resolvePixeldrain(url) {
+        try {
+            const id = (url.match(/pixeldrain\.\w+\/u\/([A-Za-z0-9]+)/) || [])[1];
+            if (!id) return null;
+            // Validate the file exists (many hubcloud pixeldrain links are decoys/404).
+            const info = await http_get(`https://pixeldrain.com/api/file/${id}/info`, headers);
+            if (!info || info.status !== 200 || /"success"\s*:\s*false/.test(info.body || "")) return null;
+            return `https://pixeldrain.com/api/file/${id}?download`;
+        } catch (e) { return null; }
     }
 
     /* --------------------- kmhd.eu shortener extractor ------------------ */
