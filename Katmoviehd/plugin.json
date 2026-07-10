@@ -1,0 +1,18 @@
+{
+  "packageName": "dev.skystream.katmoviehd",
+  "name": "KatMovieHD",
+  "version": 1,
+  "baseUrl": "https://new.katmoviehd.top",
+  "description": "KatMovieHD plugin for SkyStream - Movies & Web Series (Hindi Dual-Audio). Resolves HubCloud links.",
+  "authors": [
+    "Developer"
+  ],
+  "languages": [
+    "hi",
+    "en"
+  ],
+  "categories": [
+    "Movies",
+    "Series"
+  ]
+}
