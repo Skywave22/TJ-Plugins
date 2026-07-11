@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "packageName": "dev.mega.allinone",
+    "name": "MegaCinema - 5 Sites in 1",
+    "version": 1,
+    "baseUrl": "https://popcornmovies.io",
+    "description": "ONE PLUGIN - 5 Sites: PopcornMovies + Cineby + ZStream + PrimeShows + FireFlix | TMDB + 11 VidSrc sources aggregated | Auto fallback",
+    "authors": [
+      "MegaDev"
+    ],
+    "languages": [
+      "en"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "domains": [
+      {
+        "name": "popcornmovies.io",
+        "url": "https://popcornmovies.io"
+      },
+      {
+        "name": "cineby.at",
+        "url": "https://www.cineby.at"
+      },
+      {
+        "name": "zstream.mov",
+        "url": "https://zstream.mov"
+      },
+      {
+        "name": "primeshows.org",
+        "url": "https://primeshows.org"
+      },
+      {
+        "name": "fireflix.pages.dev",
+        "url": "https://fireflix.pages.dev"
+      }
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.mega.allinone.sky"
+  }
+]
