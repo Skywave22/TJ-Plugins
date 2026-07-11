@@ -1,4 +1,4 @@
-// Screenscape â€” SkyStream (Sky Gen 2) plugin
+// Screenscape — SkyStream (Sky Gen 2) plugin
 // Movies + TV Shows, TMDB-powered.
 //
 // Architecture:
@@ -74,6 +74,59 @@
     function year(d) { return d && d.length >= 4 ? parseInt(d.slice(0, 4), 10) : undefined; }
     function origin(u) { try { return new URL(u).origin + "/"; } catch (e) { return STREAM_REFERER; } }
 
+    // Derive a quality label ("2160p"/"1080p"/"720p"/"480p") from a release filename.
+    function qualityFromName(name) {
+        if (!name) return "";
+        const m = String(name).match(/(2160p|4k|1440p|1080p|720p|480p|360p)/i);
+        if (!m) return "";
+        return /4k/i.test(m[1]) ? "2160p" : m[1].toLowerCase();
+    }
+
+    // OpenSubtitles (Stremio v3 addon) — returns plain UTF-8 SubRip, player-ready.
+    const SUBS_BASE = "https://opensubtitles-v3.strem.io/subtitles";
+    // ISO-639-2 -> friendly label. Preferred languages appear first in the UI.
+    const LANG_LABELS = {
+        eng: "English", hin: "Hindi", spa: "Spanish", fre: "French", fra: "French",
+        ara: "Arabic", por: "Portuguese", pob: "Portuguese (BR)", ger: "German",
+        deu: "German", ita: "Italian", rus: "Russian", jpn: "Japanese", kor: "Korean",
+        chi: "Chinese", zho: "Chinese", tur: "Turkish", nld: "Dutch", pol: "Polish",
+        swe: "Swedish", ind: "Indonesian", tha: "Thai", vie: "Vietnamese",
+        ben: "Bengali", tam: "Tamil", tel: "Telugu", urd: "Urdu", fas: "Persian", per: "Persian"
+    };
+    const PREFERRED_LANGS = ["eng", "hin", "spa", "ara", "fre", "por", "ger"];
+
+    async function fetchSubtitles(info) {
+        const imdb = info.imdb;
+        if (!imdb) return [];   // subtitles are keyed by IMDB id
+        let path;
+        if (info.mtype === "tv") {
+            path = `series/${imdb}:${info.s || 1}:${info.e || 1}.json`;
+        } else {
+            path = `movie/${imdb}.json`;
+        }
+        const res = await httpGet(`${SUBS_BASE}/${path}`, { "User-Agent": UA }, 2);
+        if (!res || !res.body) return [];
+        const json = safeParse(res.body);
+        const list = (json && json.subtitles) || [];
+
+        // One subtitle per language (first = usually best match), preferred langs first.
+        const byLang = {};
+        for (const s of list) {
+            if (!s || !s.url || !s.lang) continue;
+            if (!byLang[s.lang]) byLang[s.lang] = s.url;
+        }
+        const langs = Object.keys(byLang).sort((a, b) => {
+            const ia = PREFERRED_LANGS.indexOf(a), ib = PREFERRED_LANGS.indexOf(b);
+            if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+            return a.localeCompare(b);
+        });
+        return langs.map(code => ({
+            url: byLang[code],
+            lang: code,
+            label: LANG_LABELS[code] || code.toUpperCase()
+        }));
+    }
+
     function toItem(r, forcedType) {
         const mt = forcedType || r.media_type || (r.title ? "movie" : "tv");
         if (mt !== "movie" && mt !== "tv") return null;
@@ -142,13 +195,14 @@
             if (!id) throw new Error("Missing id");
 
             if (mtype === "movie") {
-                const d = await tmdb(`movie/${id}`, "append_to_response=credits,similar");
+                const d = await tmdb(`movie/${id}`, "append_to_response=credits,similar,external_ids");
                 if (!d) throw new Error("TMDB movie not found");
+                const imdb = d.imdb_id || (d.external_ids && d.external_ids.imdb_id) || "";
                 return cb({
                     success: true,
                     data: new MultimediaItem({
                         title: d.title || d.original_title || "Untitled",
-                        url: JSON.stringify({ id, mtype: "movie" }),
+                        url: JSON.stringify({ id, mtype: "movie", imdb }),
                         posterUrl: poster(d.poster_path),
                         bannerUrl: backdrop(d.backdrop_path),
                         type: "movie",
@@ -162,8 +216,9 @@
                 });
             }
 
-            const d = await tmdb(`tv/${id}`, "append_to_response=credits,similar");
+            const d = await tmdb(`tv/${id}`, "append_to_response=credits,similar,external_ids");
             if (!d) throw new Error("TMDB tv not found");
+            const imdb = (d.external_ids && d.external_ids.imdb_id) || "";
             const seasons = (d.seasons || []).filter(s => s.season_number >= 1 && s.episode_count > 0);
             const seasonData = await Promise.all(seasons.map(s => tmdb(`tv/${id}/season/${s.season_number}`)));
             const episodes = [];
@@ -173,7 +228,7 @@
                 sd.episodes.forEach(ep => {
                     episodes.push(new Episode({
                         name: ep.name || `S${sNum}E${ep.episode_number}`,
-                        url: JSON.stringify({ id, mtype: "tv", s: sNum, e: ep.episode_number }),
+                        url: JSON.stringify({ id, mtype: "tv", s: sNum, e: ep.episode_number, imdb }),
                         season: sNum,
                         episode: ep.episode_number,
                         posterUrl: ep.still_path ? poster(ep.still_path) : poster(d.poster_path),
@@ -227,28 +282,55 @@
                 api += `&season=${info.s || 1}&episode=${info.e || 1}`;
             }
 
-            const res = await httpGet(api, { "User-Agent": UA, "Referer": STREAM_REFERER }, 3);
+            // Fetch streams + subtitles in parallel.
+            const [res, subtitles] = await Promise.all([
+                httpGet(api, { "User-Agent": UA, "Referer": STREAM_REFERER }, 3),
+                fetchSubtitles(info).catch(() => [])
+            ]);
             if (!res || !res.body) throw new Error("Stream API unreachable");
 
             const json = safeParse(res.body);
-            const urls = (json && json.data && json.data.stream_urls) || [];
+            const data = (json && json.data) || {};
+            const urls = data.stream_urls || [];
             if (!urls.length) {
                 return cb({ success: false, errorCode: "NOT_FOUND", message: "No streams available for this title yet." });
             }
 
+            // Quality label derived from the release file name, when present
+            // (e.g. "...1080p...", "...720p..."). This is the true source quality.
+            const fileQuality = qualityFromName(data.file_name);
+
+            // vaplayer returns two kinds of HLS URLs:
+            //   - "/playlist/.../list.m3u8"  -> self-contained media playlist whose
+            //     segments are real .ts (disguised .gif/.png). RELIABLE, plays fine.
+            //   - "/pl/.../master.m3u8"      -> master whose inner segments are
+            //     token-gated ("page-N.html?token=") and return 403 -> endless
+            //     BUFFERING. These are broken from outside the site, so we drop them.
+            const working = urls.filter(u => u && u.indexOf("/playlist/") >= 0);
+            const fallback = urls.filter(u => u && u.indexOf("/playlist/") < 0);
+            const ordered = working.concat(fallback);
+
             const streams = [];
             const seen = {};
-            urls.forEach((u, i) => {
+            let n = 0;
+            ordered.forEach((u) => {
                 if (!u || seen[u]) return;
                 seen[u] = true;
+                const isWorking = u.indexOf("/playlist/") >= 0;
+                if (!isWorking && working.length > 0) return;
+                n++;
+                const q = fileQuality || "Auto";
                 streams.push(new StreamResult({
                     url: u,
-                    quality: "HLS Auto",
-                    source: "Server " + (i + 1),
-                    headers: { "Referer": origin(u), "User-Agent": UA }
+                    source: (isWorking ? "Screenscape" : "Backup") + " " + n + " • " + q + " HLS",
+                    headers: { "Referer": origin(u), "User-Agent": UA },
+                    subtitles: subtitles && subtitles.length ? subtitles : undefined
                 }));
             });
 
+            if (!streams.length) {
+                return cb({ success: false, errorCode: "NOT_FOUND", message: "No playable stream for this title yet." });
+            }
             cb({ success: true, data: streams });
         } catch (e) {
             cb({ success: false, errorCode: "STREAM_ERROR", message: e.message });
