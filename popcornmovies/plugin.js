@@ -266,19 +266,32 @@
             // Shared subtitles for all streams.
             const subtitles = buildSubtitles(json.subtitles);
 
-            // 4) Map sources -> StreamResult, best/most-reliable first.
-            //    Auto HLS is adaptive (best default), then by resolution.
-            const rank = (s) => {
-                const q = String(s.quality || "").toLowerCase();
-                const hls = (s.kind || "").toLowerCase() === "hls";
-                if (q.indexOf("auto") >= 0) return 3000;            // adaptive HLS first
-                if (q.indexOf("2160") >= 0 || q.indexOf("4k") >= 0) return 2160 + (hls ? 5 : 0);
-                if (q.indexOf("1080") >= 0) return 1080 + (hls ? 5 : 0);
-                if (q.indexOf("720") >= 0) return 720 + (hls ? 5 : 0);
-                if (q.indexOf("480") >= 0) return 480 + (hls ? 5 : 0);
-                if (q.indexOf("360") >= 0) return 360 + (hls ? 5 : 0);
-                return 1;
+            // 4) Map sources -> StreamResult, most-RELIABLE first.
+            //    Provider reliability (observed): rigel & mintaka are rock-solid;
+            //    oneroom/delta (mp4) are solid; vega/moviesapi is flaky (often 404/502)
+            //    so it must NOT be first, or the app auto-plays a dead source and the
+            //    title looks broken. Within a tier, prefer higher resolution & HLS.
+            const providerScore = (p) => {
+                p = String(p || "").toLowerCase();
+                if (p.indexOf("rigel") >= 0) return 500;
+                if (p.indexOf("mintaka") >= 0 || p.indexOf("vidlink") >= 0) return 480;
+                if (p.indexOf("oneroom") >= 0 || p.indexOf("delta") >= 0) return 300;
+                if (p.indexOf("vega") >= 0 || p.indexOf("moviesapi") >= 0) return 50; // flaky -> last
+                return 100;
             };
+            const resScore = (s) => {
+                const q = String(s.quality || "").toLowerCase();
+                if (q.indexOf("2160") >= 0 || q.indexOf("4k") >= 0) return 40;
+                if (q.indexOf("1080") >= 0) return 35;
+                if (q.indexOf("auto") >= 0) return 33;   // adaptive ~ high
+                if (q.indexOf("720") >= 0) return 25;
+                if (q.indexOf("480") >= 0) return 15;
+                if (q.indexOf("360") >= 0) return 8;
+                return 5;
+            };
+            const rank = (s) =>
+                providerScore(s.provider || s.label) + resScore(s) +
+                ((s.kind || "").toLowerCase() === "hls" ? 2 : 0);
             const sorted = srcs.slice().sort((a, b) => rank(b) - rank(a));
 
             const streams = [];
