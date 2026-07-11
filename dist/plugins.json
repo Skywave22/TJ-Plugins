@@ -1,10 +1,10 @@
 [
   {
-    "packageName": "dev.mega.allinone.fixed",
-    "name": "MegaCinema FIXED - 5 Sites",
-    "version": 2,
+    "packageName": "dev.mega.ultimate.fixed",
+    "name": "MegaCinema ULTIMATE FIXED",
+    "version": 3,
     "baseUrl": "https://popcornmovies.io",
-    "description": "FIXED VERSION - Direct MP4 via VidLink + 5 site scraping + 11 embeds - No more server failed",
+    "description": "ULTIMATE FIXED - All 5 sites deep extraction | VidLink MP4 + VidRock HLS seekable + VidsrcVip + Original sites | Seeking fixed via HLS + Proxy",
     "authors": [
       "MegaDev"
     ],
@@ -37,6 +37,6 @@
         "url": "https://fireflix.pages.dev"
       }
     ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.mega.allinone.fixed.sky"
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.mega.ultimate.fixed.sky"
   }
 ]
