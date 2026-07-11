@@ -34,7 +34,7 @@
   {
     "packageName": "dev.skystream.popcornmovies",
     "name": "PopcornMovies",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://popcornmovies.io",
     "description": "PopcornMovies - Movies & TV Shows with direct HLS/MP4 streams, multiple servers, qualities and subtitles.",
     "authors": [
