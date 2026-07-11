@@ -1,9 +1,9 @@
 {
-  "packageName": "dev.mega.allinone",
-  "name": "MegaCinema - 5 Sites in 1",
-  "version": 1,
+  "packageName": "dev.mega.allinone.fixed",
+  "name": "MegaCinema FIXED - 5 Sites",
+  "version": 2,
   "baseUrl": "https://popcornmovies.io",
-  "description": "ONE PLUGIN - 5 Sites: PopcornMovies + Cineby + ZStream + PrimeShows + FireFlix | TMDB + 11 VidSrc sources aggregated | Auto fallback",
+  "description": "FIXED VERSION - Direct MP4 via VidLink + 5 site scraping + 11 embeds - No more server failed",
   "authors": ["MegaDev"],
   "languages": ["en"],
   "categories": ["Movie", "TvSeries"],
