@@ -32,9 +32,9 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.tjplugins.repo.multimovies.sky"
   },
   {
-    "packageName": "com.tjplugins.popcorn",
-    "name": "Popcorn Movies",
-    "version": 3,
+    "packageName": "dev.skystream.popcornmovies",
+    "name": "PopcornMovies",
+    "version": 4,
     "baseUrl": "https://popcornmovies.io",
     "description": "PopcornMovies - Movies & TV Shows with direct HLS/MP4 streams, multiple servers, qualities and subtitles.",
     "authors": [
@@ -47,7 +47,7 @@
       "Movies",
       "TV Shows"
     ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.tjplugins.popcorn.sky"
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.skystream.popcornmovies.sky"
   },
   {
     "packageName": "dev.skystream.screenscape",
