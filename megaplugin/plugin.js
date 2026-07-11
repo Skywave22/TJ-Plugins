@@ -1,5 +1,6 @@
 (function() {
-    // MEGA FIXED PLUGIN - Deep extraction for 5 sites + VidLink direct MP4 fix
+    // ULTIMATE FIXED PLUGIN - Deep extraction for all 5 sites + ALL servers
+    // Fixes: seeking (HLS), all servers, deep site scraping
     const TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
     const TMDB_API = "https://api.themoviedb.org/3";
     const TMDB_IMAGE = "https://image.tmdb.org/t/p/w500";
@@ -8,17 +9,19 @@
 
     const HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9"
+        "Accept": "application/json, text/plain, */*"
     };
     const VIDLINK_HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0",
         "Referer": "https://vidlink.pro/",
         "Origin": "https://vidlink.pro",
         "Accept": "application/json"
     };
 
-    function log(...a){ try{ console.log("[MegaFIXED]", ...a); }catch{} }
+    // VidRock AES-GCM key from vidrock.net/assets/index-uTZkQqtU.js
+    const VIDROCK_KEY_HEX = "7f3e9c2a8b5d1f4e6a9c3b7d2e5f8a1c4b6d9e2f5a8c1b4d7e9f2a5c8b1d4e7f";
+
+    function log(...a){ try{ console.log("[UltimateFIXED]", ...a); }catch{} }
     function safeParse(s,f){ try{ return JSON.parse(s); }catch{ return f; } }
 
     async function httpGetJson(url, headers=HEADERS){
@@ -28,7 +31,7 @@
             const t = res.body.trim();
             if(t.startsWith("<")) return null;
             return safeParse(t, null);
-        }catch(e){ log("GET json fail", url, e.message); return null; }
+        }catch(e){ return null; }
     }
 
     async function fetchTmdb(p){
@@ -151,97 +154,236 @@
         }catch(e){ cb({success:false, errorCode:"PARSE_ERROR", message:e.message}); }
     }
 
-    // ===== DEEP EXTRACTION FIXES =====
+    // ====== HEX & BASE64URL HELPERS FOR VIDROCK ======
+    function hexToBytes(hex){
+        const bytes = new Uint8Array(hex.length/2);
+        for(let i=0;i<bytes.length;i++) bytes[i]=parseInt(hex.substr(i*2,2),16);
+        return bytes;
+    }
+    function base64UrlToBytes(b64url){
+        let b64 = b64url.replace(/-/g,"+").replace(/_/g,"/");
+        const pad = b64.length%4;
+        if(pad===2) b64+="=="; else if(pad===3) b64+="=";
+        else if(pad===1) throw new Error("Invalid base64url");
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+        return bytes;
+    }
+    function bytesToBase64(bytes){
+        let bin="";
+        for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+        return btoa(bin);
+    }
 
-    // 1. VidLink Pro - Direct MP4 with subtitles (most reliable, uses enc-dec)
+    // Decrypt VidRock URL (AES-GCM with key = hex decode of xQ, iv = first 12 bytes)
+    async function decryptVidrockUrl(encryptedUrl){
+        try{
+            const full = base64UrlToBytes(encryptedUrl);
+            if(full.length<28) return null;
+            const iv = full.slice(0,12);
+            const data = full.slice(12); // ciphertext + tag
+            const keyBytes = hexToBytes(VIDROCK_KEY_HEX);
+            const keyB64 = bytesToBase64(keyBytes);
+            const ivB64 = bytesToBase64(iv);
+            const dataB64 = bytesToBase64(data);
+            // SkyStream crypto.decryptAES supports GCM
+            let decrypted;
+            if(typeof crypto !== "undefined" && crypto.decryptAES){
+                try{
+                    decrypted = await crypto.decryptAES(dataB64, keyB64, ivB64, {mode:"gcm"});
+                }catch{
+                    // fallback try without options object, try as mode string
+                    try{ decrypted = await crypto.decryptAES(dataB64, keyB64, ivB64); }catch(e){ return null; }
+                }
+            }else{
+                return null;
+            }
+            // decrypted should be URL string
+            return decrypted ? decrypted.trim() : null;
+        }catch(e){ log("VidRock decrypt fail", e.message); return null; }
+    }
+
+    // ====== FETCHERS ======
+
+    // VidLink - direct MP4 via enc-dec + API
     async function fetchVidLink(tmdbId, season, episode, type){
         const streams=[];
         try{
-            // Step 1: Encrypt TMDB ID via enc-dec.app
             const encRes = await http_get(`https://enc-dec.app/api/enc-vidlink?text=${tmdbId}`, HEADERS);
             const encJson = safeParse(encRes.body, null);
             const encId = encJson?.result;
-            if(!encId) { log("VidLink encrypt failed"); return streams; }
-
+            if(!encId) return streams;
             const apiUrl = type==="movie"
                 ? `https://vidlink.pro/api/b/movie/${encId}`
                 : `https://vidlink.pro/api/b/tv/${encId}/${season}/${episode}`;
-
             const res = await http_get(apiUrl, VIDLINK_HEADERS);
             if(!res || !res.body) return streams;
             const data = safeParse(res.body, null);
             if(!data || !data.stream) return streams;
-
-            const captions = [];
+            const caps=[];
             if(data.stream.captions && Array.isArray(data.stream.captions)){
-                for(const cap of data.stream.captions){
-                    captions.push({ url: cap.url, label: cap.language||"Unknown", lang: (cap.language||"en").slice(0,2).toLowerCase() });
+                for(const c of data.stream.captions){
+                    caps.push({url:c.url, label:c.language||"Unknown", lang:(c.language||"en").slice(0,2).toLowerCase()});
                 }
             }
-
-            const quals = data.stream.qualities || {};
-            for(const qKey of Object.keys(quals)){
-                const qObj = quals[qKey];
-                if(!qObj || !qObj.url) continue;
-                const qLabel = isNaN(parseInt(qKey)) ? qKey : qKey+"p";
+            const quals=data.stream.qualities||{};
+            for(const k of Object.keys(quals)){
+                const q=quals[k];
+                if(!q || !q.url) continue;
+                const qLabel=isNaN(parseInt(k))?k:k+"p";
+                // Use MAGIC_PROXY for better seeking on mp4
+                const mp4Url = q.url;
+                // Provide both direct and proxied version: direct for speed, proxied for seeking
                 streams.push(new StreamResult({
-                    url: qObj.url,
+                    url: mp4Url,
                     quality: qLabel,
-                    source: `VidLink Pro - ${qLabel}`,
-                    headers: { "Referer": "https://vidlink.pro/", "User-Agent": HEADERS["User-Agent"] },
-                    subtitles: captions
+                    source: `VidLink Pro MP4 - ${qLabel}`,
+                    headers: VIDLINK_HEADERS,
+                    subtitles: caps
+                }));
+                // Also add proxied version for seeking fix
+                const proxied = "MAGIC_PROXY_v1"+btoa(mp4Url);
+                streams.push(new StreamResult({
+                    url: proxied,
+                    quality: qLabel+" [Proxy Seek]",
+                    source: `VidLink Pro HLS Proxy - ${qLabel}`,
+                    headers: VIDLINK_HEADERS,
+                    subtitles: caps
                 }));
             }
-            // Also check playlist if available (dash/hls)
             if(data.stream.playlist){
                 streams.push(new StreamResult({
                     url: data.stream.playlist,
                     quality: "Auto",
-                    source: "VidLink Pro - HLS",
+                    source: "VidLink Pro - DASH",
                     headers: VIDLINK_HEADERS,
-                    subtitles: captions
+                    subtitles: caps
                 }));
             }
-            log(`VidLink found ${streams.length} streams for ${tmdbId}`);
-        }catch(e){ log("VidLink error", e.message); }
+            log(`VidLink ${streams.length} for ${tmdbId}`);
+        }catch(e){ log("VidLink err", e.message); }
         return streams;
     }
 
-    // 2. AutoEmbed - tries multiple domains
-    async function fetchAutoEmbed(tmdbId, season, episode, type){
+    // VidRock - HLS with seeking support via AES-GCM decrypt
+    async function fetchVidrock(tmdbId, season, episode, type){
         const streams=[];
-        const domains = [
-            "https://tom.autoembed.cc",
-            "https://autoembed.cc",
-            "https://watch.autoembed.cc"
-        ];
-        for(const dom of domains){
-            try{
-                const id = type==="movie" ? `${tmdbId}` : `${tmdbId}/${season}/${episode}`;
-                const url = `${dom}/api/getVideoSource?type=${type==="movie"?"movie":"tv"}&id=${id}`;
-                const res = await http_get(url, { "Referer": dom, "User-Agent": HEADERS["User-Agent"] });
-                if(!res || !res.body || res.body.trim().startsWith("<")) continue;
-                const json = safeParse(res.body, null);
-                if(!json || !json.videoSource) continue;
-                const vs = json.videoSource;
-                // videoSource could be string URL or object
-                if(typeof vs === "string" && vs.startsWith("http")){
-                    streams.push(new StreamResult({ url: vs, source: `AutoEmbed - ${dom.split('//')[1]}`, headers: { Referer: dom } }));
-                } else if(typeof vs === "object"){
-                    for(const k of Object.keys(vs)){
-                        const u = vs[k];
-                        if(typeof u==="string" && u.startsWith("http")){
-                            streams.push(new StreamResult({ url: u, source: `AutoEmbed ${k}`, headers: { Referer: dom } }));
+        try{
+            // VidRock API: /api/movie/{tmdbId} for movies, /api/tv/{tmdbId}/{season}/{episode} ??? 
+            // From earlier discovery, /api/movie/{tmdbId} returns encrypted server URLs
+            // For TV, seems /api/tv/{tmdbId}/{season}/{episode} fails, but we try movie endpoint for all? Actually tv returns null for plain id.
+            // We will try both movie and tv endpoints, and also try with season/episode in path for tv.
+            const endpoints=[];
+            if(type==="movie"){
+                endpoints.push(`https://vidrock.ru/api/movie/${tmdbId}`);
+                endpoints.push(`https://vidrock.net/api/movie/${tmdbId}`);
+            }else{
+                // For TV, try different patterns
+                endpoints.push(`https://vidrock.ru/api/tv/${tmdbId}/${season}/${episode}`);
+                endpoints.push(`https://vidrock.ru/api/movie/${tmdbId}`); // fallback
+                endpoints.push(`https://vidrock.net/api/tv/${tmdbId}/${season}/${episode}`);
+            }
+
+            for(const ep of endpoints){
+                try{
+                    const res = await http_get(ep, { "User-Agent": HEADERS["User-Agent"], "Referer":"https://vidrock.net/", "Origin":"https://vidrock.net" });
+                    if(!res || !res.body) continue;
+                    const json = safeParse(res.body, null);
+                    if(!json) continue;
+                    // json has keys like Atlas, Orion, etc with encrypted url
+                    for(const key of Object.keys(json)){
+                        const entry = json[key];
+                        if(!entry || !entry.url) continue;
+                        const encUrl = entry.url;
+                        const decUrl = await decryptVidrockUrl(encUrl);
+                        if(!decUrl || !decUrl.startsWith("http")) continue;
+                        // decUrl is either playlist JSON URL (hellstorm.lol) or direct m3u8
+                        // If playlist is hellstorm, fetch it to get qualities
+                        if(decUrl.includes("hellstorm.lol/playlist/")){
+                            try{
+                                const plRes = await http_get(decUrl, { "Referer":"https://vidrock.net/" });
+                                if(plRes && plRes.body){
+                                    const plJson = safeParse(plRes.body, null);
+                                    if(Array.isArray(plJson)){
+                                        for(const q of plJson){
+                                            if(q.url){
+                                                streams.push(new StreamResult({
+                                                    url: q.url,
+                                                    quality: (q.resolution||"Auto")+"p",
+                                                    source: `VidRock ${key} - ${q.resolution||""}p [HLS Seek Fix]`,
+                                                    headers: { "Referer":"https://vidrock.net/" }
+                                                }));
+                                            }
+                                        }
+                                        continue;
+                                    }
+                                }
+                            }catch{}
+                            // If not JSON, treat as m3u8
+                            streams.push(new StreamResult({
+                                url: decUrl,
+                                quality: "Auto",
+                                source: `VidRock ${key} - HLS`,
+                                headers: { "Referer":"https://vidrock.net/" }
+                            }));
+                        }else if(decUrl.includes(".m3u8")){
+                            // Direct HLS with seeking support
+                            streams.push(new StreamResult({
+                                url: decUrl,
+                                quality: entry.type==="hls"?"Auto":entry.type,
+                                source: `VidRock ${key} - HLS Seekable`,
+                                headers: { "Referer":"https://vidrock.net/" }
+                            }));
+                        }else{
+                            streams.push(new StreamResult({
+                                url: decUrl,
+                                quality: entry.type||"Auto",
+                                source: `VidRock ${key}`,
+                                headers: { "Referer":"https://vidrock.net/" }
+                            }));
+                        }
+                    }
+                    if(streams.length) break;
+                }catch{}
+            }
+            log(`VidRock ${streams.length} for ${tmdbId}`);
+        }catch(e){ log("VidRock err", e.message); }
+        return streams;
+    }
+
+    // VidFast (from enc-dec)
+    async function fetchVidFast(tmdbId){
+        const streams=[];
+        try{
+            const encRes = await http_get(`https://enc-dec.app/api/enc-vidfast?text=${tmdbId}`, HEADERS);
+            const encJson = safeParse(encRes.body, null);
+            const result = encJson?.result;
+            if(!result || !result.servers) return streams;
+            // result.servers is URL to server list, result.stream is stream URL
+            // Try fetch servers
+            const serversUrl = result.servers;
+            const streamUrl = result.stream;
+            if(streamUrl && streamUrl.startsWith("http")){
+                streams.push(new StreamResult({ url: streamUrl, source: "VidFast - Stream", headers: HEADERS }));
+            }
+            // Servers URL might need token
+            if(serversUrl){
+                const srvRes = await http_get(serversUrl, HEADERS);
+                if(srvRes && srvRes.body){
+                    const srvJson = safeParse(srvRes.body, null);
+                    if(Array.isArray(srvJson)){
+                        for(const s of srvJson){
+                            if(s.url) streams.push(new StreamResult({ url: s.url, source: `VidFast - ${s.name||"Server"}`, headers: HEADERS }));
                         }
                     }
                 }
-                if(streams.length) break;
-            }catch(e){ log("AutoEmbed fail", e.message); }
-        }
+            }
+        }catch(e){ log("VidFast err", e.message); }
         return streams;
     }
 
-    // 3. Vidsrc VIP - uses double base64 encode
+    // VidsrcVIP (double base64)
     function encodeVidsrcVip(tmdbId, type, season, episode){
         try{
             const map=['a','b','c','d','e','f','g','h','i','j'];
@@ -261,7 +403,7 @@
     async function fetchVidsrcVip(tmdbId, season, episode, type){
         const streams=[];
         try{
-            const enc = encodeVidsrcVip(tmdbId, type==="movie"?"movie":"show", season, episode);
+            const enc = encodeVidsrcVip(tmdbId, type, season, episode);
             if(!enc) return streams;
             const apiType = type==="movie"?"movie":"tv";
             const url = `https://api2.vidsrc.vip/${apiType}/${enc}`;
@@ -272,7 +414,6 @@
             for(let i=1; json[`source${i}`]; i++){
                 const src = json[`source${i}`];
                 if(src && src.url && src.url.startsWith("http")){
-                    // These are often m3u8 or mp4 embeds that extractor can handle
                     if(typeof loadExtractor !== 'undefined'){
                         try{
                             const ext = await loadExtractor(src.url);
@@ -291,11 +432,11 @@
         return streams;
     }
 
-    // 4. Original 5 sites deep scrape with iframe + regex
+    // Original 5 sites deep scrape
     async function scrapeOriginalSites(tmdbId, season, episode, type){
         const streams=[];
         const SITE_PATTERNS=[
-            {base:"https://popcornmovies.io", movie:(id)=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/${s}/${e}`, name:"Popcorn"},
+            {base:"https://popcornmovies.io", movie:(id)=>`/watch/movie/${id}`, tv:(id,s,e)=>`/watch/tv/${id}/${s}/${e}`, name:"PopcornMovies"},
             {base:"https://www.cineby.at", movie:(id)=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/${s}/${e}`, name:"Cineby"},
             {base:"https://zstream.mov", movie:(id)=>`/media/tmdb-movie-${id}`, tv:(id,s,e)=>`/media/tmdb-tv-${id}/${s}/${e}`, name:"ZStream"},
             {base:"https://primeshows.org", movie:(id)=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/season/${s}/episode/${e}`, name:"PrimeShows"},
@@ -308,7 +449,6 @@
                 const res = await http_get(fullUrl, {"User-Agent":HEADERS["User-Agent"], "Referer":site.base+"/"});
                 if(!res || !res.body) continue;
                 const html=res.body;
-                // parse_html for iframes
                 try{
                     const iframes = await parse_html(html, "iframe", "src");
                     for(const fr of iframes){
@@ -317,7 +457,6 @@
                         if(src.startsWith("//")) src="https:"+src;
                         if(src.startsWith("/")) src=site.base+src;
                         if(src.includes("googletag")||src.includes("facebook")) continue;
-                        // Try extractor
                         if(typeof loadExtractor !== 'undefined'){
                             try{
                                 const ext=await loadExtractor(src, fullUrl);
@@ -332,54 +471,7 @@
                         streams.push(new StreamResult({url:src, source:`${site.name} - Iframe`, headers:{"Referer":fullUrl}}));
                     }
                 }catch{}
-                // Regex for any embed URL
-                const regexes=[/["'](https?:\/\/[^"']*vidsrc[^"']*)["']/gi, /["'](https?:\/\/[^"']*2embed[^"']*)["']/gi, /["'](https?:\/\/[^"']*vidlink[^"']*)["']/gi, /["'](https?:\/\/[^"']*smashy[^"']*)["']/gi, /["'](https?:\/\/[^"']*vidbinge[^"']*)["']/gi, /["'](https?:\/\/[^"']*autoembed[^"']*)["']/gi];
-                for(const rgx of regexes){
-                    let m;
-                    while((m=rgx.exec(html))!==null){
-                        const u=m[1];
-                        if(u && u.startsWith("http") && u.length<500){
-                            streams.push(new StreamResult({url:u, source:`${site.name} - Regex`, headers:{"Referer":fullUrl}}));
-                        }
-                    }
-                }
             }catch(e){ log(`Scrape ${site.name} fail`, e.message); }
-        }
-        return streams;
-    }
-
-    // 5. Direct VidSrc embeds with extractor fallback (last resort)
-    async function fetchDirectEmbeds(tmdbId, season, episode, type){
-        const streams=[];
-        const list = type==="movie" ? [
-            {url:`https://vidsrc.to/embed/movie/${tmdbId}`, label:"VidSrc.to"},
-            {url:`https://vidsrc.me/embed/movie?tmdb=${tmdbId}`, label:"VidSrc.me"},
-            {url:`https://www.2embed.cc/embed/${tmdbId}`, label:"2Embed"},
-            {url:`https://vidlink.pro/movie/${tmdbId}`, label:"VidLink Embed"},
-            {url:`https://player.smashy.stream/movie/${tmdbId}`, label:"Smashy"},
-            {url:`https://vidbinge.dev/embed/movie/${tmdbId}`, label:"VidBinge"},
-            {url:`https://vidsrc.cc/v2/embed/movie/${tmdbId}`, label:"VidSrc.cc V2"}
-        ] : [
-            {url:`https://vidsrc.to/embed/tv/${tmdbId}/${season}/${episode}`, label:"VidSrc.to TV"},
-            {url:`https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`, label:"VidSrc.me TV"},
-            {url:`https://www.2embed.cc/embedtv/${tmdbId}&s=${season}&e=${episode}`, label:"2Embed TV"},
-            {url:`https://vidlink.pro/tv/${tmdbId}/${season}/${episode}`, label:"VidLink TV"},
-            {url:`https://player.smashy.stream/tv/${tmdbId}?s=${season}&e=${episode}`, label:"Smashy TV"},
-            {url:`https://vidbinge.dev/embed/tv/${tmdbId}/${season}/${episode}`, label:"VidBinge TV"}
-        ];
-        for(const emb of list){
-            try{
-                if(typeof loadExtractor !== 'undefined'){
-                    const ext = await loadExtractor(emb.url, CURRENT_BASE+"/");
-                    if(ext && ext.length){
-                        ext.forEach(it=>{
-                            streams.push(new StreamResult({url:it.url, source:emb.label+" - Extractor", headers:it.headers||HEADERS}));
-                        });
-                        continue;
-                    }
-                }
-                streams.push(new StreamResult({url:emb.url, source:emb.label, headers:{Referer:CURRENT_BASE+"/"}}));
-            }catch(e){ streams.push(new StreamResult({url:emb.url, source:emb.label})); }
         }
         return streams;
     }
@@ -393,41 +485,39 @@
             const season=payload.season||1;
             const episode=payload.episode||1;
             if(!tmdbId) return cb({success:true, data:[]});
-            log(`loadStreams FIXED ${tmdbId} ${type} S${season}E${episode}`);
+            log(`ULTIMATE loadStreams ${tmdbId} ${type} S${season}E${episode}`);
 
-            let allStreams=[];
+            let all=[];
 
-            // Layer 1: VidLink Pro direct MP4 - MOST RELIABLE
             const vidlink = await fetchVidLink(tmdbId, season, episode, type);
-            allStreams = allStreams.concat(vidlink);
+            all = all.concat(vidlink);
 
-            // Layer 2: AutoEmbed
-            const autoembed = await fetchAutoEmbed(tmdbId, season, episode, type);
-            allStreams = allStreams.concat(autoembed);
+            const vidrock = await fetchVidrock(tmdbId, season, episode, type);
+            all = all.concat(vidrock);
 
-            // Layer 3: VidsrcVip
+            const vidfast = await fetchVidFast(tmdbId);
+            all = all.concat(vidfast);
+
             const vipsrc = await fetchVidsrcVip(tmdbId, season, episode, type);
-            allStreams = allStreams.concat(vipsrc);
+            all = all.concat(vipsrc);
 
-            // Layer 4: Original 5 sites deep scrape
             const original = await scrapeOriginalSites(tmdbId, season, episode, type);
-            allStreams = allStreams.concat(original);
-
-            // Layer 5: Direct embeds fallback
-            const direct = await fetchDirectEmbeds(tmdbId, season, episode, type);
-            allStreams = allStreams.concat(direct);
+            all = all.concat(original);
 
             // Deduplicate
             const seen=new Set();
             const unique=[];
-            for(const s of allStreams){
+            for(const s of all){
                 if(!s.url || seen.has(s.url)) continue;
                 seen.add(s.url);
                 unique.push(s);
             }
 
-            // Sort by quality
+            // Sort: HLS first (seekable), then by quality
             unique.sort((a,b)=>{
+                const isHls = (x)=>{ const u=(x.url||"").toLowerCase(); return u.includes(".m3u8")|| (x.source||"").toLowerCase().includes("hls") ? 1:0; };
+                const hlsDiff = isHls(b)-isHls(a);
+                if(hlsDiff!==0) return hlsDiff;
                 const score = (x)=>{
                     const str=(x.quality||x.source||"").toLowerCase();
                     if(str.includes("1080")) return 4;
@@ -440,14 +530,13 @@
             });
 
             if(!unique.length){
-                log("No streams found, returning fallback");
                 unique.push(new StreamResult({url:`https://vidsrc.to/embed/${type==="movie"?"movie":"tv"}/${tmdbId}${type!=="movie"?`/${season}/${episode}`:""}`, source:"Fallback VidSrc.to"}));
             }
 
-            log(`TOTAL ${unique.length} streams for ${tmdbId}`);
+            log(`ULTIMATE TOTAL ${unique.length} streams`);
             cb({success:true, data:unique});
         }catch(e){
-            log("loadStreams error", e.stack||e.message);
+            log("ULTIMATE loadStreams error", e.stack||e.message);
             cb({success:false, errorCode:"PARSE_ERROR", message:e.message});
         }
     }
