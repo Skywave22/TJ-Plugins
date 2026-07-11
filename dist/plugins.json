@@ -38,5 +38,25 @@
       }
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.mega.ultimate.fixed.sky"
+  },
+  {
+    "packageName": "com.master.mega.india",
+    "name": "Mega India Aggregator",
+    "version": 1,
+    "baseUrl": "https://aggregator.local",
+    "description": "9-in-1: Movies4u + Vegamovies + HDHub4u + AnimeVilla + FilmyFly + HindMovie + MovieBox + MoviesMod + Bolly4u",
+    "authors": [
+      "Master"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries",
+      "Anime"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.master.mega.india.sky"
   }
 ]
