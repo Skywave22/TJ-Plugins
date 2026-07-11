@@ -1,19 +1,19 @@
 // Screenscape â€” SkyStream (Sky Gen 2) plugin
-// Movies + TV Shows.  https://screenscape.me  /  https://main.screenscape.me
+// Movies + TV Shows, TMDB-powered.
 //
 // Architecture:
-//   - BROWSING (getHome / search / load) uses the TMDB API directly. Screenscape
-//     is 100% TMDB-based (every URL is a TMDB id, all art is image.tmdb.org), and
-//     the site itself is Cloudflare-gated, so TMDB is the reliable metadata source.
-//   - PLAYBACK (loadStreams) returns Screenscape's OFFICIAL embed URL:
-//       https://main.screenscape.me/embed?tmdb=<id>&type=movie
-//       https://main.screenscape.me/embed?tmdb=<id>&type=tv&s=<s>&e=<e>
-//     The embed handles Cloudflare, ads and multi-server switching itself, so the
-//     app plays it in its webview/player. This is the documented, stable API.
+//   - BROWSING (getHome / search / load): TMDB API directly (rich, reliable, no Cloudflare).
+//   - PLAYBACK (loadStreams): resolves DIRECT .m3u8 (HLS) URLs so SkyStream's native
+//     player can stream them. The stream backend used by screenscape/vidsrc is the
+//     vaplayer streamdata API:
+//        https://streamdata.vaplayer.ru/api.php?tmdb=<id>&type=movie
+//        https://streamdata.vaplayer.ru/api.php?tmdb=<id>&type=tv&season=<s>&episode=<e>
+//     (requires Referer: https://nextgencloudfabric.com/). Its `stream_urls[]` are
+//     real HLS master playlists (application/vnd.apple.mpegurl), directly playable.
 //
 // Runtime conventions (verified against skystream-cli v1.9.x):
 //   - http_get(url, headers) -> { status, body }
-//   - item URLs are JSON-encoded so type/id/season/episode survive across calls.
+//   - item URLs are JSON-encoded so id/type/season/episode survive across calls.
 
 (function () {
     "use strict";
@@ -24,14 +24,15 @@
     const TMDB = "https://api.themoviedb.org/3";
     const IMG = "https://image.tmdb.org/t/p/w500";
     const IMG_ORIG = "https://image.tmdb.org/t/p/original";
-    // Community TMDB v3 keys (widely used in open-source apps); tried in order.
     const KEYS = [
         "3fd2be6f0c70a2a598f084ddfb75487c",
         "a07e22bc18f5cb106bfe4cc1f83ad8ed",
         "e55425032d3d0f371fc776f302e7c09b"
     ];
 
-    const EMBED = "https://main.screenscape.me/embed";
+    // Stream backend (vaplayer). Referer required.
+    const STREAM_API = "https://streamdata.vaplayer.ru/api.php";
+    const STREAM_REFERER = "https://nextgencloudfabric.com/";
 
     /* ------------------------------ helpers ----------------------------- */
 
@@ -41,12 +42,12 @@
         try { return JSON.parse(s); } catch (e) { return null; }
     }
 
-    async function httpGet(url, attempts) {
+    async function httpGet(url, hdrs, attempts) {
         attempts = attempts || 3;
         let last = null;
         for (let i = 0; i < attempts; i++) {
             try {
-                const res = await http_get(url, H);
+                const res = await http_get(url, hdrs || H);
                 if (res && res.status >= 200 && res.status < 300 && res.body) return res;
                 last = res;
             } catch (e) { last = null; }
@@ -55,16 +56,14 @@
         return last;
     }
 
-    // GET a TMDB endpoint (path may contain a query string) as parsed JSON,
-    // trying each API key until one succeeds.
     async function tmdb(path, extraQuery) {
         const sep = path.indexOf("?") >= 0 ? "&" : "?";
         for (const key of KEYS) {
             const url = `${TMDB}/${path}${sep}api_key=${key}${extraQuery ? "&" + extraQuery : ""}`;
-            const res = await httpGet(url, 2);
+            const res = await httpGet(url, H, 2);
             if (res && res.body) {
                 const json = safeParse(res.body);
-                if (json && !json.status_code) return json;   // status_code present => TMDB error
+                if (json && !json.status_code) return json;
             }
         }
         return null;
@@ -73,21 +72,18 @@
     function poster(p) { return p ? IMG + p : ""; }
     function backdrop(p) { return p ? IMG_ORIG + p : ""; }
     function year(d) { return d && d.length >= 4 ? parseInt(d.slice(0, 4), 10) : undefined; }
+    function origin(u) { try { return new URL(u).origin + "/"; } catch (e) { return STREAM_REFERER; } }
 
-    // Map a TMDB result (movie/tv/multi) to a MultimediaItem.
     function toItem(r, forcedType) {
         const mt = forcedType || r.media_type || (r.title ? "movie" : "tv");
-        if (mt !== "movie" && mt !== "tv") return null;      // skip 'person' etc.
-        const title = r.title || r.name || "Untitled";
-        const date = r.release_date || r.first_air_date || "";
+        if (mt !== "movie" && mt !== "tv") return null;
         return new MultimediaItem({
-            title: title,
-            // Encode everything loadStreams/load needs.
+            title: r.title || r.name || "Untitled",
             url: JSON.stringify({ id: r.id, mtype: mt }),
             posterUrl: poster(r.poster_path),
             bannerUrl: backdrop(r.backdrop_path),
             type: mt === "tv" ? "series" : "movie",
-            year: year(date),
+            year: year(r.release_date || r.first_air_date || ""),
             score: r.vote_average ? Math.round(r.vote_average * 10) / 10 : undefined,
             description: r.overview || ""
         });
@@ -104,24 +100,19 @@
         try {
             const rows = [
                 { name: "Trending", path: "trending/all/week" },
-                { name: "Popular Movies", path: "movie/popular" },
-                { name: "Trending TV Series", path: "tv/popular" },
-                { name: "Top Rated Movies", path: "movie/top_rated" },
-                { name: "Top Rated TV", path: "tv/top_rated" },
-                { name: "Now Playing", path: "movie/now_playing" }
+                { name: "Popular Movies", path: "movie/popular", t: "movie" },
+                { name: "Trending TV Series", path: "tv/popular", t: "tv" },
+                { name: "Top Rated Movies", path: "movie/top_rated", t: "movie" },
+                { name: "Top Rated TV", path: "tv/top_rated", t: "tv" },
+                { name: "Now Playing", path: "movie/now_playing", t: "movie" }
             ];
-
             const results = await Promise.all(rows.map(async (row) => {
                 const json = await tmdb(row.path);
-                const forced = row.path.startsWith("movie/") ? "movie"
-                            : row.path.startsWith("tv/") ? "tv" : null;
-                const items = mapResults(json, forced);
+                const items = mapResults(json, row.t || null);
                 return items.length ? { name: row.name, items } : null;
             }));
-
             const data = {};
             results.filter(Boolean).forEach(r => { data[r.name] = r.items; });
-
             if (Object.keys(data).length === 0) {
                 return cb({ success: false, errorCode: "HTTP_ERROR", message: "Could not reach TMDB." });
             }
@@ -147,47 +138,42 @@
     async function load(urlStr, cb) {
         try {
             const info = safeParse(urlStr) || {};
-            const id = info.id;
-            const mtype = info.mtype || "movie";
+            const id = info.id, mtype = info.mtype || "movie";
             if (!id) throw new Error("Missing id");
 
             if (mtype === "movie") {
                 const d = await tmdb(`movie/${id}`, "append_to_response=credits,similar");
                 if (!d) throw new Error("TMDB movie not found");
-
-                const item = new MultimediaItem({
-                    title: d.title || d.original_title || "Untitled",
-                    url: JSON.stringify({ id: id, mtype: "movie" }),
-                    posterUrl: poster(d.poster_path),
-                    bannerUrl: backdrop(d.backdrop_path),
-                    type: "movie",
-                    year: year(d.release_date),
-                    score: d.vote_average ? Math.round(d.vote_average * 10) / 10 : undefined,
-                    duration: d.runtime || undefined,
-                    description: d.overview || "",
-                    cast: buildCast(d.credits),
-                    recommendations: mapResults(d.similar, "movie")
+                return cb({
+                    success: true,
+                    data: new MultimediaItem({
+                        title: d.title || d.original_title || "Untitled",
+                        url: JSON.stringify({ id, mtype: "movie" }),
+                        posterUrl: poster(d.poster_path),
+                        bannerUrl: backdrop(d.backdrop_path),
+                        type: "movie",
+                        year: year(d.release_date),
+                        score: d.vote_average ? Math.round(d.vote_average * 10) / 10 : undefined,
+                        duration: d.runtime || undefined,
+                        description: d.overview || "",
+                        cast: buildCast(d.credits),
+                        recommendations: mapResults(d.similar, "movie")
+                    })
                 });
-                return cb({ success: true, data: item });
             }
 
-            // TV series -> build episode list across all seasons.
             const d = await tmdb(`tv/${id}`, "append_to_response=credits,similar");
             if (!d) throw new Error("TMDB tv not found");
-
             const seasons = (d.seasons || []).filter(s => s.season_number >= 1 && s.episode_count > 0);
+            const seasonData = await Promise.all(seasons.map(s => tmdb(`tv/${id}/season/${s.season_number}`)));
             const episodes = [];
-            // Fetch each season's episode list (in parallel).
-            const seasonData = await Promise.all(
-                seasons.map(s => tmdb(`tv/${id}/season/${s.season_number}`))
-            );
             seasonData.forEach((sd, idx) => {
                 if (!sd || !sd.episodes) return;
                 const sNum = seasons[idx].season_number;
                 sd.episodes.forEach(ep => {
                     episodes.push(new Episode({
                         name: ep.name || `S${sNum}E${ep.episode_number}`,
-                        url: JSON.stringify({ id: id, mtype: "tv", s: sNum, e: ep.episode_number }),
+                        url: JSON.stringify({ id, mtype: "tv", s: sNum, e: ep.episode_number }),
                         season: sNum,
                         episode: ep.episode_number,
                         posterUrl: ep.still_path ? poster(ep.still_path) : poster(d.poster_path),
@@ -197,22 +183,23 @@
                     }));
                 });
             });
-
-            const item = new MultimediaItem({
-                title: d.name || d.original_name || "Untitled",
-                url: JSON.stringify({ id: id, mtype: "tv" }),
-                posterUrl: poster(d.poster_path),
-                bannerUrl: backdrop(d.backdrop_path),
-                type: "series",
-                year: year(d.first_air_date),
-                score: d.vote_average ? Math.round(d.vote_average * 10) / 10 : undefined,
-                status: d.status && /ended|canceled/i.test(d.status) ? "completed" : "ongoing",
-                description: d.overview || "",
-                cast: buildCast(d.credits),
-                recommendations: mapResults(d.similar, "tv"),
-                episodes: episodes
+            cb({
+                success: true,
+                data: new MultimediaItem({
+                    title: d.name || d.original_name || "Untitled",
+                    url: JSON.stringify({ id, mtype: "tv" }),
+                    posterUrl: poster(d.poster_path),
+                    bannerUrl: backdrop(d.backdrop_path),
+                    type: "series",
+                    year: year(d.first_air_date),
+                    score: d.vote_average ? Math.round(d.vote_average * 10) / 10 : undefined,
+                    status: d.status && /ended|canceled/i.test(d.status) ? "completed" : "ongoing",
+                    description: d.overview || "",
+                    cast: buildCast(d.credits),
+                    recommendations: mapResults(d.similar, "tv"),
+                    episodes: episodes
+                })
             });
-            cb({ success: true, data: item });
         } catch (e) {
             cb({ success: false, errorCode: "LOAD_ERROR", message: e.message });
         }
@@ -232,28 +219,35 @@
     async function loadStreams(urlInfo, cb) {
         try {
             const info = safeParse(urlInfo) || {};
-            const id = info.id;
-            const mtype = info.mtype || "movie";
+            const id = info.id, mtype = info.mtype || "movie";
             if (!id) throw new Error("Missing id");
 
-            let embedUrl;
+            let api = `${STREAM_API}?tmdb=${id}&type=${mtype === "tv" ? "tv" : "movie"}`;
             if (mtype === "tv") {
-                const s = info.s || 1, e = info.e || 1;
-                embedUrl = `${EMBED}?tmdb=${id}&type=tv&s=${s}&e=${e}`;
-            } else {
-                embedUrl = `${EMBED}?tmdb=${id}&type=movie`;
+                api += `&season=${info.s || 1}&episode=${info.e || 1}`;
             }
 
-            // Return the official embed as the playable source. SkyStream opens it
-            // in its webview/embedded player; the embed resolves the real stream,
-            // handles Cloudflare, server switching and ads on its side.
-            const streams = [
-                new StreamResult({
-                    url: embedUrl,
-                    source: "Screenscape",
-                    headers: { "Referer": "https://main.screenscape.me/", "User-Agent": UA }
-                })
-            ];
+            const res = await httpGet(api, { "User-Agent": UA, "Referer": STREAM_REFERER }, 3);
+            if (!res || !res.body) throw new Error("Stream API unreachable");
+
+            const json = safeParse(res.body);
+            const urls = (json && json.data && json.data.stream_urls) || [];
+            if (!urls.length) {
+                return cb({ success: false, errorCode: "NOT_FOUND", message: "No streams available for this title yet." });
+            }
+
+            const streams = [];
+            const seen = {};
+            urls.forEach((u, i) => {
+                if (!u || seen[u]) return;
+                seen[u] = true;
+                streams.push(new StreamResult({
+                    url: u,
+                    quality: "HLS Auto",
+                    source: "Server " + (i + 1),
+                    headers: { "Referer": origin(u), "User-Agent": UA }
+                }));
+            });
 
             cb({ success: true, data: streams });
         } catch (e) {
