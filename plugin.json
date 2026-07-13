@@ -1,0 +1,15 @@
+{
+  "packageName": "dev.akash.stars.vegamovie",
+  "name": "VegaMovie",
+  "version": 1,
+  "baseUrl": "https://vegamovie.su",
+  "description": "VegaMovie plugin for SkyStream - Bollywood, Hollywood, Dual Audio, Web Series",
+  "authors": ["Akash"],
+  "languages": ["hi", "en", "ta", "te", "ml", "kn"],
+  "categories": ["Movies", "TV Shows", "Anime"],
+  "domains": [
+    { "name": "vegamovie.su", "url": "https://vegamovie.su" },
+    { "name": "vegamovies.nl", "url": "https://vegamovies.nl" },
+    { "name": "vegamovie.ink", "url": "https://vegamovie.ink" }
+  ]
+}
