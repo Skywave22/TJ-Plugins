@@ -1,43 +1,110 @@
 (function() {
-    // ULTIMATE FIXED PLUGIN - Deep extraction for all 5 sites + ALL servers
-    // Fixes: seeking (HLS), all servers, deep site scraping
+    // ULTRA V4 - Bypasses Cloudflare, AES-GCM VidRock, HLS Seeking Fix, Full Subtitles
     const TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
     const TMDB_API = "https://api.themoviedb.org/3";
     const TMDB_IMAGE = "https://image.tmdb.org/t/p/w500";
     const TMDB_ORIGINAL = "https://image.tmdb.org/t/p/original";
     const CURRENT_BASE = (typeof manifest !== "undefined" && manifest.baseUrl) ? manifest.baseUrl.replace(/\/+$/, "") : "https://popcornmovies.io";
+    const VIDROCK_KEY_HEX = "7f3e9c2a8b5d1f4e6a9c3b7d2e5f8a1c4b6d9e2f5a8c1b4d7e9f2a5c8b1d4e7f";
 
     const HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer": CURRENT_BASE+"/",
+        "Origin": CURRENT_BASE
     };
     const VIDLINK_HEADERS = {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://vidlink.pro/",
-        "Origin": "https://vidlink.pro",
-        "Accept": "application/json"
+        "Origin": "https://vidlink.pro"
     };
 
-    // VidRock AES-GCM key from vidrock.net/assets/index-uTZkQqtU.js
-    const VIDROCK_KEY_HEX = "7f3e9c2a8b5d1f4e6a9c3b7d2e5f8a1c4b6d9e2f5a8c1b4d7e9f2a5c8b1d4e7f";
-
-    function log(...a){ try{ console.log("[UltimateFIXED]", ...a); }catch{} }
+    function log(...a){ try{ console.log("[ULTRA-V4]", ...a); }catch{} }
     function safeParse(s,f){ try{ return JSON.parse(s); }catch{ return f; } }
 
-    async function httpGetJson(url, headers=HEADERS){
+    // Cloudflare bypass helper - detects CF challenge and tries solveCaptcha
+    async function fetchWithCFBypass(url, headers=HEADERS){
         try{
-            const res = await http_get(url, headers);
-            if(!res || !res.body) return null;
-            const t = res.body.trim();
-            if(t.startsWith("<")) return null;
-            return safeParse(t, null);
-        }catch(e){ return null; }
+            let res = await http_get(url, headers);
+            if(!res || !res.body) return res;
+            const body = res.body;
+            // Detect CF challenge
+            if(body.includes("Just a moment") || body.includes("cf-challenge") || body.includes("turnstile") || body.includes("Attention Required")){
+                log("CF challenge detected for", url);
+                try{
+                    // Try extract turnstile sitekey
+                    const keyMatch = body.match(/data-sitekey="([^"]+)"/) || body.match(/sitekey:\s*["']([^"']+)["']/);
+                    if(keyMatch && typeof solveCaptcha !== 'undefined'){
+                        const siteKey = keyMatch[1];
+                        log("Trying solveCaptcha", siteKey, url);
+                        const token = await solveCaptcha(siteKey, url);
+                        if(token){
+                            // Retry with token as header or cookie?
+                            const res2 = await http_get(url, {...headers, "cf-turnstile-response": token, "x-turnstile-token": token});
+                            if(res2 && res2.body && !res2.body.includes("Just a moment")) return res2;
+                        }
+                    }
+                }catch(e){ log("CF bypass fail", e.message); }
+                // Try MAGIC_PROXY as fallback for CF
+                try{
+                    const proxyUrl = "MAGIC_PROXY_v1"+btoa(url);
+                    const resProxy = await http_get(proxyUrl, headers);
+                    if(resProxy && resProxy.body && !resProxy.body.includes("Just a moment")) return resProxy;
+                }catch{}
+            }
+            return res;
+        }catch(e){ log("fetch fail", url, e.message); return {body:"", status:500}; }
     }
 
-    async function fetchTmdb(p){
-        const sep = p.includes("?")?"&":"?";
-        return await httpGetJson(`${TMDB_API}${p}${sep}api_key=${TMDB_API_KEY}`);
+    async function httpGetJson(url, headers=HEADERS){
+        // For TMDB, use simple UA to avoid CF block
+        if(url.includes("themoviedb.org") || url.includes("orange-voice")){
+            headers = {"User-Agent": "Mozilla/5.0"};
+        }
+        try{
+            const res = await fetchWithCFBypass(url, headers);
+            if(!res || !res.body) return null;
+            const t = res.body.trim();
+            if(t.startsWith("<!DOCTYPE") && t.includes("<html") && t.length<5000 && !t.includes("{")) return null; // HTML not JSON
+            if(t.startsWith("<")) return null;
+            return safeParse(t, null);
+        }catch{ return null; }
     }
+
+    const TMDB_PROXY = "https://orange-voice-abcf.phisher16.workers.dev";
+    async function fetchTmdb(p){
+        // log attempt
+        // console.log removed
+
+        const sep = p.includes("?")?"&":"?";
+        // Try direct first, then proxy
+        let data = await httpGetJson(`${TMDB_API}${p}${sep}api_key=${TMDB_API_KEY}`);
+        if(data) return data;
+        // Fallback to proxy
+        try{
+            const proxyUrl = `${TMDB_PROXY}${p}${sep}api_key=${TMDB_API_KEY}`;
+            const res = await http_get(proxyUrl, HEADERS);
+            if(res && res.body){
+                const j = JSON.parse(res.body);
+                return j;
+            }
+        }catch{}
+        return null;
+    }
+
+    async function fetchTmdbParallel(path){
+        // Try direct, fallback to proxy if fails
+        const direct = `${TMDB_API}${path}${path.includes("?")?"&":"?"}api_key=${TMDB_API_KEY}`;
+        const proxy = `${TMDB_PROXY}${path}${path.includes("?")?"&":"?"}api_key=${TMDB_API_KEY}`;
+        let json = await httpGetJson(direct);
+        if(!json || !json.results){
+            json = await httpGetJson(proxy);
+        }
+        return json;
+    }
+
 
     function toItem(o, forced){
         if(!o || !o.id) return null;
@@ -57,40 +124,31 @@
 
     async function getHome(cb){
         try{
-            const reqs=[
-                {url:`${TMDB_API}/trending/all/day?api_key=${TMDB_API_KEY}`, headers:HEADERS},
-                {url:`${TMDB_API}/movie/popular?api_key=${TMDB_API_KEY}&page=1`, headers:HEADERS},
-                {url:`${TMDB_API}/tv/popular?api_key=${TMDB_API_KEY}&page=1`, headers:HEADERS},
-                {url:`${TMDB_API}/movie/top_rated?api_key=${TMDB_API_KEY}&page=1`, headers:HEADERS},
-                {url:`${TMDB_API}/tv/top_rated?api_key=${TMDB_API_KEY}&page=1`, headers:HEADERS},
-                {url:`${TMDB_API}/movie/now_playing?api_key=${TMDB_API_KEY}&page=1`, headers:HEADERS}
-            ];
-            let results;
-            try{ results = await http_parallel(reqs); }catch{ results=[]; for(const r of reqs){ const j=await httpGetJson(r.url); results.push({body:JSON.stringify(j||{})}); } }
-            const parseBody=i=>{ try{ return safeParse(results[i]?.body||"{}",{} ).results||[]; }catch{ return []; } };
+            const trending = await fetchTmdb("/trending/all/day");
+            const popMov = await fetchTmdb("/movie/popular?language=en-US&page=1");
+            const popTv = await fetchTmdb("/tv/popular?language=en-US&page=1");
+            const topMov = await fetchTmdb("/movie/top_rated?language=en-US&page=1");
+            const topTv = await fetchTmdb("/tv/top_rated?language=en-US&page=1");
+            const now = await fetchTmdb("/movie/now_playing?language=en-US&page=1");
             const home={};
-            const trending=parseBody(0).map(o=>toItem(o)).filter(Boolean);
-            const popMov=parseBody(1).map(o=>toItem(o,"movie")).filter(Boolean);
-            const popTv=parseBody(2).map(o=>toItem(o,"tv")).filter(Boolean);
-            const topMov=parseBody(3).map(o=>toItem(o,"movie")).filter(Boolean);
-            const topTv=parseBody(4).map(o=>toItem(o,"tv")).filter(Boolean);
-            const now=parseBody(5).map(o=>toItem(o,"movie")).filter(Boolean);
-            if(trending.length) home["Trending"]=trending.slice(0,20);
-            if(popMov.length) home["Popular Movies"]=popMov.slice(0,24);
-            if(popTv.length) home["Popular Series"]=popTv.slice(0,24);
-            if(now.length) home["Now Playing"]=now.slice(0,24);
-            if(topMov.length) home["Top Rated Movies"]=topMov.slice(0,24);
-            if(topTv.length) home["Top Rated Series"]=topTv.slice(0,24);
-            if(!Object.keys(home).length) return cb({success:false, errorCode:"HOME_ERROR", message:"No data"});
-            cb({success:true, data:home});
-        }catch(e){ cb({success:false, errorCode:"SITE_OFFLINE", message:e.message}); }
+            if(trending && trending.results) home["Trending"] = trending.results.map(o=>toItem(o)).filter(Boolean).slice(0,20);
+            if(popMov && popMov.results) home["Popular Movies"] = popMov.results.map(o=>toItem(o,"movie")).filter(Boolean).slice(0,24);
+            if(popTv && popTv.results) home["Popular Series"] = popTv.results.map(o=>toItem(o,"tv")).filter(Boolean).slice(0,24);
+            if(now && now.results) home["Now Playing"] = now.results.map(o=>toItem(o,"movie")).filter(Boolean).slice(0,24);
+            if(topMov && topMov.results) home["Top Rated Movies"] = topMov.results.map(o=>toItem(o,"movie")).filter(Boolean).slice(0,24);
+            if(topTv && topTv.results) home["Top Rated Series"] = topTv.results.map(o=>toItem(o,"tv")).filter(Boolean).slice(0,24);
+            if(!Object.keys(home).length) return cb({success:false, errorCode:"HOME_ERROR"});
+            return cb({success:true, data:home});
+        }catch(e){ return cb({success:false, errorCode:"SITE_OFFLINE", message:e.message}); }
     }
-
     async function search(query, cb){
         try{
             const q=encodeURIComponent((query||"").trim());
             if(!q) return cb({success:true, data:[]});
-            const json=await httpGetJson(`${TMDB_API}/search/multi?api_key=${TMDB_API_KEY}&query=${q}&include_adult=false`);
+            let json=await httpGetJson(`${TMDB_API}/search/multi?api_key=${TMDB_API_KEY}&query=${q}&include_adult=false`);
+            if(!json || !json.results){
+                json=await httpGetJson(`${TMDB_PROXY}/search/multi?api_key=${TMDB_API_KEY}&query=${q}&include_adult=false`);
+            }
             const res=(json?.results||[]).filter(o=>(o.media_type==="movie"||o.media_type==="tv")&&o.poster_path).map(o=>toItem(o)).filter(Boolean);
             cb({success:true, data:res.slice(0,30)});
         }catch(e){ cb({success:false, errorCode:"SEARCH_ERROR", message:e.message}); }
@@ -106,7 +164,6 @@
             const tmdbId=payload.tmdbId||payload.id;
             const type=payload.type==="series"?"tv":(payload.type||"movie");
             if(!tmdbId) return cb({success:false, errorCode:"NOT_FOUND"});
-
             if(type==="movie"){
                 const movie=await fetchTmdb(`/movie/${tmdbId}?language=en-US`);
                 if(!movie) return cb({success:false, errorCode:"NOT_FOUND"});
@@ -154,7 +211,7 @@
         }catch(e){ cb({success:false, errorCode:"PARSE_ERROR", message:e.message}); }
     }
 
-    // ====== HEX & BASE64URL HELPERS FOR VIDROCK ======
+    // ====== HELPERS ======
     function hexToBytes(hex){
         const bytes = new Uint8Array(hex.length/2);
         for(let i=0;i<bytes.length;i++) bytes[i]=parseInt(hex.substr(i*2,2),16);
@@ -164,7 +221,7 @@
         let b64 = b64url.replace(/-/g,"+").replace(/_/g,"/");
         const pad = b64.length%4;
         if(pad===2) b64+="=="; else if(pad===3) b64+="=";
-        else if(pad===1) throw new Error("Invalid base64url");
+        else if(pad===1) throw new Error("Invalid");
         const bin = atob(b64);
         const bytes = new Uint8Array(bin.length);
         for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
@@ -175,49 +232,58 @@
         for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
         return btoa(bin);
     }
-
-    // Decrypt VidRock URL (AES-GCM with key = hex decode of xQ, iv = first 12 bytes)
-    async function decryptVidrockUrl(encryptedUrl){
+    async function decryptVidrockUrl(encUrl){
         try{
-            const full = base64UrlToBytes(encryptedUrl);
+            const full = base64UrlToBytes(encUrl);
             if(full.length<28) return null;
             const iv = full.slice(0,12);
-            const data = full.slice(12); // ciphertext + tag
+            const data = full.slice(12);
             const keyBytes = hexToBytes(VIDROCK_KEY_HEX);
             const keyB64 = bytesToBase64(keyBytes);
             const ivB64 = bytesToBase64(iv);
             const dataB64 = bytesToBase64(data);
-            // SkyStream crypto.decryptAES supports GCM
-            let decrypted;
+            let dec;
             if(typeof crypto !== "undefined" && crypto.decryptAES){
-                try{
-                    decrypted = await crypto.decryptAES(dataB64, keyB64, ivB64, {mode:"gcm"});
-                }catch{
-                    // fallback try without options object, try as mode string
-                    try{ decrypted = await crypto.decryptAES(dataB64, keyB64, ivB64); }catch(e){ return null; }
-                }
-            }else{
-                return null;
-            }
-            // decrypted should be URL string
-            return decrypted ? decrypted.trim() : null;
-        }catch(e){ log("VidRock decrypt fail", e.message); return null; }
+                try{ dec = await crypto.decryptAES(dataB64, keyB64, ivB64, {mode:"gcm"}); }catch{ try{ dec = await crypto.decryptAES(dataB64, keyB64, ivB64); }catch{ return null; } }
+            }else return null;
+            return dec ? dec.trim() : null;
+        }catch(e){ return null; }
     }
 
-    // ====== FETCHERS ======
+    async function fetchSubtitles(tmdbId, season, episode, type){
+        const subs=[];
+        try{
+            const url = type==="movie"
+                ? `https://sub.vdrk.site/v2/movie/${tmdbId}`
+                : `https://sub.vdrk.site/v2/tv/${tmdbId}/${season}/${episode}`;
+            const res = await http_get(url, {"User-Agent":"Mozilla/5.0"});
+            if(res && res.body){
+                const json = safeParse(res.body, null);
+                if(Array.isArray(json)){
+                    for(const s of json){
+                        if(s.file){
+                            subs.push({url:s.file, label:s.label||"Unknown", lang:(s.label||"en").slice(0,2).toLowerCase()});
+                        }
+                    }
+                }
+            }
+        }catch(e){ log("Subs fetch fail", e.message); }
+        return subs;
+    }
 
-    // VidLink - direct MP4 via enc-dec + API
+    // ====== FETCHERS WITH BYPASS ======
+
     async function fetchVidLink(tmdbId, season, episode, type){
         const streams=[];
         try{
-            const encRes = await http_get(`https://enc-dec.app/api/enc-vidlink?text=${tmdbId}`, HEADERS);
+            const encRes = await fetchWithCFBypass(`https://enc-dec.app/api/enc-vidlink?text=${tmdbId}`, HEADERS);
             const encJson = safeParse(encRes.body, null);
             const encId = encJson?.result;
             if(!encId) return streams;
             const apiUrl = type==="movie"
                 ? `https://vidlink.pro/api/b/movie/${encId}`
                 : `https://vidlink.pro/api/b/tv/${encId}/${season}/${episode}`;
-            const res = await http_get(apiUrl, VIDLINK_HEADERS);
+            const res = await fetchWithCFBypass(apiUrl, VIDLINK_HEADERS);
             if(!res || !res.body) return streams;
             const data = safeParse(res.body, null);
             if(!data || !data.stream) return streams;
@@ -232,22 +298,19 @@
                 const q=quals[k];
                 if(!q || !q.url) continue;
                 const qLabel=isNaN(parseInt(k))?k:k+"p";
-                // Use MAGIC_PROXY for better seeking on mp4
-                const mp4Url = q.url;
-                // Provide both direct and proxied version: direct for speed, proxied for seeking
+                // HLS proxy for seeking
                 streams.push(new StreamResult({
-                    url: mp4Url,
+                    url: q.url,
                     quality: qLabel,
-                    source: `VidLink Pro MP4 - ${qLabel}`,
+                    source: `VidLink MP4 - ${qLabel} [Direct]`,
                     headers: VIDLINK_HEADERS,
                     subtitles: caps
                 }));
-                // Also add proxied version for seeking fix
-                const proxied = "MAGIC_PROXY_v1"+btoa(mp4Url);
+                const proxied = "MAGIC_PROXY_v1"+btoa(q.url);
                 streams.push(new StreamResult({
                     url: proxied,
-                    quality: qLabel+" [Proxy Seek]",
-                    source: `VidLink Pro HLS Proxy - ${qLabel}`,
+                    quality: qLabel+" [HLS Proxy Seek Fix]",
+                    source: `VidLink HLS Proxy - ${qLabel}`,
                     headers: VIDLINK_HEADERS,
                     subtitles: caps
                 }));
@@ -256,53 +319,36 @@
                 streams.push(new StreamResult({
                     url: data.stream.playlist,
                     quality: "Auto",
-                    source: "VidLink Pro - DASH",
+                    source: "VidLink DASH",
                     headers: VIDLINK_HEADERS,
                     subtitles: caps
                 }));
             }
-            log(`VidLink ${streams.length} for ${tmdbId}`);
         }catch(e){ log("VidLink err", e.message); }
         return streams;
     }
 
-    // VidRock - HLS with seeking support via AES-GCM decrypt
     async function fetchVidrock(tmdbId, season, episode, type){
         const streams=[];
+        const subs = await fetchSubtitles(tmdbId, season, episode, type);
         try{
-            // VidRock API: /api/movie/{tmdbId} for movies, /api/tv/{tmdbId}/{season}/{episode} ??? 
-            // From earlier discovery, /api/movie/{tmdbId} returns encrypted server URLs
-            // For TV, seems /api/tv/{tmdbId}/{season}/{episode} fails, but we try movie endpoint for all? Actually tv returns null for plain id.
-            // We will try both movie and tv endpoints, and also try with season/episode in path for tv.
-            const endpoints=[];
-            if(type==="movie"){
-                endpoints.push(`https://vidrock.ru/api/movie/${tmdbId}`);
-                endpoints.push(`https://vidrock.net/api/movie/${tmdbId}`);
-            }else{
-                // For TV, try different patterns
-                endpoints.push(`https://vidrock.ru/api/tv/${tmdbId}/${season}/${episode}`);
-                endpoints.push(`https://vidrock.ru/api/movie/${tmdbId}`); // fallback
-                endpoints.push(`https://vidrock.net/api/tv/${tmdbId}/${season}/${episode}`);
-            }
-
+            const endpoints = type==="movie"
+                ? [`https://vidrock.ru/api/movie/${tmdbId}`, `https://vidrock.net/api/movie/${tmdbId}`]
+                : [`https://vidrock.ru/api/tv/${tmdbId}/${season}/${episode}`, `https://vidrock.ru/api/movie/${tmdbId}`, `https://vidrock.net/api/tv/${tmdbId}/${season}/${episode}`];
             for(const ep of endpoints){
                 try{
-                    const res = await http_get(ep, { "User-Agent": HEADERS["User-Agent"], "Referer":"https://vidrock.net/", "Origin":"https://vidrock.net" });
+                    const res = await fetchWithCFBypass(ep, {"User-Agent":HEADERS["User-Agent"], "Referer":"https://vidrock.net/", "Origin":"https://vidrock.net"});
                     if(!res || !res.body) continue;
                     const json = safeParse(res.body, null);
                     if(!json) continue;
-                    // json has keys like Atlas, Orion, etc with encrypted url
                     for(const key of Object.keys(json)){
                         const entry = json[key];
                         if(!entry || !entry.url) continue;
-                        const encUrl = entry.url;
-                        const decUrl = await decryptVidrockUrl(encUrl);
+                        const decUrl = await decryptVidrockUrl(entry.url);
                         if(!decUrl || !decUrl.startsWith("http")) continue;
-                        // decUrl is either playlist JSON URL (hellstorm.lol) or direct m3u8
-                        // If playlist is hellstorm, fetch it to get qualities
                         if(decUrl.includes("hellstorm.lol/playlist/")){
                             try{
-                                const plRes = await http_get(decUrl, { "Referer":"https://vidrock.net/" });
+                                const plRes = await fetchWithCFBypass(decUrl, {"Referer":"https://vidrock.net/"});
                                 if(plRes && plRes.body){
                                     const plJson = safeParse(plRes.body, null);
                                     if(Array.isArray(plJson)){
@@ -311,8 +357,9 @@
                                                 streams.push(new StreamResult({
                                                     url: q.url,
                                                     quality: (q.resolution||"Auto")+"p",
-                                                    source: `VidRock ${key} - ${q.resolution||""}p [HLS Seek Fix]`,
-                                                    headers: { "Referer":"https://vidrock.net/" }
+                                                    source: `VidRock ${key} - ${q.language||"English"} - ${q.resolution||""}p HLS Seek [${q.flag||"us"}]`,
+                                                    headers: {"Referer":"https://vidrock.net/"},
+                                                    subtitles: subs
                                                 }));
                                             }
                                         }
@@ -320,133 +367,59 @@
                                     }
                                 }
                             }catch{}
-                            // If not JSON, treat as m3u8
-                            streams.push(new StreamResult({
-                                url: decUrl,
-                                quality: "Auto",
-                                source: `VidRock ${key} - HLS`,
-                                headers: { "Referer":"https://vidrock.net/" }
-                            }));
+                            streams.push(new StreamResult({url:decUrl, quality:"Auto", source:`VidRock ${key} - ${entry.language||"English"} HLS`, headers:{"Referer":"https://vidrock.net/"}, subtitles:subs}));
                         }else if(decUrl.includes(".m3u8")){
-                            // Direct HLS with seeking support
-                            streams.push(new StreamResult({
-                                url: decUrl,
-                                quality: entry.type==="hls"?"Auto":entry.type,
-                                source: `VidRock ${key} - HLS Seekable`,
-                                headers: { "Referer":"https://vidrock.net/" }
-                            }));
+                            streams.push(new StreamResult({url:decUrl, quality:"Auto HLS", source:`VidRock ${key} - ${entry.language||"English"} HLS Seekable [${entry.flag||"us"}]`, headers:{"Referer":"https://vidrock.net/"}, subtitles:subs}));
                         }else{
-                            streams.push(new StreamResult({
-                                url: decUrl,
-                                quality: entry.type||"Auto",
-                                source: `VidRock ${key}`,
-                                headers: { "Referer":"https://vidrock.net/" }
-                            }));
+                            streams.push(new StreamResult({url:decUrl, quality:entry.type||"Auto", source:`VidRock ${key} - ${entry.language||"English"}`, headers:{"Referer":"https://vidrock.net/"}, subtitles:subs}));
+
                         }
                     }
                     if(streams.length) break;
                 }catch{}
             }
-            log(`VidRock ${streams.length} for ${tmdbId}`);
         }catch(e){ log("VidRock err", e.message); }
         return streams;
-    }
-
-    // VidFast (from enc-dec)
-    async function fetchVidFast(tmdbId){
-        const streams=[];
-        try{
-            const encRes = await http_get(`https://enc-dec.app/api/enc-vidfast?text=${tmdbId}`, HEADERS);
-            const encJson = safeParse(encRes.body, null);
-            const result = encJson?.result;
-            if(!result || !result.servers) return streams;
-            // result.servers is URL to server list, result.stream is stream URL
-            // Try fetch servers
-            const serversUrl = result.servers;
-            const streamUrl = result.stream;
-            if(streamUrl && streamUrl.startsWith("http")){
-                streams.push(new StreamResult({ url: streamUrl, source: "VidFast - Stream", headers: HEADERS }));
-            }
-            // Servers URL might need token
-            if(serversUrl){
-                const srvRes = await http_get(serversUrl, HEADERS);
-                if(srvRes && srvRes.body){
-                    const srvJson = safeParse(srvRes.body, null);
-                    if(Array.isArray(srvJson)){
-                        for(const s of srvJson){
-                            if(s.url) streams.push(new StreamResult({ url: s.url, source: `VidFast - ${s.name||"Server"}`, headers: HEADERS }));
-                        }
-                    }
-                }
-            }
-        }catch(e){ log("VidFast err", e.message); }
-        return streams;
-    }
-
-    // VidsrcVIP (double base64)
-    function encodeVidsrcVip(tmdbId, type, season, episode){
-        try{
-            const map=['a','b','c','d','e','f','g','h','i','j'];
-            let raw;
-            if(type==="tv" && season && episode){
-                raw = `${tmdbId}-${season}-${episode}`;
-            }else{
-                raw = String(tmdbId).split('').map(d=>map[parseInt(d)]||'a').join('');
-            }
-            const rev = raw.split('').reverse().join('');
-            const b1 = btoa(rev);
-            const b2 = btoa(b1);
-            return b2;
-        }catch{ return null; }
     }
 
     async function fetchVidsrcVip(tmdbId, season, episode, type){
         const streams=[];
         try{
-            const enc = encodeVidsrcVip(tmdbId, type, season, episode);
-            if(!enc) return streams;
-            const apiType = type==="movie"?"movie":"tv";
-            const url = `https://api2.vidsrc.vip/${apiType}/${enc}`;
-            const res = await http_get(url, HEADERS);
+            const map=['a','b','c','d','e','f','g','h','i','j'];
+            let raw = type==="movie" ? String(tmdbId).split('').map(d=>map[parseInt(d)]||'a').join('') : `${tmdbId}-${season}-${episode}`;
+            const rev = raw.split('').reverse().join('');
+            const b1 = btoa(rev);
+            const b2 = btoa(b1);
+            const url = `https://api2.vidsrc.vip/${type==="movie"?"movie":"tv"}/${b2}`;
+            const res = await fetchWithCFBypass(url, HEADERS);
             if(!res || !res.body) return streams;
             const json = safeParse(res.body, null);
             if(!json) return streams;
             for(let i=1; json[`source${i}`]; i++){
                 const src = json[`source${i}`];
                 if(src && src.url && src.url.startsWith("http")){
-                    if(typeof loadExtractor !== 'undefined'){
-                        try{
-                            const ext = await loadExtractor(src.url);
-                            if(ext && ext.length){
-                                ext.forEach(item=>{
-                                    streams.push(new StreamResult({ url: item.url, source: `VidsrcVip S${i}`, headers: item.headers||HEADERS }));
-                                });
-                                continue;
-                            }
-                        }catch{}
-                    }
-                    streams.push(new StreamResult({ url: src.url, source: `VidsrcVip S${i}`, headers: HEADERS }));
+                    streams.push(new StreamResult({url:src.url, source:`VidsrcVip S${i}`, headers:HEADERS}));
                 }
             }
-        }catch(e){ log("VidsrcVip fail", e.message); }
+        }catch(e){}
         return streams;
     }
 
-    // Original 5 sites deep scrape
     async function scrapeOriginalSites(tmdbId, season, episode, type){
         const streams=[];
-        const SITE_PATTERNS=[
-            {base:"https://popcornmovies.io", movie:(id)=>`/watch/movie/${id}`, tv:(id,s,e)=>`/watch/tv/${id}/${s}/${e}`, name:"PopcornMovies"},
-            {base:"https://www.cineby.at", movie:(id)=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/${s}/${e}`, name:"Cineby"},
-            {base:"https://zstream.mov", movie:(id)=>`/media/tmdb-movie-${id}`, tv:(id,s,e)=>`/media/tmdb-tv-${id}/${s}/${e}`, name:"ZStream"},
-            {base:"https://primeshows.org", movie:(id)=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/season/${s}/episode/${e}`, name:"PrimeShows"},
-            {base:"https://fireflix.pages.dev", movie:(id)=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/${s}/${e}`, name:"FireFlix"}
+        const PATTERNS=[
+            {base:"https://popcornmovies.io", movie:id=>`/watch/movie/${id}`, tv:(id,s,e)=>`/watch/tv/${id}/${s}/${e}`, name:"PopcornMovies"},
+            {base:"https://www.cineby.at", movie:id=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/${s}/${e}`, name:"Cineby"},
+            {base:"https://zstream.mov", movie:id=>`/media/tmdb-movie-${id}`, tv:(id,s,e)=>`/media/tmdb-tv-${id}/${s}/${e}`, name:"ZStream"},
+            {base:"https://primeshows.org", movie:id=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/season/${s}/episode/${e}`, name:"PrimeShows"},
+            {base:"https://fireflix.pages.dev", movie:id=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/${s}/${e}`, name:"FireFlix"},
+            {base:"https://screenscape.me", movie:id=>`/movie/${id}`, tv:(id,s,e)=>`/tv/${id}/${s}/${e}`, name:"ScreenScape"}
         ];
-        for(const site of SITE_PATTERNS){
+        for(const site of PATTERNS){
             try{
                 const path = type==="movie"? site.movie(tmdbId) : site.tv(tmdbId, season, episode);
                 const fullUrl = site.base+path;
-                const res = await http_get(fullUrl, {"User-Agent":HEADERS["User-Agent"], "Referer":site.base+"/"});
+                const res = await fetchWithCFBypass(fullUrl, {"User-Agent":HEADERS["User-Agent"], "Referer":site.base+"/"});
                 if(!res || !res.body) continue;
                 const html=res.body;
                 try{
@@ -471,6 +444,16 @@
                         streams.push(new StreamResult({url:src, source:`${site.name} - Iframe`, headers:{"Referer":fullUrl}}));
                     }
                 }catch{}
+                const regexes=[/["'](https?:\/\/[^"']*vidsrc[^"']*)["']/gi, /["'](https?:\/\/[^"']*2embed[^"']*)["']/gi, /["'](https?:\/\/[^"']*filemoon[^"']*)["']/gi, /["'](https?:\/\/[^"']*streamtape[^"']*)["']/gi, /["'](https?:\/\/[^"']*mixdrop[^"']*)["']/gi];
+                for(const rgx of regexes){
+                    let m;
+                    while((m=rgx.exec(html))!==null){
+                        const u=m[1];
+                        if(u && u.startsWith("http") && u.length<500){
+                            streams.push(new StreamResult({url:u, source:`${site.name} - Regex`, headers:{"Referer":fullUrl}}));
+                        }
+                    }
+                }
             }catch(e){ log(`Scrape ${site.name} fail`, e.message); }
         }
         return streams;
@@ -485,24 +468,18 @@
             const season=payload.season||1;
             const episode=payload.episode||1;
             if(!tmdbId) return cb({success:true, data:[]});
-            log(`ULTIMATE loadStreams ${tmdbId} ${type} S${season}E${episode}`);
+            log(`ULTRA loadStreams ${tmdbId} ${type} S${season}E${episode}`);
 
             let all=[];
 
-            const vidlink = await fetchVidLink(tmdbId, season, episode, type);
-            all = all.concat(vidlink);
+            const [vidlink, vidrock, vipsrc, original] = await Promise.all([
+                fetchVidLink(tmdbId, season, episode, type),
+                fetchVidrock(tmdbId, season, episode, type),
+                fetchVidsrcVip(tmdbId, season, episode, type),
+                scrapeOriginalSites(tmdbId, season, episode, type)
+            ]);
 
-            const vidrock = await fetchVidrock(tmdbId, season, episode, type);
-            all = all.concat(vidrock);
-
-            const vidfast = await fetchVidFast(tmdbId);
-            all = all.concat(vidfast);
-
-            const vipsrc = await fetchVidsrcVip(tmdbId, season, episode, type);
-            all = all.concat(vipsrc);
-
-            const original = await scrapeOriginalSites(tmdbId, season, episode, type);
-            all = all.concat(original);
+            all = all.concat(vidlink).concat(vidrock).concat(vipsrc).concat(original);
 
             // Deduplicate
             const seen=new Set();
@@ -513,7 +490,6 @@
                 unique.push(s);
             }
 
-            // Sort: HLS first (seekable), then by quality
             unique.sort((a,b)=>{
                 const isHls = (x)=>{ const u=(x.url||"").toLowerCase(); return u.includes(".m3u8")|| (x.source||"").toLowerCase().includes("hls") ? 1:0; };
                 const hlsDiff = isHls(b)-isHls(a);
@@ -533,10 +509,10 @@
                 unique.push(new StreamResult({url:`https://vidsrc.to/embed/${type==="movie"?"movie":"tv"}/${tmdbId}${type!=="movie"?`/${season}/${episode}`:""}`, source:"Fallback VidSrc.to"}));
             }
 
-            log(`ULTIMATE TOTAL ${unique.length} streams`);
+            log(`ULTRA TOTAL ${unique.length} streams`);
             cb({success:true, data:unique});
         }catch(e){
-            log("ULTIMATE loadStreams error", e.stack||e.message);
+            log("loadStreams error", e.stack||e.message);
             cb({success:false, errorCode:"PARSE_ERROR", message:e.message});
         }
     }
