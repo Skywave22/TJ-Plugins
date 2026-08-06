@@ -1,7 +1,7 @@
 {
   "packageName": "com.vegamovies.repo.vegamovies",
   "name": "VegaMovies",
-  "version": 2,
+  "version": 1,
   "baseUrl": "https://vegamoviez.lol",
   "description": "VegaMovies multi-mirror plugin — automatically aggregates servers & mirrors from all 4 Vegamovies sites (vegamoviez.lol, vegamoviess.fun, vega-ts.com, vegamovie.me). Movies + TV series with episode support.",
   "authors": [
