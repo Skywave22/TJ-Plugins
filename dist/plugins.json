@@ -62,5 +62,42 @@
       "Anime"
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.master.mega.india.sky"
+  },
+  {
+    "packageName": "com.vegamovies.repo.vegamovies",
+    "name": "VegaMovies",
+    "version": 1,
+    "baseUrl": "https://vegamoviez.lol",
+    "description": "VegaMovies / Vegamovies multi-mirror plugin — aggregates servers from 4 mirror domains (vegamoviez.lol, vegamoviess.fun, vega-ts.com, vegamovie.me) with /go redirector bypass.",
+    "authors": [
+      "SkyStreamDev"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "domains": [
+      {
+        "name": "vegamoviez.lol",
+        "url": "https://vegamoviez.lol"
+      },
+      {
+        "name": "vegamoviess.fun",
+        "url": "https://vegamoviess.fun"
+      },
+      {
+        "name": "vega-ts.com",
+        "url": "https://vega-ts.com"
+      },
+      {
+        "name": "vegamovie.me",
+        "url": "https://vegamovie.me"
+      }
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.vegamovies.repo.vegamovies.sky"
   }
 ]
