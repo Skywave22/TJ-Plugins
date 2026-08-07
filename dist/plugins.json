@@ -1,5 +1,23 @@
 [
   {
+    "packageName": "dev.moviebite.plugin",
+    "name": "MovieBite",
+    "version": 1,
+    "baseUrl": "https://moviebite.cc",
+    "description": "Watch Movies & TV Shows in HD from MovieBite.cc - Multi-server streaming with 4K support",
+    "authors": [
+      "SkyDev"
+    ],
+    "languages": [
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "TV Shows"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.moviebite.plugin.sky"
+  },
+  {
     "packageName": "dev.screenscape.plugin",
     "name": "ScreenScape",
     "version": 2,
