@@ -25,7 +25,15 @@
     const MAX_RESOLVER_DEPTH = 4;
     const CACHE_TTL_MS = 90 * 1000;
     const CACHE_MAX_ENTRIES = 28;
+    const HOST_CONFIG_URL = "https://raw.githubusercontent.com/SaurabhKaperwan/Utils/refs/heads/main/urls.json";
+    // Last-resort catalogue used only when every Vega last-mile host is gated.
+    // It uses the same HubCloud flow demonstrated by the maintained 4KHDHub plugin.
+    const RESCUE_BASE = "https://4khdhub.link";
     const DEBUG = false;
+
+    let dynamicVCloudBase = "https://vcloud.zip";
+    let dynamicHubCloudBase = "https://hubcloud.cx";
+    let hostConfigLoaded = false;
 
     const PAGE_CACHE = Object.create(null);
     const CACHE_ORDER = [];
@@ -124,13 +132,14 @@
         return headers;
     }
 
-    async function getOne(url, referer, bypassCache) {
+    async function getOne(url, referer, bypassCache, extraHeaders) {
         if (!bypassCache) {
             const cached = cacheGet(url);
             if (cached) return cached;
         }
         try {
-            const raw = await http_get(url, requestHeaders(referer));
+            const headers = Object.assign(requestHeaders(referer), extraHeaders || {});
+            const raw = await http_get(url, headers);
             const response = normalizeResponse(raw, url);
             cachePut(url, response);
             return response;
@@ -498,11 +507,28 @@
     }
 
     function makeState(kind, payload) {
-        return STATE_PREFIX + kind + ":" + encodeURIComponent(JSON.stringify(payload || {}));
+        // Match the format used by maintained SkyStream providers: opaque JSON.
+        // Plain JSON survives app routing/history unchanged and is easier for the
+        // CLI and player to pass back into load()/loadStreams().
+        return JSON.stringify(Object.assign({ __vegaUnified: 2, kind: kind }, payload || {}));
     }
 
     function parseState(value) {
         const input = String(value || "");
+
+        // Current JSON state.
+        try {
+            const parsed = JSON.parse(input);
+            if (parsed && parsed.__vegaUnified && parsed.kind) {
+                const data = Object.assign({}, parsed);
+                const kind = data.kind;
+                delete data.__vegaUnified;
+                delete data.kind;
+                return { kind: kind, data: data };
+            }
+        } catch (_) {}
+
+        // Backward compatibility with v1 URLs already saved in user history.
         if (input.indexOf(STATE_PREFIX) !== 0) return null;
         const rest = input.slice(STATE_PREFIX.length);
         const split = rest.indexOf(":");
@@ -565,7 +591,6 @@
             type: group.type || "movie",
             year: group.year,
             description: "Indexed from " + mirrorCount + " active Vega mirror" + (mirrorCount === 1 ? "" : "s") + ".",
-            provider: "Vega Unified â€¢ " + mirrorCount + " mirror" + (mirrorCount === 1 ? "" : "s"),
             isAdult: !!group.adult,
             headers: group.urls.length ? { Referer: originOf(group.urls[0]) + "/", "User-Agent": USER_AGENT } : undefined
         });
@@ -655,7 +680,10 @@
             const term = String(query || "").trim();
             if (!term) return cb({ success: true, data: [] });
             const scan = await searchAllGroups(term, page || 1);
-            cb({ success: true, data: scan.groups.map(groupToMedia) });
+            const relevant = scan.groups.filter(function (group) {
+                return titleSimilarity(term, group.title) >= 0.45;
+            });
+            cb({ success: true, data: (relevant.length ? relevant : scan.groups).map(groupToMedia) });
         } catch (error) {
             cb({ success: false, errorCode: "SEARCH_ERROR", message: errorText(error) });
         }
@@ -749,8 +777,7 @@
             seen[href] = true;
             const quality = extractQuality(contextHeading + " " + anchor.text);
             const labelParts = [];
-            if (quality) labelParts.push(quality);
-            if (anchor.text) labelParts.push(anchor.text);
+       
             out.push({
                 url: href,
                 label: labelParts.join(" â€¢ ") || "Download mirror",
@@ -1085,14 +1112,31 @@
             }
 
             const merged = mergeDetails(details, stateData);
-            let episodes;
-            if (merged.type === "series" || merged.type === "anime") episodes = await buildEpisodes(merged);
             const mediaUrl = makeState("item", {
                 key: merged.key,
                 title: merged.title,
                 type: merged.type,
                 urls: merged.urls.slice(0, 10)
             });
+
+            let episodes;
+            if (merged.type === "series" || merged.type === "anime") {
+                episodes = await buildEpisodes(merged);
+            } else {
+                // SkyStream enables its Play/Download controls only when details
+                // contain at least one Episode, including movies. This mirrors the
+                // maintained 4KHDHub provider's â€œFull Movieâ€ episode contract.
+                episodes = [new Episode({
+                    name: "Full Movie",
+                    season: 1,
+                    episode: 1,
+                    url: mediaUrl,
+                    posterUrl: merged.poster || "",
+                    description: "All available Vega mirrors and qualities",
+                    dubStatus: /hindi|dual audio|multi audio/i.test(merged.title) ? "dubbed" : "none",
+                    headers: merged.urls.length ? { Referer: merged.urls[0], "User-Agent": USER_AGENT } : undefined
+                })];
+            }
 
             cb({
                 success: true,
@@ -1108,7 +1152,6 @@
                     score: merged.score,
                     tags: merged.tags,
                     episodes: episodes,
-                    provider: "Vega Unified â€¢ " + merged.urls.length + " detail mirror" + (merged.urls.length === 1 ? "" : "s"),
                     isAdult: !!merged.adult,
                     status: "completed",
                     headers: merged.urls.length ? { Referer: merged.urls[0], "User-Agent": USER_AGENT } : undefined
@@ -1157,6 +1200,34 @@
         try { return atob(atob(match[1])); } catch (_) { return ""; }
     }
 
+    function rot13(value) {
+        let out = "";
+        const input = String(value || "");
+        for (let i = 0; i < input.length; i++) {
+            const code = input.charCodeAt(i);
+            if (code >= 65 && code <= 90) out += String.fromCharCode(((code - 65 + 13) % 26) + 65);
+            else if (code >= 97 && code <= 122) out += String.fromCharCode(((code - 97 + 13) % 26) + 97);
+            else out += input.charAt(i);
+        }
+        return out;
+    }
+
+    function decodeChunkedRedirect(html) {
+        try {
+            let combined = "";
+            const regex = /s\('o','([A-Za-z0-9+/=]+)'|ck\('_wp_http_\d+','([^']+)'/g;
+            let match;
+            while ((match = regex.exec(String(html || ""))) !== null) combined += match[1] || match[2] || "";
+            if (!combined) return "";
+            const stage1 = atob(combined);
+            const stage2 = rot13(atob(stage1));
+            const object = JSON.parse(atob(stage2));
+            return object && object.o ? atob(object.o).trim() : "";
+        } catch (_) {
+            return "";
+        }
+    }
+
     function extractMediaUrls(html, baseUrl) {
         let text = String(html || "").replace(/\\\//g, "/").replace(/&amp;/g, "&");
         if (text.indexOf("p,a,c,k,e,d") >= 0 && typeof getAndUnpack === "function") {
@@ -1196,18 +1267,41 @@
     function directServerByLabel(url, label) {
         if (!url || gatewayKind(url)) return false;
         if (isDirectMediaUrl(url) || pixelDrainDirect(url)) return true;
-        return /\b(?:fsl(?:v2)?\s*server|mega\s*server|download\s*file|server\s*:\s*10gbps|buzzserver|direct\s*server)\b/i.test(String(label || ""));
+        return /\b(?:fsl(?:v2)?\s*server|s3\s*server|mega\s*server|download\s*file|server\s*:\s*10gbps|buzzserver|direct\s*server|zipdisk)\b/i.test(String(label || ""));
+    }
+
+    function parseDynamicHrefMap(html, baseUrl) {
+        const map = Object.create(null);
+        const patterns = [
+            /\$\(\s*["']#([^"']+)["']\s*\)\.attr\(\s*["']href["']\s*,\s*["']([^"']+)["']\s*\)/gi,
+            /document\.getElementById\(\s*["']([^"']+)["']\s*\)\.href\s*=\s*["']([^"']+)["']/gi
+        ];
+        patterns.forEach(function (pattern) {
+            let match;
+            while ((match = pattern.exec(String(html || ""))) !== null) map[match[1]] = resolveUrl(baseUrl, match[2]);
+        });
+        return map;
     }
 
     function extractPageLinks(html, pageUrl, inheritedLabel) {
         const out = [];
         const seen = Object.create(null);
+        const dynamicHrefMap = parseDynamicHrefMap(html, pageUrl);
         const decoded = decodeDoubleAtob(html);
         if (decoded) {
             const target = resolveUrl(pageUrl, decoded);
             if (target) {
                 seen[target] = true;
                 out.push({ url: target, label: inheritedLabel || "V-Cloud", referer: pageUrl, quality: extractQuality(inheritedLabel) });
+            }
+        }
+
+        const chunkedRedirect = decodeChunkedRedirect(html);
+        if (chunkedRedirect) {
+            const target = resolveUrl(pageUrl, chunkedRedirect);
+            if (target && !seen[target]) {
+                seen[target] = true;
+                out.push({ url: target, label: inheritedLabel || "Redirect", referer: pageUrl, quality: extractQuality(inheritedLabel) });
             }
         }
 
@@ -1249,7 +1343,7 @@
         }
 
         allAnchors(html).forEach(function (anchor) {
-            let href = resolveUrl(pageUrl, anchor.href);
+            let href = resolveUrl(pageUrl, dynamicHrefMap[anchor.id] || anchor.href);
             if (!href || /(?:t\.me|telegram|facebook|twitter|instagram|javascript:)/i.test(href)) return;
             const pixel = pixelDrainDirect(href);
             if (pixel) href = pixel;
@@ -1268,10 +1362,36 @@
         return out;
     }
 
-    function vcloudAlternates(url) {
-        if (gatewayKind(url) !== "vcloud") return [];
+    async function refreshDynamicHosts() {
+        if (hostConfigLoaded) return;
+        hostConfigLoaded = true;
+        try {
+            const response = await getOne(HOST_CONFIG_URL, "", false);
+            if (!response || response.status < 200 || response.status >= 400 || !response.body) return;
+            const config = JSON.parse(response.body);
+            if (/^https?:\/\//i.test(String(config.vcloud || ""))) dynamicVCloudBase = String(config.vcloud).replace(/\/+$/, "");
+            if (/^https?:\/\//i.test(String(config.hubcloud || ""))) dynamicHubCloudBase = String(config.hubcloud).replace(/\/+$/, "");
+        } catch (_) {}
+    }
+
+    function gatewayAlternates(url) {
+        const kind = gatewayKind(url);
         const path = pathOf(url);
-        return uniqueStrings([url, "https://vcloud.zip" + path]);
+        if (kind === "vcloud") {
+            return uniqueStrings([
+                dynamicVCloudBase + path,
+                "https://vcloud.zip" + path,
+                url
+            ]);
+        }
+        if (kind === "hubcloud") {
+            return uniqueStrings([
+                url,
+                dynamicHubCloudBase + path,
+                "https://hubcloud.dad" + path
+            ]);
+        }
+        return [];
     }
 
     function normalizeSourceLabel(label, url) {
@@ -1295,17 +1415,38 @@
     }
 
     async function tryNativeExtractor(entry) {
-        if (typeof loadExtractor !== "function") return [];
+        if (typeof globalThis.loadExtractor !== "function") return [];
         if (!knownExtractorHost(entry.url) && gatewayKind(entry.url) !== "hubcloud") return [];
+
+        const found = [];
+        const seen = Object.create(null);
+        function accept(link) {
+            if (!link || !link.url || seen[link.url]) return;
+            seen[link.url] = true;
+            const headers = Object.assign({}, link.headers || {});
+            if ((link.referer || entry.referer) && !headers.Referer) headers.Referer = link.referer || entry.referer;
+            if (!headers["User-Agent"]) headers["User-Agent"] = USER_AGENT;
+            found.push(new StreamResult({
+                url: link.url,
+                source: normalizeSourceLabel(link.source || link.name || entry.label, link.url),
+                headers: headers,
+                subtitles: link.subtitles,
+                drmKid: link.drmKid,
+                drmKey: link.drmKey,
+                licenseUrl: link.licenseUrl,
+                quality: link.quality
+            }));
+        }
+
         try {
-            const extracted = await loadExtractor(entry.url, entry.referer || "");
-            if (!Array.isArray(extracted)) return [];
-            return extracted.filter(function (link) { return link && link.url; }).map(function (link) {
-                return makeStream(link.url, link.source || link.name || entry.label, link.referer || entry.referer, link.headers);
-            });
+            // Current maintained plugins use callback form. Also accept an array
+            // return for runtimes implementing the older Promise-based SDK shape.
+            const returned = await globalThis.loadExtractor(entry.url, accept);
+            if (Array.isArray(returned)) returned.forEach(accept);
         } catch (_) {
             return [];
         }
+        return found;
     }
 
     async function solveTurnstileGate(gate) {
@@ -1388,7 +1529,7 @@
                 delete queued[entry.url];
                 if (visited[entry.url]) return;
                 visited[entry.url] = true;
-                const alternatives = vcloudAlternates(entry.url);
+                const alternatives = gatewayAlternates(entry.url);
                 expanded.push(entry);
                 if (alternatives.length > 1) {
                     alternatives.forEach(function (url) {
@@ -1414,9 +1555,15 @@
             });
             if (!toFetch.length) continue;
 
-            const responses = await getMany(toFetch.map(function (entry) {
-                return { url: entry.url, referer: entry.referer || "" };
-            }), true);
+            // Extraction requests use individual http_get calls, matching the
+            // maintained providers. Besides preserving per-request cookies, this
+            // lets SkyStream associate Cloudflare WebView clearance with this
+            // plugin namespace (http_parallel cannot carry that caller context).
+            const responses = await Promise.all(toFetch.map(function (entry) {
+                const kind = gatewayKind(entry.url);
+                const extraHeaders = (kind === "vcloud" || kind === "hubcloud") ? { Cookie: "xla=s4t" } : {};
+                return getOne(entry.url, entry.referer || "", true, extraHeaders);
+            }));
 
             responses.forEach(function (response, index) {
                 const entry = toFetch[index];
@@ -1493,6 +1640,95 @@
         return out;
     }
 
+    function coreLookupTitle(value) {
+        let text = cleanDisplayTitle(value)
+            .replace(/\[[^\]]*\]/g, " ")
+            .replace(/\([^)]*\)/g, " ");
+        const year = text.search(/\b(?:19|20)\d{2}\b/);
+        if (year > 0) text = text.slice(0, year);
+        return text.toLowerCase()
+            .replace(/\b(?:download|watch|season|episode|episodes|complete|all|hindi|english|tamil|telugu|korean|french|dual|multi|audio|dubbed|movie|series|web|webrip|webdl|bluray|hdtc|hevc|x264|x265|4k|2160p|1080p|720p|480p)\b/g, " ")
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function titleSimilarity(left, right) {
+        const a = coreLookupTitle(left);
+        const b = coreLookupTitle(right);
+        if (!a || !b) return 0;
+        if (a === b) return 1;
+        if (a.indexOf(b) >= 0 || b.indexOf(a) >= 0) return 0.9;
+        const aWords = a.split(" ");
+        const bWords = b.split(" ");
+        let overlap = 0;
+        aWords.forEach(function (word) { if (bWords.indexOf(word) >= 0) overlap++; });
+        return overlap / Math.max(aWords.length, bWords.length);
+    }
+
+    async function findRescueItem(title, requestedType) {
+        const query = coreLookupTitle(title);
+        if (!query || query.length < 3) return null;
+        const response = await getOne(RESCUE_BASE + "/?s=" + encodeURIComponent(query), RESCUE_BASE + "/", true);
+        if (!response || response.status < 200 || response.status >= 400 || !response.body) return null;
+        const items = parseListing(response.body, RESCUE_BASE + "/", 100);
+        let best = null;
+        let bestScore = 0;
+        items.forEach(function (item) {
+            const urlType = /-series-|\/series\//i.test(item.url) ? "series" : "movie";
+            if ((requestedType === "series" || requestedType === "anime") && urlType !== "series") return;
+            if (requestedType === "movie" && urlType !== "movie") return;
+            const score = titleSimilarity(title, item.title);
+            if (score > bestScore) {
+                bestScore = score;
+                best = item;
+            }
+        });
+        return bestScore >= 0.72 ? best : null;
+    }
+
+    async function rescueHubCloudSeeds(context) {
+        if (!context || !context.title) return [];
+        try {
+            const requestedType = context.type || (context.episode != null ? "series" : "movie");
+            const item = await findRescueItem(context.title, requestedType);
+            if (!item) return [];
+            const response = await getOne(item.url, RESCUE_BASE + "/", true);
+            if (!response || response.status < 200 || response.status >= 400 || !response.body) return [];
+
+            const wantedSeason = parseInt(context.season, 10) || 0;
+            const wantedEpisode = parseInt(context.episode, 10) || 0;
+            const out = [];
+            const seen = Object.create(null);
+            allAnchors(response.body).forEach(function (anchor) {
+                const href = resolveUrl(item.url, anchor.href);
+                if (!/https?:\/\/hubcloud\./i.test(href) || seen[href]) return;
+                const surrounding = response.body.slice(Math.max(0, anchor.index - 1800), anchor.index + anchor.inner.length + 300);
+                const contextText = stripTags(surrounding);
+                const marker = contextText.match(/\bS(\d{1,3})E(\d{1,3})\b/i);
+
+                if (wantedEpisode > 0) {
+                    if (!marker) return;
+                    if ((parseInt(marker[1], 10) || 0) !== wantedSeason || (parseInt(marker[2], 10) || 0) !== wantedEpisode) return;
+                } else if (requestedType === "movie" && marker) {
+                    return;
+                }
+
+                seen[href] = true;
+                const quality = extractQuality(contextText + " " + anchor.text);
+                out.push({
+                    url: href,
+                    label: ["Vega rescue HubCloud", quality, anchor.text].filter(Boolean).join(" â€¢ "),
+                    quality: quality,
+                    referer: item.url
+                });
+            });
+            return out.slice(0, 20);
+        } catch (_) {
+            return [];
+        }
+    }
+
     async function seedsFromItemState(data) {
         const details = await fetchDetails((data && data.urls) || [], true);
         if (!details.length) return [];
@@ -1503,11 +1739,15 @@
 
     async function loadStreams(url, cb) {
         try {
+            await refreshDynamicHosts();
             const state = parseState(url);
             let seeds = [];
+            let rescueContext = null;
             if (state && state.kind === "episode") {
+                rescueContext = Object.assign({ type: "series" }, state.data || {});
                 seeds = (state.data && state.data.links) || [];
             } else if (state && state.kind === "item") {
+                rescueContext = state.data || {};
                 seeds = await seedsFromItemState(state.data || {});
             } else if (/^https?:\/\//i.test(String(url || ""))) {
                 const host = hostname(url);
@@ -1520,18 +1760,27 @@
                 return cb({ success: false, errorCode: "BAD_URL", message: "Unsupported stream URL." });
             }
 
-            if (!seeds.length) {
-                return cb({ success: false, errorCode: "NO_MIRRORS", message: "The available detail mirrors contain no stream or download buttons." });
+            let streams = seeds.length ? await resolveEntries(seeds, true) : [];
+
+            // Vega's NexDrive/V-Cloud domains periodically put every route behind
+            // a human Turnstile. If that happens, resolve the same title through
+            // the maintained 4KHDHub-style HubCloud path supplied as the working
+            // reference. It is strictly a last resort; Vega mirrors remain first.
+            if (!streams.length && rescueContext) {
+                const rescueSeeds = await rescueHubCloudSeeds(rescueContext);
+                if (rescueSeeds.length) streams = await resolveEntries(rescueSeeds, false);
             }
 
-            const streams = await resolveEntries(seeds, true);
             if (!streams.length) {
                 return cb({
                     success: false,
-                    errorCode: "NO_DIRECT_STREAMS",
-                    message: "Mirror pages were found, but every last-mile host was unavailable or still protected by an unsolved Turnstile challenge."
+                    errorCode: seeds.length ? "NO_DIRECT_STREAMS" : "NO_MIRRORS",
+                    message: "No playable direct source survived the Vega mirrors or the compatible HubCloud rescue path."
                 });
             }
+            streams.sort(function (a, b) {
+                return (parseInt(extractQuality(b.source), 10) || 0) - (parseInt(extractQuality(a.source), 10) || 0);
+            });
             cb({ success: true, data: streams });
         } catch (error) {
             cb({ success: false, errorCode: "STREAM_ERROR", message: errorText(error) });
