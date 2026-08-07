@@ -2,7 +2,7 @@
   {
     "packageName": "dev.screenscape.plugin",
     "name": "ScreenScape",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://screenscape.me",
     "description": "Watch Movies & TV Shows in HD with multi-language audio (Hindi, English, Tamil, Telugu)",
     "authors": [
