@@ -1,0 +1,10 @@
+{
+  "packageName": "dev.screenscape.plugin",
+  "name": "ScreenScape",
+  "version": 1,
+  "baseUrl": "https://screenscape.me",
+  "description": "Watch Movies & TV Shows in HD with multi-language audio (Hindi, English, Tamil, Telugu)",
+  "authors": ["SkyDev"],
+  "languages": ["en", "hi", "ta", "te"],
+  "categories": ["Movies", "TV Shows"]
+}
