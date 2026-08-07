@@ -1,5 +1,25 @@
 [
   {
+    "packageName": "dev.arena.skystream.vegaunified",
+    "name": "Vega Unified",
+    "version": 1,
+    "baseUrl": "https://vegamoviez.lol",
+    "description": "Automatic multi-domain Vega aggregator with mirror fail-over and bounded redirector/host extraction.",
+    "authors": [
+      "Lover"
+    ],
+    "languages": [
+      "hi",
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "Series",
+      "Anime"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.arena.skystream.vegaunified.sky"
+  },
+  {
     "packageName": "dev.mega.ultra.v4",
     "name": "MegaCinema ULTRA V4 - All Fixed",
     "version": 4,
