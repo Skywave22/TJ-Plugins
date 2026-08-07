@@ -1,0 +1,10 @@
+{
+  "packageName": "dev.moviebite.plugin",
+  "name": "MovieBite",
+  "version": 1,
+  "baseUrl": "https://moviebite.cc",
+  "description": "Watch Movies & TV Shows in HD from MovieBite.cc - Multi-server streaming with 4K support",
+  "authors": ["SkyDev"],
+  "languages": ["en"],
+  "categories": ["Movies", "TV Shows"]
+}
