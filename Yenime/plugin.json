@@ -6,6 +6,4 @@
   "description": "Anime provider scraping yenime.net — Jikan catalog + Flikhub streams with SUB & DUB and subtitles.",
   "authors": ["YenimePlugin"],
   "languages": ["en", "jp"],
-  "categories": ["Anime"],
-  "url": "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/com.yenime.provider.sky"
-}
+  "categories": ["Anime"]
