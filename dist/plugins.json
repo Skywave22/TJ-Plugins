@@ -17,5 +17,23 @@
       "TV Shows"
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.hdmovieshub.plugin.sky"
+  },
+  {
+    "packageName": "com.yenime.provider",
+    "name": "Yenime",
+    "version": 4,
+    "baseUrl": "https://yenime.net",
+    "description": "Anime provider scraping yenime.net — Jikan catalog + Flikhub streams with SUB & DUB and subtitles.",
+    "authors": [
+      "YenimePlugin"
+    ],
+    "languages": [
+      "en",
+      "jp"
+    ],
+    "categories": [
+      "Anime"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.yenime.provider.sky"
   }
 ]
