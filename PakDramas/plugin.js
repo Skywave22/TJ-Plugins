@@ -497,6 +497,7 @@
 
     // Build one fMP4 media playlist. chunkBytes = target byte-range size per
     // HLS segment (arbitrary cut points are fine — segments stay contiguous).
+    // Passing a huge chunkBytes yields a single-segment playlist.
     function buildFmp4Playlist(fmt, chunkBytes, totalDurSec) {
         const url = fmt.url;
         const clen = parseInt(fmt.contentLength, 10);
@@ -511,16 +512,21 @@
             "#EXT-X-PLAYLIST-TYPE:VOD",
             '#EXT-X-MAP:URI="' + url + '#init.mp4",BYTERANGE="' + initLen + '@' + inr.start + '"'
         ];
-        const maxDur = totalDurSec * chunkBytes / totalBytes;
-        lines.push("#EXT-X-TARGETDURATION:" + (Math.ceil(maxDur) + 1));
         let pos = segStart;
+        let maxDur = 0;
+        const segs = [];
         while (pos < clen) {
             const size = Math.min(chunkBytes, clen - pos);
             const dur = totalDurSec * size / totalBytes;
-            lines.push("#EXTINF:" + dur.toFixed(6) + ",");
-            lines.push("#EXT-X-BYTERANGE:" + size + "@" + pos);
-            lines.push(url + "#seg.mp4");
+            if (dur > maxDur) maxDur = dur;
+            segs.push([size, pos, dur]);
             pos += size;
+        }
+        lines.push("#EXT-X-TARGETDURATION:" + (Math.ceil(maxDur) + 1));
+        for (let i = 0; i < segs.length; i++) {
+            lines.push("#EXTINF:" + segs[i][2].toFixed(6) + ",");
+            lines.push("#EXT-X-BYTERANGE:" + segs[i][0] + "@" + segs[i][1]);
+            lines.push(url + "#seg.mp4");
         }
         lines.push("#EXT-X-ENDLIST");
         return lines.join("\n") + "\n";
@@ -546,8 +552,11 @@
         if (!vf || !au) return null;
         const durSec = parseFloat((r.videoDetails && r.videoDetails.lengthSeconds) || "0") || 0;
         if (!(durSec > 0)) return null;
-        const vpl = buildFmp4Playlist(vf, 16 * 1024 * 1024, durSec);
-        const apl = buildFmp4Playlist(au, 4 * 1024 * 1024, durSec);
+        // Video: 4 MB chunks -> playback starts after ~4 MB (fast on mobile),
+        // and a failed segment is cheap to retry. Audio: one single segment
+        // (low bitrate, streams instantly) -> keeps the master playlist tiny.
+        const vpl = buildFmp4Playlist(vf, 4 * 1024 * 1024, durSec);
+        const apl = buildFmp4Playlist(au, 1e12, durSec);
         const bw = (vf.bitrate || 0) + (au.bitrate || 0);
         const vcodec = codecOf(vf) || "avc1.640028";
         const acodec = codecOf(au) || "mp4a.40.2";
@@ -557,6 +566,50 @@
             '#EXT-X-STREAM-INF:BANDWIDTH=' + bw + ',RESOLUTION=' + vf.width + 'x' + vf.height + ',AUDIO="aud",CODECS="' + vcodec + ',' + acodec + '"\n' +
             'data:application/vnd.apple.mpegurl;base64,' + b64encode(vpl) + '\n';
         return { master: master, height: vf.height };
+    }
+
+    // ------------------------------------------------------------------
+    //  4c. Invidious fallback — the open Invidious API (same approach the
+    //      CloudStream "Invidious" extension uses). Some instances still
+    //      serve itag 22 (720p progressive) which YouTube's own clients no
+    //      longer return. Pure fallback behind the primary methods.
+    // ------------------------------------------------------------------
+    const INVIDIOUS_INSTANCES = [
+        "https://inv.nadeko.net",
+        "https://yewtu.be",
+        "https://invidious.nerdvpn.de",
+        "https://iv.melmac.space",
+        "https://invidious.f5.si",
+        "https://vid.puffyan.us",
+        "https://invidious.privacyredirect.com",
+        "https://invidious.perennialte.ch",
+        "https://iv.ggtyler.dev",
+        "https://invidious.materialio.us"
+    ];
+
+    async function invidiousStreams(videoId) {
+        const out = [];
+        for (let i = 0; i < INVIDIOUS_INSTANCES.length && out.length < 2; i++) {
+            const base = INVIDIOUS_INSTANCES[i];
+            let text = "";
+            try {
+                text = await httpGetText(base + "/api/v1/videos/" + videoId +
+                    "?fields=formatStreams", { "Accept": "application/json" });
+            } catch (e) { continue; }
+            if (!text) continue;
+            let j = null;
+            try { j = JSON.parse(text); } catch (e) { continue; }
+            const fs = (j && j.formatStreams) || [];
+            for (let k = 0; k < fs.length; k++) {
+                const f = fs[k];
+                if (!f || !f.url) continue;
+                let u = String(f.url);
+                if (u.charAt(0) === "/") u = base + u;   // relative -> instance-proxied
+                if (f.itag === 22) out.push({ url: u, label: "720p (Invidious)", rank: 12 });
+                else if (f.itag === 18) out.push({ url: u, label: "360p (Invidious)", rank: 31 });
+            }
+        }
+        return out;
     }
 
     async function loadStreams(url, cb) {
@@ -610,7 +663,14 @@
             }
         } catch (e) { errors.push("safari:" + (e && e.message ? e.message : e)); }
 
-        // (3) ANDROID -> progressive MP4 fallback (itag 22 = 720p, itag 18 = 360p)
+        // (3) Invidious -> itag 22 (720p progressive) when an instance has it
+        try {
+            const inv = await invidiousStreams(m.v);
+            for (let i = 0; i < inv.length; i++) add(inv[i].url, inv[i].label, inv[i].rank);
+            if (!inv.length) errors.push("invidious:no-stream");
+        } catch (e) { errors.push("invidious:" + (e && e.message ? e.message : e)); }
+
+        // (4) ANDROID -> progressive MP4 fallback (itag 22 = 720p, itag 18 = 360p)
         try {
             const r = await fetchPlayer(AND_CTX, AND_UA, m.v);
             if (r) {
