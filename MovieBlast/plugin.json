@@ -1,0 +1,20 @@
+{
+  "packageName": "com.movieblast.provider",
+  "name": "MovieBlast",
+  "version": 1,
+  "baseUrl": "https://app.cloud-mb.xyz",
+  "description": "MovieBlast - Hindi, Tamil, Telugu & English Movies/Series with multi-quality streams. TMDB catalog + MovieBlast app API (HMAC-signed CDN links). Ported from Hindi-Nuvio.",
+  "authors": [
+    "Skywave22"
+  ],
+  "languages": [
+    "en",
+    "hi",
+    "ta",
+    "te"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries"
+  ]
+}
