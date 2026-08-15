@@ -1,0 +1,17 @@
+{
+  "packageName": "com.goated.provider",
+  "name": "Goated",
+  "version": 1,
+  "baseUrl": "https://goated.cx",
+  "description": "Free movies & TV shows (up to 4K) from goated.cx. TMDB catalog (trending, popular, search, full details, seasons & episodes) plus the site's own stream resolver (proof-of-work + AES-256-GCM -> merged video+audio HLS). Fully on-device: no server, no ffmpeg, no yt-dlp. Includes Orbit & Valenox source switching.",
+  "authors": [
+    "GoatedPlugin"
+  ],
+  "languages": [
+    "en"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries"
+  ]
+}
