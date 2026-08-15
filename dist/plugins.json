@@ -77,6 +77,27 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hindidubbed.provider.sky"
   },
   {
+    "packageName": "com.movieblast.provider",
+    "name": "MovieBlast",
+    "version": 1,
+    "baseUrl": "https://app.cloud-mb.xyz",
+    "description": "MovieBlast - Hindi, Tamil, Telugu & English Movies/Series with multi-quality streams. TMDB catalog + MovieBlast app API (HMAC-signed CDN links). Ported from Hindi-Nuvio.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en",
+      "hi",
+      "ta",
+      "te"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movieblast.provider.sky"
+  },
+  {
     "packageName": "com.pakdramas.provider",
     "name": "Pakistani Dramas",
     "version": 6,
