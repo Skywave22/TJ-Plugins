@@ -427,14 +427,18 @@
     }
 
     async function getChallenge() {
-        return await httpGetJson(RF_BASE + "/api/challenge", { "User-Agent": "Mozilla/5.0" });
+        var c = await httpGetJson(RF_BASE + "/api/challenge", { "User-Agent": "Mozilla/5.0" });
+        if (!c || !c.challenge) throw new Error("challenge unavailable");
+        return c;
     }
 
     function proofOfWork(challenge, difficulty) {
         var prefix = "";
         for (var i = 0; i < difficulty; i++) prefix += "0";
+        // difficulty counts HEX zeros: e.g. difficulty 4 ≈ 1/65536 per try,
+        // so the loop needs a large cap (the site uses 5e6).
         var n = 0;
-        var max = 200000;
+        var max = 5000000;
         while (n <= max) {
             if (sha256Hex(challenge + String(n)).indexOf(prefix) === 0) return String(n);
             n++;
@@ -471,6 +475,97 @@
             { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
             JSON.stringify(body)
         );
+    }
+
+    // ------------------------------------------------------------------
+    //  Stream verification (only hand the player servers that actually work)
+    // ------------------------------------------------------------------
+    var sourceHealth = {}; // source name -> { until: ms timestamp }
+
+    function nowMs() {
+        try { return Date.now(); } catch (e) { return 0; }
+    }
+
+    function isSourceCachedBroken(source) {
+        var h = sourceHealth[source];
+        return !!h && nowMs() < h.until;
+    }
+
+    function markSourceBroken(source) {
+        try { sourceHealth[source] = { until: nowMs() + 2 * 60 * 1000 }; } catch (e) { /* ignore */ }
+    }
+
+    // http_get with a JS-side timeout — races the bridge against setTimeout.
+    // Resolves {__timeout:true} on timeout, {__error:true,message} on error,
+    // otherwise the raw bridge response.
+    function httpGetTimeout(url, headers, ms) {
+        return new Promise(function (resolve) {
+            var settled = false;
+            var timer = null;
+            function finish(v) {
+                if (settled) return;
+                settled = true;
+                if (timer !== null) { try { clearTimeout(timer); } catch (e) {} }
+                resolve(v);
+            }
+            try {
+                timer = setTimeout(function () { finish({ __timeout: true }); }, ms);
+            } catch (e) { /* no setTimeout available */ }
+            var p;
+            try {
+                if (typeof http_get === "function") {
+                    p = http_get(url, headers);
+                } else if (typeof fetch === "function") {
+                    p = fetch(url, { headers: headers }).then(function (r) {
+                        return (r && typeof r.text === "function")
+                            ? r.text().then(function (t) { return { body: t }; })
+                            : { body: "" };
+                    });
+                } else {
+                    p = Promise.reject(new Error("no http bridge"));
+                }
+            } catch (e) {
+                p = Promise.reject(e);
+            }
+            p.then(function (res) { finish(res); })
+             .catch(function (err) { finish({ __error: true, message: String(err && err.message ? err.message : err) }); });
+        });
+    }
+
+    function firstChildUrl(playlist) {
+        var lines = String(playlist || "").split("\n");
+        for (var i = 0; i < lines.length; i++) {
+            var t = lines[i].trim();
+            if (t && t.charAt(0) !== "#") return t;
+        }
+        return "";
+    }
+
+    function resolveChildUrl(masterUrl, child) {
+        if (!child) return "";
+        if (child.indexOf("http") === 0) return child;
+        var base = String(masterUrl).split("?")[0];
+        base = base.substring(0, base.lastIndexOf("/") + 1);
+        return base + child;
+    }
+
+    // Deep-verifies a stream URL: fetches the master playlist and its first
+    // child (variant or segment) with the goated.cx Referer. Returns
+    // {ok, timeout} so a dead server (e.g. a hanging variant) is filtered out
+    // and a slow one isn't mistaken for an error.
+    async function verifyStream(url) {
+        var H = { "User-Agent": "Mozilla/5.0", "Referer": "https://goated.cx/" };
+        var m = await httpGetTimeout(url, H, 5000);
+        if (m && m.__timeout) return { ok: false, timeout: true };
+        if (m && m.__error) return { ok: false, timeout: false };
+        var body = respText(m);
+        if (!body || body.indexOf("#EXTM3U") < 0) return { ok: false, timeout: false };
+        var child = resolveChildUrl(url, firstChildUrl(body));
+        if (!child) return { ok: true, timeout: false };
+        var c = await httpGetTimeout(child, H, 2000);
+        if (c && c.__timeout) return { ok: false, timeout: true };
+        if (c && c.__error) return { ok: false, timeout: false };
+        return { ok: respText(c).length > 0, timeout: false };
     }
 
     // ------------------------------------------------------------------
@@ -634,18 +729,14 @@
                 plaintext.season = parseInt(m.s, 10) || 1;
                 plaintext.episode = parseInt(m.e, 10) || 1;
             }
-            var r = await resolve(plaintext);
-            if (!r || !r.url) {
-                return cb({ success: false, errorCode: "NO_STREAM", message: "No stream found for this title." });
-            }
 
             // The reallyfast CDN serves playlists openly but 403s the actual
             // segments unless the request carries Referer: https://goated.cx/.
             // Route the stream through the app's local proxy (MAGIC_PROXY_v1)
             // so that Referer is injected into every playlist + segment fetch.
-            function wrapStream(url, label) {
+            function wrapStream(u, label) {
                 return new StreamResult({
-                    url: "MAGIC_PROXY_v1" + b64encodeStr(url),
+                    url: "MAGIC_PROXY_v1" + b64encodeStr(u),
                     source: label,
                     headers: {
                         "User-Agent": "Mozilla/5.0",
@@ -654,23 +745,49 @@
                 });
             }
 
-            var out = [];
-            out.push(wrapStream(r.url, r.source ? "Goated — " + r.source : "Goated"));
+            // 1) Primary resolve (no source = server default, usually Orbit).
+            var r = await resolve(plaintext);
+            if (!r || !r.url) {
+                return cb({ success: false, errorCode: "NO_STREAM", message: "No stream found for this title." });
+            }
 
-            // offer alternate sources (source switching), up to 2 extra
-            var sources = r.availableSources || [];
-            if (sources.length > 1) {
-                for (var i = 0; i < sources.length && out.length < 3; i++) {
-                    if (sources[i] === r.source) continue;
-                    try {
-                        var p2 = { mediaType: mediaType, id: String(m.id), source: sources[i] };
-                        if (mediaType === "tv") { p2.season = plaintext.season; p2.episode = plaintext.episode; }
-                        var r2 = await resolve(p2);
-                        if (r2 && r2.url) {
-                            out.push(wrapStream(r2.url, "Goated — " + r2.source));
-                        }
-                    } catch (e2) { /* skip */ }
-                }
+            // 2) In parallel: verify the primary while resolving + verifying
+            //    every alternate source the backend reports. A source that
+            //    fails its deep check (or is cached-broken) is dropped, so
+            //    the player only ever lists servers that will actually play.
+            var others = (r.availableSources || []).filter(function (s) { return s !== r.source; });
+            var altJobs = others.map(function (s) {
+                if (isSourceCachedBroken(s)) return Promise.resolve(null);
+                var p = { mediaType: mediaType, id: String(m.id), source: s };
+                if (mediaType === "tv") { p.season = plaintext.season; p.episode = plaintext.episode; }
+                return resolve(p).then(function (x) {
+                    if (!x || !x.url) return null;
+                    return verifyStream(x.url).then(function (v) {
+                        if (v.ok) return { source: s, url: x.url };
+                        if (v.timeout) markSourceBroken(s);
+                        return null;
+                    });
+                }).catch(function () { return null; });
+            });
+
+            var results = await Promise.all([
+                verifyStream(r.url),
+                Promise.all(altJobs)
+            ]);
+            var primaryOk = results[0].ok;
+            var alts = results[1];
+
+            var out = [];
+            if (primaryOk) {
+                out.push(wrapStream(r.url, r.source ? "Goated — " + r.source : "Goated"));
+            }
+            for (var i = 0; i < alts.length; i++) {
+                if (alts[i]) out.push(wrapStream(alts[i].url, "Goated — " + alts[i].source));
+            }
+            // Never return empty — fall back to the primary so a transient
+            // verification hiccup can't block playback.
+            if (out.length === 0) {
+                out.push(wrapStream(r.url, r.source ? "Goated — " + r.source : "Goated"));
             }
             cb({ success: true, data: out });
         } catch (e) {
