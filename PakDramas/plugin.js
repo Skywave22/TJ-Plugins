@@ -1,14 +1,14 @@
 (function () {
     // =========================================================================
-    //  Pakistani Dramas (YouTube) — SkyStream provider  v3
+    //  Pakistani Dramas (YouTube) — SkyStream provider  v5
     //
     //  Fully on-device (InnerTube JSON API, no server, no ffmpeg, no yt-dlp).
     //
-    //  v3 changes:
+    //  v5 changes:
     //    * Dramas are grouped into SERIES (one poster per drama, every episode
     //      under it). New episodes appear automatically (live re-fetch).
     //    * 13 official channels.
-    //    * On-device 720p/1080p: builds a fragmented-MP4 HLS master in pure JS
+    //    * On-device HD: YouTube merged-HLS (WEB/TV clients) + single-segment fMP4 HLS
     //      from the iOS client's adaptive formats (init + byte-range segments
     //      pointing straight at googlevideo). The player joins video+audio
     //      natively. 360p MP4 remains the guaranteed fallback.
@@ -29,6 +29,11 @@
     // Safari UA on the WEB client -> pre-merged video+audio HLS (up to 1080p).
     const SAFARI_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15";
     const SAFARI_CTX = { client: { clientName: "WEB", clientVersion: "2.20260811.07.00", userAgent: SAFARI_UA + ",gzip(gfe)", hl: "en", gl: "US" } };
+
+    // TV + mobile-web contexts — some return a merged HLS where WEB is gated.
+    const TV_SIMPLE_CTX = { client: { clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER", clientVersion: "2.0", hl: "en", gl: "US" } };
+    const MWEB_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+    const MWEB_CTX = { client: { clientName: "MWEB", clientVersion: "2.20240726.01.00", hl: "en", gl: "US" } };
 
     const CHANNELS = [
         { id: "UCEeEQxm6qc_qaTE7qTV5aLQ", name: "HUM TV" },
@@ -495,46 +500,46 @@
         return String(fmt.codecs || "");
     }
 
-    // Build one fMP4 media playlist. chunkBytes = target byte-range size per
-    // HLS segment (arbitrary cut points are fine — segments stay contiguous).
-    // Passing a huge chunkBytes yields a single-segment playlist.
-    function buildFmp4Playlist(fmt, chunkBytes, totalDurSec) {
+    // Build one fMP4 media playlist as a SINGLE segment (one big byte-range
+    // covering the whole stream from the sidx to EOF). This keeps the
+    // playlist tiny — every HLS manifest line must stay under FFmpeg's
+    // 4096-byte line buffer, and a single segment is the only way a media
+    // playlist embedded as a data: URI in the master can fit on one line.
+    // The player streams the one range progressively and seeks inside it via
+    // the fMP4's own sidx index.
+    function buildFmp4Playlist(fmt, totalDurSec) {
         const url = fmt.url;
         const clen = parseInt(fmt.contentLength, 10);
         const ir = fmt.indexRange, inr = fmt.initRange;
         const segStart = parseInt(ir.end, 10) + 1;   // first moof sits right after the sidx
-        const totalBytes = clen - segStart;
+        const segLen = clen - segStart;
         const initLen = parseInt(inr.end, 10) - parseInt(inr.start, 10) + 1;
-        const lines = [
-            "#EXTM3U",
-            "#EXT-X-VERSION:7",
-            "#EXT-X-MEDIA-SEQUENCE:0",
-            "#EXT-X-PLAYLIST-TYPE:VOD",
-            '#EXT-X-MAP:URI="' + url + '#init.mp4",BYTERANGE="' + initLen + '@' + inr.start + '"'
-        ];
-        let pos = segStart;
-        let maxDur = 0;
-        const segs = [];
-        while (pos < clen) {
-            const size = Math.min(chunkBytes, clen - pos);
-            const dur = totalDurSec * size / totalBytes;
-            if (dur > maxDur) maxDur = dur;
-            segs.push([size, pos, dur]);
-            pos += size;
-        }
-        lines.push("#EXT-X-TARGETDURATION:" + (Math.ceil(maxDur) + 1));
-        for (let i = 0; i < segs.length; i++) {
-            lines.push("#EXTINF:" + segs[i][2].toFixed(6) + ",");
-            lines.push("#EXT-X-BYTERANGE:" + segs[i][0] + "@" + segs[i][1]);
-            lines.push(url + "#seg.mp4");
-        }
-        lines.push("#EXT-X-ENDLIST");
-        return lines.join("\n") + "\n";
+        return (
+            "#EXTM3U\n" +
+            "#EXT-X-PLAYLIST-TYPE:VOD\n" +
+            '#EXT-X-MAP:URI="' + url + '#x",BYTERANGE="' + initLen + '@' + inr.start + '"\n' +
+            "#EXT-X-TARGETDURATION:" + (Math.ceil(totalDurSec) + 1) + "\n" +
+            "#EXTINF:" + totalDurSec.toFixed(3) + ",\n" +
+            "#EXT-X-BYTERANGE:" + segLen + "@" + segStart + "\n" +
+            url + "#x\n" +
+            "#EXT-X-ENDLIST\n"
+        );
+    }
+
+    function dataUri(playlist) {
+        const prefix = "data:application/vnd.apple.mpegurl;base64,";
+        const uri = prefix + b64encode(playlist);
+        // FFmpeg's HLS parser reads each manifest line into a 4096-byte
+        // buffer; longer lines are silently truncated and the playlist fails
+        // to parse. Guard against that.
+        if (uri.length > 4000) return null;
+        return uri;
     }
 
     // Build a master playlist carrying the best available HD video + AAC
-    // audio. Returns { master, height } or null when the video has no
-    // usable adaptive formats.
+    // audio, both as single-segment fMP4 playlists embedded as data: URIs.
+    // Returns { master, height } or null when the video has no usable
+    // adaptive formats (or the URLs are too long to embed safely).
     async function buildHlsMaster(videoId) {
         const r = await fetchPlayer(IOS_CTX, IOS_UA, videoId);
         if (!r || !r.streamingData) return null;
@@ -552,20 +557,64 @@
         if (!vf || !au) return null;
         const durSec = parseFloat((r.videoDetails && r.videoDetails.lengthSeconds) || "0") || 0;
         if (!(durSec > 0)) return null;
-        // Video: 4 MB chunks -> playback starts after ~4 MB (fast on mobile),
-        // and a failed segment is cheap to retry. Audio: one single segment
-        // (low bitrate, streams instantly) -> keeps the master playlist tiny.
-        const vpl = buildFmp4Playlist(vf, 4 * 1024 * 1024, durSec);
-        const apl = buildFmp4Playlist(au, 1e12, durSec);
+        const vUri = dataUri(buildFmp4Playlist(vf, durSec));
+        const aUri = dataUri(buildFmp4Playlist(au, durSec));
+        if (!vUri || !aUri) return null;
         const bw = (vf.bitrate || 0) + (au.bitrate || 0);
         const vcodec = codecOf(vf) || "avc1.640028";
         const acodec = codecOf(au) || "mp4a.40.2";
         const master =
             "#EXTM3U\n#EXT-X-VERSION:7\n" +
-            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="audio",DEFAULT=YES,AUTOSELECT=YES,URI="data:application/vnd.apple.mpegurl;base64,' + b64encode(apl) + '"\n' +
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="audio",DEFAULT=YES,AUTOSELECT=YES,URI="' + aUri + '"\n' +
             '#EXT-X-STREAM-INF:BANDWIDTH=' + bw + ',RESOLUTION=' + vf.width + 'x' + vf.height + ',AUDIO="aud",CODECS="' + vcodec + ',' + acodec + '"\n' +
-            'data:application/vnd.apple.mpegurl;base64,' + b64encode(vpl) + '\n';
+            vUri + "\n";
         return { master: master, height: vf.height };
+    }
+
+    // Try to get YouTube's own pre-merged HLS manifest (single m3u8 with
+    // video+audio muxed, up to 1080p). YouTube only returns it to the WEB
+    // client on non-flagged IPs — residential/mobile IPs usually get it,
+    // datacenter IPs get PO-token-gated instead. Returns a list of
+    // { url, height }.
+    async function tryMergedHls(videoId) {
+        const tries = [
+            { ctx: SAFARI_CTX, ua: SAFARI_UA },
+            { ctx: WEB_CTX, ua: WEB_UA },
+            { ctx: TV_SIMPLE_CTX, ua: WEB_UA },
+            { ctx: MWEB_CTX, ua: MWEB_UA }
+        ];
+        // One attempt each, all in parallel — a gated client returns quickly
+        // and we don't want retry delays on the HD path.
+        const rs = await Promise.all(tries.map(function (t) {
+            return innertube("player", { context: t.ctx, videoId: videoId }, t.ua)
+                .then(function (r) { return r; })
+                .catch(function () { return null; });
+        }));
+        const out = [];
+        const seen = {};
+        for (let i = 0; i < rs.length; i++) {
+            const r = rs[i];
+            if (!r || !r.streamingData) continue;
+            const ps = r.playabilityStatus;
+            if (ps && ps.status !== "OK" && ps.status !== "CONTENT_CHECK_REQUIRED") continue;
+            const sd = r.streamingData;
+            if (sd.hlsManifestUrl && !seen[sd.hlsManifestUrl]) {
+                seen[sd.hlsManifestUrl] = 1;
+                out.push({ url: sd.hlsManifestUrl, height: 1080 });
+            }
+            const fmts = sd.formats || [];
+            for (let k = 0; k < fmts.length; k++) {
+                const f = fmts[k];
+                if (!f || !f.url) continue;
+                const mt = String(f.mimeType || "");
+                if (mt.indexOf("mpegURL") !== -1 || f.url.indexOf("m3u8") !== -1) {
+                    if (seen[f.url]) continue;
+                    seen[f.url] = 1;
+                    out.push({ url: f.url, height: f.height || 1080 });
+                }
+            }
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------
@@ -630,38 +679,31 @@
             results.push({ url: u, label: label, rank: rank });
         }
 
-        // (1) On-device 720p/1080p — fMP4 HLS master built in pure JS from
-        //     the iOS client's adaptive formats (video + AAC audio in one URL).
+        // (1) YouTube's own merged HLS (single m3u8, video+audio muxed, up to
+        //     1080p). Returned by the WEB/TV clients on non-flagged IPs; this
+        //     is the most reliable HD path where available.
+        try {
+            const mh = await tryMergedHls(m.v);
+            for (let i = 0; i < mh.length; i++) {
+                const h = mh[i].height ? (mh[i].height + "p") : "HD";
+                add(mh[i].url, h + " (HLS)", 1 + i);
+            }
+            if (!mh.length) errors.push("merged-hls:none");
+        } catch (e) { errors.push("merged-hls:" + (e && e.message ? e.message : e)); }
+
+        // (2) On-device 720p/1080p — fragmented-MP4 HLS master built in pure
+        //     JS from the iOS client's adaptive formats (video + AAC audio in
+        //     one URL, single-segment so every manifest line fits FFmpeg's
+        //     4096-byte line buffer).
         try {
             const hd = await buildHlsMaster(m.v);
             if (hd && hd.master) {
                 const p = hd.height ? (hd.height + "p") : "HD";
-                add("magic_m3u8:" + b64encode(hd.master), p + " (HLS)", 0);
+                add("magic_m3u8:" + b64encode(hd.master), p + " (HLS)", 5);
             } else {
                 errors.push("hls:no-adaptive");
             }
         } catch (e) { errors.push("hls:" + (e && e.message ? e.message : e)); }
-
-        // (2) Safari-WEB -> pre-merged HLS up to 1080p (residential IPs)
-        try {
-            const r = await fetchPlayer(SAFARI_CTX, SAFARI_UA, m.v);
-            if (r) {
-                const sd = r.streamingData || {};
-                if (sd.hlsManifestUrl) add(sd.hlsManifestUrl, "HD (HLS)", 5);
-                const fmts = sd.formats || [];
-                for (let i = 0; i < fmts.length; i++) {
-                    const f = fmts[i];
-                    if (!f || !f.url) continue;
-                    const mt = String(f.mimeType || "");
-                    if (mt.indexOf("mpegURL") !== -1 || f.url.indexOf("m3u8") !== -1) {
-                        const h = f.height ? (f.height + "p") : "HD";
-                        add(f.url, h + " (HLS)", f.height ? 3000 - f.height : 6);
-                    }
-                }
-            } else {
-                errors.push("safari:no-hls");
-            }
-        } catch (e) { errors.push("safari:" + (e && e.message ? e.message : e)); }
 
         // (3) Invidious -> itag 22 (720p progressive) when an instance has it
         try {
