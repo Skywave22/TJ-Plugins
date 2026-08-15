@@ -250,6 +250,10 @@
         return out;
     }
 
+    function b64encodeStr(s) {
+        return b64encodeArr(utf8Bytes(s));
+    }
+
     function utf8Bytes(str) {
         var bytes = [];
         for (var i = 0; i < str.length; i++) {
@@ -593,7 +597,16 @@
                     year: dd.release_date ? parseInt(dd.release_date.split("-")[0], 10) : null,
                     score: dd.vote_average,
                     duration: dd.runtime || null,
-                    tags: (dd.genres || []).map(function (g) { return g.name; })
+                    tags: (dd.genres || []).map(function (g) { return g.name; }),
+                    // SkyStream only enables the Play button when a title has
+                    // at least one episode — movies get a single synthetic one.
+                    episodes: [{
+                        name: dd.title || "Movie",
+                        url: itemUrl("movie", m.id),
+                        season: 1,
+                        episode: 1,
+                        posterUrl: poster(dd.poster_path, "w500")
+                    }]
                 };
                 var recs = dd.recommendations && dd.recommendations.results;
                 if (recs && recs.length) {
@@ -625,8 +638,24 @@
             if (!r || !r.url) {
                 return cb({ success: false, errorCode: "NO_STREAM", message: "No stream found for this title." });
             }
+
+            // The reallyfast CDN serves playlists openly but 403s the actual
+            // segments unless the request carries Referer: https://goated.cx/.
+            // Route the stream through the app's local proxy (MAGIC_PROXY_v1)
+            // so that Referer is injected into every playlist + segment fetch.
+            function wrapStream(url, label) {
+                return new StreamResult({
+                    url: "MAGIC_PROXY_v1" + b64encodeStr(url),
+                    source: label,
+                    headers: {
+                        "User-Agent": "Mozilla/5.0",
+                        "Referer": "https://goated.cx/"
+                    }
+                });
+            }
+
             var out = [];
-            out.push(new StreamResult({ url: r.url, source: (r.source ? "Goated — " + r.source : "Goated"), headers: { "User-Agent": "Mozilla/5.0" } }));
+            out.push(wrapStream(r.url, r.source ? "Goated — " + r.source : "Goated"));
 
             // offer alternate sources (source switching), up to 2 extra
             var sources = r.availableSources || [];
@@ -638,7 +667,7 @@
                         if (mediaType === "tv") { p2.season = plaintext.season; p2.episode = plaintext.episode; }
                         var r2 = await resolve(p2);
                         if (r2 && r2.url) {
-                            out.push(new StreamResult({ url: r2.url, source: "Goated — " + r2.source, headers: { "User-Agent": "Mozilla/5.0" } }));
+                            out.push(wrapStream(r2.url, "Goated — " + r2.source));
                         }
                     } catch (e2) { /* skip */ }
                 }
