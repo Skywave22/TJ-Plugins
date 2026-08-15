@@ -1,7 +1,7 @@
 {
   "packageName": "com.pakdramas.provider",
   "name": "Pakistani Dramas",
-  "version": 5,
+  "version": 6,
   "baseUrl": "https://www.youtube.com",
   "description": "Pakistani dramas from 13 official YouTube channels (HUM TV, ARY Digital, HAR PAL GEO, Express TV, Green TV, Aan TV, A Plus, BOL, Urdu 1, LTN Family, TV One, Hum Sitaray, PTV Home). Series grouped with auto-updating episodes. On-device 720p/1080p (fragmented-MP4 HLS built in pure JS, no ffmpeg/yt-dlp/server) with 360p MP4 fallback.",
   "authors": [

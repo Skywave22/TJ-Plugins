@@ -1,10 +1,10 @@
 (function () {
     // =========================================================================
-    //  Pakistani Dramas (YouTube) — SkyStream provider  v5
+    //  Pakistani Dramas (YouTube) — SkyStream provider  v6
     //
     //  Fully on-device (InnerTube JSON API, no server, no ffmpeg, no yt-dlp).
     //
-    //  v5 changes:
+    //  v6 changes:
     //    * Dramas are grouped into SERIES (one poster per drama, every episode
     //      under it). New episodes appear automatically (live re-fetch).
     //    * 13 official channels.
@@ -671,35 +671,47 @@
         const errors = [];
         const seen = {};
 
-        function add(u, label, rank) {
+        function add(u, label, rank, headers) {
             if (!u) return;
-            if (!/^(https?:|magic_m3u8:)/.test(u)) return;
+            if (!/^(https?:|magic_m3u8:|MAGIC_PROXY)/.test(u)) return;
             if (seen[u]) return;
             seen[u] = 1;
-            results.push({ url: u, label: label, rank: rank });
+            results.push({ url: u, label: label, rank: rank, headers: headers || null });
         }
 
-        // (1) YouTube's own merged HLS (single m3u8, video+audio muxed, up to
-        //     1080p). Returned by the WEB/TV clients on non-flagged IPs; this
-        //     is the most reliable HD path where available.
+        // (1) YouTube's own merged HLS (single m3u8, video+audio muxed, small
+        //     6s segments, up to 1080p). This is what the official players use
+        //     and it sidesteps every range-size/line-length limit. YouTube
+        //     returns it to the WEB/TV clients on residential/mobile IPs.
+        //     Routed through the app's local proxy so the manifest + segments
+        //     are fetched with a matching browser User-Agent / Referer.
         try {
             const mh = await tryMergedHls(m.v);
             for (let i = 0; i < mh.length; i++) {
                 const h = mh[i].height ? (mh[i].height + "p") : "HD";
-                add(mh[i].url, h + " (HLS)", 1 + i);
+                let u = mh[i].url;
+                if (typeof btoa === "function") {
+                    u = "MAGIC_PROXY_v1" + btoa(u);
+                }
+                const hdrs = {
+                    "User-Agent": SAFARI_UA,
+                    "Referer": "https://www.youtube.com/"
+                };
+                add(u, h + " (YouTube)", 1 + i, hdrs);
             }
             if (!mh.length) errors.push("merged-hls:none");
         } catch (e) { errors.push("merged-hls:" + (e && e.message ? e.message : e)); }
 
-        // (2) On-device 720p/1080p — fragmented-MP4 HLS master built in pure
-        //     JS from the iOS client's adaptive formats (video + AAC audio in
-        //     one URL, single-segment so every manifest line fits FFmpeg's
-        //     4096-byte line buffer).
+        // (2) On-device fMP4 HLS (fallback when YouTube gives no merged HLS) —
+        //     single-segment per track so the data: URIs fit FFmpeg's 4096-byte
+        //     line buffer. NOTE: this issues one large byte-range; googlevideo
+        //     rejects ranges larger than ~16 MB on some networks, in which case
+        //     use the (1) or (4) entries.
         try {
             const hd = await buildHlsMaster(m.v);
             if (hd && hd.master) {
                 const p = hd.height ? (hd.height + "p") : "HD";
-                add("magic_m3u8:" + b64encode(hd.master), p + " (HLS)", 5);
+                add("magic_m3u8:" + b64encode(hd.master), p + " (fMP4)", 5);
             } else {
                 errors.push("hls:no-adaptive");
             }
@@ -740,7 +752,11 @@
         results.sort(function (a, b) { return a.rank - b.rank; });
         const out = [];
         for (let i = 0; i < results.length; i++) {
-            out.push(new StreamResult({ url: results[i].url, source: results[i].label }));
+            out.push(new StreamResult({
+                url: results[i].url,
+                source: results[i].label,
+                headers: results[i].headers || undefined
+            }));
         }
         cb({ success: true, data: out });
     }
