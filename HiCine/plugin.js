@@ -366,12 +366,6 @@
                 isAdult: false
             };
 
-            if (info.type === 'movie') {
-                item.type = 'movie';
-                cb({ success: true, data: mkItem(item) });
-                return;
-            }
-
             // Series / anime — build the episode list from season_1..season_N
             var episodes = [];
             var s;
@@ -392,16 +386,30 @@
             }
 
             if (!episodes.length) {
-                // No parsed episodes — if the record has plain movie-style links, treat as movie
-                if (parseMovieLinks(det.links).length) {
-                    item.type = 'movie';
-                    return cb({ success: true, data: mkItem(item) });
+                // Record has no season fields — if it has movie-style links, treat as movie
+                if (!parseMovieLinks(det.links).length) {
+                    return cb({ success: false, errorCode: 'NO_EPISODES', message: 'No episodes found for this title' });
                 }
-                return cb({ success: false, errorCode: 'NO_EPISODES', message: 'No episodes found for this title' });
+                item.type = 'movie';
             }
 
-            item.type = info.type;
-            cb({ success: true, data: mkItem(item), episodes: episodes });
+            // Movies (and movie-like items) get a single pseudo-episode —
+            // SkyStream's play button is episode-driven and stays disabled without one.
+            if (item.type === 'movie') {
+                episodes = [mkEpisode({
+                    name: cleanTitle(det.title),
+                    url: detailUrl(p.ct, p.id),
+                    season: 1,
+                    episode: 1,
+                    dubStatus: 'none',
+                    playbackPolicy: 'none'
+                })];
+            }
+
+            // Episodes MUST live inside the MultimediaItem (data.episodes),
+            // not beside it in the callback payload.
+            item.episodes = episodes;
+            cb({ success: true, data: mkItem(item) });
         } catch (e) {
             cb({ success: false, errorCode: 'ERROR', message: String((e && e.message) || e) });
         }
@@ -443,16 +451,17 @@
             }
 
             var streams = [];
-            for (var t = 0; t < targets.length; t++) {
-                var target = targets[t];
+            var resolvedAll = await Promise.all(targets.map(async function (target) {
+                var got = [];
                 try {
                     var resolved = await resolveWorker(target.workerUrl, target.quality, target.size);
-                    for (var r = 0; r < resolved.length; r++) streams.push(resolved[r]);
+                    for (var r = 0; r < resolved.length; r++) got.push(resolved[r]);
                 } catch (_) {
                     // Worker failed for this quality — try remaining targets
                 }
                 // Generic extractor fallback for non-worker hosts (gofile, pixeldrain, ...)
-                if (typeof loadExtractor === 'function' && /^https?:\/\//.test(target.workerUrl)
+                if (!got.length && typeof loadExtractor === 'function'
+                        && /^https?:\/\//.test(target.workerUrl)
                         && target.workerUrl.indexOf('workers.dev') < 0) {
                     try {
                         var ex = await loadExtractor(target.workerUrl);
@@ -460,13 +469,17 @@
                             for (var x = 0; x < ex.length; x++) {
                                 if (ex[x] && ex[x].url) {
                                     ex[x].quality = (ex[x].quality || target.quality || 'Link');
-                                    streams.push(ex[x]);
+                                    got.push(ex[x]);
                                 }
                             }
                         }
                     } catch (_) { /* extractor not available for this host */ }
                 }
-            }
+                return got;
+            }));
+            resolvedAll.forEach(function (batch) {
+                for (var b = 0; b < batch.length; b++) streams.push(batch[b]);
+            });
 
             // De-duplicate identical signed URLs (rare: same file on two keys)
             var seen = {};
@@ -484,6 +497,9 @@
             cb({ success: false, errorCode: 'ERROR', message: String((e && e.message) || e) });
         }
     }
+
+    // ─────────────────────────── export ───────────────────────────
+
     globalThis.getHome = getHome;
     globalThis.search = search;
     globalThis.load = load;
