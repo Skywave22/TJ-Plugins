@@ -58,6 +58,33 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.hdmovieshub.plugin.sky"
   },
   {
+    "packageName": "com.hicine.skystream",
+    "name": "HiCine",
+    "version": 1,
+    "baseUrl": "https://api.hicine.sbs",
+    "domains": [
+      {
+        "name": "api.hicine.sbs (primary)",
+        "url": "https://api.hicine.sbs"
+      }
+    ],
+    "description": "HiCine - Bollywood & Hollywood movies, series and anime (Hindi dual-audio). Movies, WEB series, K-dramas and anime from hicine.sbs",
+    "authors": [
+      "Arena Agent"
+    ],
+    "languages": [
+      "hi",
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "Series",
+      "Anime"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hicine.skystream.sky"
+  },
+  {
     "packageName": "com.hindidubbed.provider",
     "name": "Hindi Dubbed",
     "version": 1,
