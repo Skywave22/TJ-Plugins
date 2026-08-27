@@ -224,6 +224,16 @@
         return detailUrl(ct, id) + '/season/' + season + '/episode/' + ep;
     }
 
+    // Normalize image URLs: protocol-relative, root-relative, http -> https
+    function fixPoster(u) {
+        var s = String(u || '').trim();
+        if (!s) return '';
+        if (s.startsWith('//')) return 'https:' + s;
+        if (s.startsWith('/')) return 'https://storage.hicine.sbs' + s;
+        if (s.startsWith('http://')) return 'https://' + s.slice(7);
+        return s;
+    }
+
     function toItem(rec, forceCt) {
         if (!rec) return null;
         var ct = forceCt || rec.contentType;
@@ -237,10 +247,12 @@
                : 'movies';
             info = COLLECTIONS[ct];
         }
+        var poster = fixPoster(rec.featured_image || rec.poster) || PLACEHOLDER;
         return mkItem({
             title: cleanTitle(rec.title),
             url: detailUrl(ct, rec.record_id),
-            posterUrl: rec.featured_image || rec.poster || PLACEHOLDER,
+            posterUrl: poster,
+            bannerUrl: poster,
             type: info.type,
             year: parseYear(rec),
             description: rec.excerpt ? stripTags(rec.excerpt) : undefined
@@ -545,14 +557,16 @@
             var item = {
                 title: cleanTitle(det.title),
                 url: detailUrl(p.ct, p.id),
-                posterUrl: det.featured_image || det.poster || PLACEHOLDER,
+                posterUrl: fixPoster(det.featured_image || det.poster) || PLACEHOLDER,
                 type: info.type,
                 year: parseYear(det),
                 description: description || undefined,
                 isAdult: false
             };
+            item.bannerUrl = item.posterUrl;
 
             // Series / anime — build the episode list from season_1..season_N
+            var poster = item.posterUrl;
             var episodes = [];
             var s;
             for (s = 1; s <= MAX_SEASONS; s++) {
@@ -569,6 +583,7 @@
                         url: episodeUrl(p.ct, p.id, s, eps[i].num),
                         season: s,
                         episode: eps[i].num,
+                        posterUrl: poster,
                         dubStatus: 'none',
                         playbackPolicy: 'none'
                     }));
@@ -582,6 +597,7 @@
                         url: episodeUrl(p.ct, p.id, s, ALL_EPISODE_NUMBER),
                         season: s,
                         episode: ALL_EPISODE_NUMBER,
+                        posterUrl: poster,
                         dubStatus: 'none',
                         playbackPolicy: 'none'
                     }));
@@ -602,6 +618,7 @@
                             url: episodeUrl(p.ct, p.id, s, ZIP_EPISODE_NUMBER),
                             season: s,
                             episode: ZIP_EPISODE_NUMBER,
+                            posterUrl: poster,
                             dubStatus: 'none',
                             playbackPolicy: 'none'
                         }));
@@ -631,6 +648,7 @@
                     url: detailUrl(p.ct, p.id),
                     season: 1,
                     episode: 1,
+                    posterUrl: poster,
                     dubStatus: 'none',
                     playbackPolicy: 'none'
                 })];
