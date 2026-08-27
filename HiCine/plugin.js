@@ -94,6 +94,47 @@
         return m ? (m[1] + m[2].toUpperCase()) : '';
     }
 
+    // ── audio-language detection (HiCine files carry language in their titles) ──
+    var LANGS = ['hindi', 'punjabi', 'urdu', 'tamil', 'telugu', 'marathi',
+                 'kannada', 'malayalam', 'bengali', 'gujarati', 'english',
+                 'korean', 'japanese', 'chinese', 'spanish', 'arabic'];
+
+    function langFromText(text) {
+        var s = decodeEntities(String(text || '').toLowerCase());
+        var found = [];
+        for (var i = 0; i < LANGS.length; i++) {
+            if (s.indexOf(LANGS[i]) >= 0) found.push(LANGS[i]);
+        }
+        return found.join('-');
+    }
+
+    function langLabel(lang) {
+        if (!lang) return '';
+        return lang.split('-').map(function (p) {
+            return p.charAt(0).toUpperCase() + p.slice(1);
+        }).join('-');
+    }
+
+    // Hindi (incl. Hindi dual-audio) is the DEFAULT server tier, then other
+    // Indian languages, then unknown, then English/foreign.
+    function langTier(lang) {
+        if (!lang) return 3;
+        if (lang.indexOf('hindi') >= 0) return 0;
+        if (lang.indexOf('punjabi') >= 0 || lang.indexOf('urdu') >= 0) return 1;
+        if (lang.indexOf('english') >= 0) return 4;
+        return 2;
+    }
+
+    function sortTargetsByPreference(targets) {
+        // Hindi first (default), then highest quality within the same language
+        return targets.slice().sort(function (a, b) {
+            var lt = langTier(a.lang || '') - langTier(b.lang || '');
+            if (lt !== 0) return lt;
+            var qa = QRANK[a.quality] || 0, qb = QRANK[b.quality] || 0;
+            return qb - qa;
+        });
+    }
+
     var QRANK = { '2160p': 5, '1440p': 4, '1080p': 3, '720p': 2, '480p': 1, '360p': 1 };
 
     // pick the highest-quality variant of an episode
@@ -126,8 +167,9 @@
         return { base: base, vcloud: vcloud, data: data };
     }
 
-    function buildGoStream(ctx, tokenKey, tk, quality, size) {
+    function buildGoStream(ctx, tokenKey, tk, quality, size, lang) {
         var label = (SERVER_LABELS[tokenKey] || tokenKey.toUpperCase());
+        if (lang) label += ' • ' + langLabel(lang);
         if (quality) label += ' • ' + quality;
         var fileSize = size || (ctx.data && ctx.data.size) || '';
         if (fileSize) label += ' • ' + fileSize;
@@ -269,7 +311,8 @@
             out.push({
                 workerUrl: m[0],
                 quality: qualityFromText(line) || 'auto',
-                size: sizeFromText(line)
+                size: sizeFromText(line),
+                lang: langFromText(line)
             });
         });
         return out;
@@ -319,7 +362,8 @@
                     season: season,
                     workerUrl: hits[i].url,
                     quality: qualityFromText(seg) || 'pack',
-                    size: sizeFromText(seg)
+                    size: sizeFromText(seg),
+                    lang: langFromText(seg)
                 });
             }
         });
@@ -331,7 +375,7 @@
     // Streams are returned as signed /go URLs; the player follows the 302 to the
     // direct file (R2 / PixelDrain). Never http_get the /go URL itself — that
     // would download the whole movie through the plugin sandbox.
-    async function resolveWorker(workerUrl, quality, size, allowFallbackServers) {
+    async function resolveWorker(workerUrl, quality, size, allowFallbackServers, lang) {
         var ctx = await fetchWorkerTokens(workerUrl);
         if (!ctx) return [];
         var tokens = (ctx.data && ctx.data.tokens) || {};
@@ -341,17 +385,22 @@
         if (!allowFallbackServers) {
             keys = keys.filter(function (t) { return SKIP_SERVERS.indexOf(t) < 0; });
         }
+        // deterministic, most-reliable-server-first ordering
+        keys.sort(function (a, b) {
+            var ia = SERVER_PREFERENCE.indexOf(a); var ib = SERVER_PREFERENCE.indexOf(b);
+            return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+        });
         keys.forEach(function (t) {
             var tk = tokens[t] || {};
             if (!tk.ts || !tk.sig) return;
-            out.push(buildGoStream(ctx, t, tk, quality, size));
+            out.push(buildGoStream(ctx, t, tk, quality, size, lang));
         });
         return out;
     }
 
     // Bulk mode: one link per file — try the most reliable server first, fall
     // back to the next. Keeps "All Episodes" fast (1 request per episode).
-    async function resolveWorkerSingle(workerUrl, quality, labelPrefix) {
+    async function resolveWorkerSingle(workerUrl, quality, labelPrefix, lang) {
         var ctx;
         try {
             ctx = await fetchWorkerTokens(workerUrl);
@@ -369,7 +418,7 @@
         for (var i = 0; i < keys.length; i++) {
             var tk = tokens[keys[i]] || {};
             if (!tk.ts || !tk.sig) continue;
-            var s = buildGoStream(ctx, keys[i], tk, quality, '');
+            var s = buildGoStream(ctx, keys[i], tk, quality, '', lang);
             if (labelPrefix) s.source = labelPrefix + ' • ' + s.source;
             s.quality = s.source;
             return s;
@@ -384,7 +433,7 @@
         while (tries < 2) {
             tries++;
             try {
-                var got = await resolveWorker(target.workerUrl, target.quality, target.size, false);
+                var got = await resolveWorker(target.workerUrl, target.quality, target.size, false, target.lang);
                 if (got.length) return got;
             } catch (e) {
                 if (e && e.dead) return []; // confirmed dead — stop retrying
@@ -393,7 +442,7 @@
         }
         // last resort: allow the ad-walled/page hosts so *something* is listed
         try {
-            return await resolveWorker(target.workerUrl, target.quality, target.size, true);
+            return await resolveWorker(target.workerUrl, target.quality, target.size, true, target.lang);
         } catch (_) { /* fall through */ }
         // generic extractor fallback for non-worker hosts
         if (typeof loadExtractor === 'function' && target.workerUrl.indexOf('workers.dev') < 0) {
@@ -674,20 +723,27 @@
                 return cb({ success: false, errorCode: 'NOT_FOUND', message: (det && det.error) || 'Item not found' });
             }
 
-            // Collect every (workerUrl, quality) target for this movie / episode
+            // Collect every (workerUrl, quality, lang) target for this movie / episode
             var targets = [];
             var bulkMode = false;
-            var bulkLabelPrefix = '';
             if (p.season != null && p.ep != null) {
                 var seasonText = det['season_' + p.season] || '';
                 var eps = parseSeasonEpisodes(seasonText);
+                // season header (first line) carries the audio language, e.g.
+                // "Reacher Season 1 Amazon Dual Audio {Hindi-English} Series ..."
+                var seasonLang = langFromText(String(seasonText).split(/\r?\n/)[0] || '');
 
                 if (p.ep === ZIP_EPISODE_NUMBER) {
                     // whole-season complete pack (zip download)
                     parseSeasonZips(det['season_zip']).filter(function (z) {
                         return z.season === p.season;
                     }).forEach(function (z) {
-                        targets.push({ workerUrl: z.workerUrl, quality: (z.quality !== 'pack' ? z.quality : 'Pack'), size: z.size });
+                        targets.push({
+                            workerUrl: z.workerUrl,
+                            quality: (z.quality !== 'pack' ? z.quality : 'Pack'),
+                            size: z.size,
+                            lang: z.lang
+                        });
                     });
                 } else if (p.ep === ALL_EPISODE_NUMBER) {
                     // every single episode of the season, best quality, one server each
@@ -698,6 +754,7 @@
                         targets.push({
                             workerUrl: best.url,
                             quality: best.quality === 'auto' ? '' : best.quality,
+                            lang: seasonLang,
                             bulkLabel: 'E' + e.num
                         });
                     });
@@ -709,12 +766,12 @@
                                     message: 'Episode ' + p.ep + ' not found in season ' + p.season });
                     }
                     ep.variants.forEach(function (v) {
-                        targets.push({ workerUrl: v.url, quality: v.quality, size: '' });
+                        targets.push({ workerUrl: v.url, quality: v.quality, size: '', lang: seasonLang });
                     });
                 }
             } else {
                 parseMovieLinks(det.links).forEach(function (l) {
-                    targets.push({ workerUrl: l.workerUrl, quality: l.quality, size: l.size });
+                    targets.push({ workerUrl: l.workerUrl, quality: l.quality, size: l.size, lang: l.lang });
                 });
             }
 
@@ -723,22 +780,30 @@
                             message: 'No download links uploaded for this title yet — check back later.' });
             }
 
+            // Hindi (and Hindi dual-audio) first — it becomes the default server
+            targets = sortTargetsByPreference(targets);
+
             var streams = [];
             if (bulkMode) {
-                // "All Episodes": resolve one server per episode, small concurrency pool
+                // "All Episodes": one server per episode; keep results INDEXED so the
+                // episode order stays E1, E2, E3… regardless of network completion order
+                var bulkResults = new Array(targets.length);
                 var cursor = 0;
                 async function bulkRunner() {
                     while (cursor < targets.length) {
-                        var t = targets[cursor++];
+                        var idx = cursor++;
+                        var t = targets[idx];
                         try {
-                            var st = await resolveWorkerSingle(t.workerUrl, t.quality, t.bulkLabel);
-                            if (st) streams.push(st);
-                        } catch (_) { /* skip this episode's link */ }
+                            bulkResults[idx] = await resolveWorkerSingle(t.workerUrl, t.quality, t.bulkLabel, t.lang);
+                        } catch (_) {
+                            bulkResults[idx] = null;
+                        }
                     }
                 }
                 var pool = [];
                 for (var w = 0; w < Math.min(3, targets.length); w++) pool.push(bulkRunner());
                 await Promise.all(pool);
+                bulkResults.forEach(function (s3) { if (s3) streams.push(s3); });
             } else {
                 var batches = await resolveAllTargets(targets);
                 batches.forEach(function (batch) {
