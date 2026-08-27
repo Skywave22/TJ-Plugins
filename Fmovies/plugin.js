@@ -125,25 +125,57 @@
 
     // ─────────────────────────── getHome ───────────────────────────
 
+    // "Latest Updated" — shows with an episode airing today (TMDB schedule)
+    async function latestUpdated() {
+        var tryPaths = ['/tv/airing_today', '/tv/on_the_air'];
+        for (var i = 0; i < tryPaths.length; i++) {
+            try {
+                var d = await tmdb(tryPaths[i] + '?page=1');
+                var results = (d && d.results) || [];
+                if (!results.length) continue;
+                return results.slice(0, 20).map(function (r) {
+                    var name = r.name || r.original_name || 'tv';
+                    var slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                    return mkItem({
+                        title: name,
+                        url: SITE + '/tv/' + r.id + '/' + slug,
+                        posterUrl: r.poster_path ? (TMDB_IMG + '/w500' + r.poster_path) : PLACEHOLDER,
+                        bannerUrl: r.backdrop_path ? (TMDB_IMG + '/w1280' + r.backdrop_path) : undefined,
+                        type: 'series',
+                        year: r.first_air_date ? parseInt(String(r.first_air_date).slice(0, 4), 10) : undefined,
+                        score: r.vote_average || undefined,
+                        description: r.overview || undefined,
+                        syncData: { tmdb: String(r.id) }
+                    });
+                });
+            } catch (_) { /* try the next schedule endpoint */ }
+        }
+        return [];
+    }
+
     async function getHome(cb) {
         try {
             var defs = [
-                { name: 'Trending',      path: '/trending' },
-                { name: 'Latest Movies', path: '/movies' },
+                { name: 'Trending',        path: '/trending' },
+                { name: 'Latest Movies',   path: '/movies' },
                 { name: 'Latest TV Shows', path: '/tv' }
             ];
-            var settled = await Promise.all(defs.map(function (d) {
+            var pageRows = await Promise.all(defs.map(function (d) {
                 return fetchPage(d.path).then(
                     function (v) { return v; },
                     function (e) { console.error('Row failed:', d.name, e && e.message); return null; }
                 );
             }));
+            var updated = await latestUpdated().catch(function () { return []; });
+
             var data = {};
             for (var i = 0; i < defs.length; i++) {
-                if (settled[i] && settled[i].length) {
-                    data[defs[i].name] = settled[i].slice(0, 20).map(cardToItem);
+                if (pageRows[i] && pageRows[i].length) {
+                    data[defs[i].name] = pageRows[i].slice(0, 20).map(cardToItem);
                 }
             }
+            if (updated.length) data['Latest Updated'] = updated;
+
             if (!Object.keys(data).length) {
                 return cb({ success: false, errorCode: 'UNAVAILABLE', message: 'FMoviess returned no content (' + SITE + ')' });
             }
@@ -349,101 +381,192 @@
         return std[h] ? std[h] : (h + 'p');
     }
 
+    function b64(str) {
+        try { return btoa(unescape(encodeURIComponent(str))); } catch (_) { return null; }
+    }
+
+    // netrocdn direct URLs geo-block some regions — the sparkvid Cloudflare
+    // worker proxies the same path as /cdn/{base64(path)}.js?query
+    function toProxyUrl(u) {
+        try {
+            var qi = u.indexOf('?');
+            if (qi < 0) return null;
+            var path = u.slice(0, qi), q = u.slice(qi + 1);
+            if (path.indexOf('workers.dev') >= 0) return null; // already the proxy
+            var noHost = path.replace(/^https?:\/\/[^/]+/, '');
+            if (!noHost || noHost.charAt(0) !== '/') noHost = '/' + noHost;
+            var enc = b64(noHost);
+            if (!enc) return null;
+            return 'https://cdn-proxy.sparkvid.workers.dev/cdn/' + enc + '.js?' + q;
+        } catch (_) { return null; }
+    }
+
+    // ── Server A: moviesapi.to "vidora" (direct HLS + subtitles) ──
+    async function vidoraStreams(kind, tmdbId, season, episode) {
+        var apiUrl = kind === 'tv'
+            ? VIDORA + '/tv/' + tmdbId + '/' + season + '/' + episode
+            : VIDORA + '/movie/' + tmdbId;
+
+        var data = null;
+        try {
+            var res = await http_get(apiUrl, {
+                'User-Agent': UA,
+                'Accept': 'application/json',
+                'x-player-key': PLAYER_KEY,
+                'Referer': PLAYER_REFERER,
+                'Origin': PLAYER_REFERER.slice(0, -1)
+            });
+            var body = (res && typeof res === 'object') ? res.body : res;
+            try { data = JSON.parse(typeof body === 'string' ? body : JSON.stringify(body)); }
+            catch (_) { data = null; }
+        } catch (_) { return []; }
+
+        if (!data || !data.result || !data.sources || !data.sources[0] || !data.sources[0].url) {
+            return [];
+        }
+
+        var master = data.sources[0].url;
+        var subs = [];
+        (data.sources[0].tracks || []).forEach(function (t) {
+            if (t && t.file && t.label) subs.push({ url: t.file, label: t.label, lang: t.label });
+        });
+        var headers = { 'Referer': PLAYER_REFERER, 'User-Agent': UA };
+
+        var streams = [mkStream({
+            url: master,
+            quality: 'MoviesAPI • Auto',
+            headers: headers,
+            subtitles: subs.length ? subs : undefined
+        })];
+
+        // split master into per-quality options, each in direct + CF-proxy form
+        try {
+            var body2 = await getText(master, { 'Referer': PLAYER_REFERER });
+            var lines = body2.split('\n');
+            for (var i = 0; i < lines.length; i++) {
+                if (lines[i].indexOf('#EXT-X-STREAM-INF') === 0) {
+                    var resM = lines[i].match(/RESOLUTION=(\d+)x(\d+)/i);
+                    var bwM = lines[i].match(/BANDWIDTH=(\d+)/);
+                    var next = '';
+                    for (var j = i + 1; j < lines.length; j++) {
+                        var t = lines[j].trim();
+                        if (t && t.charAt(0) !== '#') { next = t; break; }
+                    }
+                    if (!next) continue;
+                    if (next.indexOf('http') !== 0) {
+                        next = master.slice(0, master.lastIndexOf('/') + 1) + next;
+                    }
+                    var q = resM ? qualityFromResolution(parseInt(resM[1], 10), parseInt(resM[2], 10))
+                                 : (bwM ? Math.round(parseInt(bwM[1], 10) / 1000) + ' kbps' : 'Auto');
+                    streams.push(mkStream({
+                        url: next,
+                        quality: 'MoviesAPI • ' + q,
+                        headers: headers,
+                        subtitles: subs.length ? subs : undefined
+                    }));
+                    var proxied = toProxyUrl(next);
+                    if (proxied) {
+                        streams.push(mkStream({
+                            url: proxied,
+                            quality: 'MoviesAPI • ' + q + ' • CF',
+                            headers: headers,
+                            subtitles: subs.length ? subs : undefined
+                        }));
+                    }
+                }
+            }
+        } catch (_) { /* master unreadable — Auto option above still stands */ }
+
+        return streams;
+    }
+
+    // ── Server B: vixsrc.to (multi-audio HLS masters) ──
+    //  /api/{movie|tv}/... -> {"src":"/embed/{id}?token=.."} ->
+    //  embed page exposes window.masterPlaylist + window.streams ->
+    //  /playlist/{id}?token=..&expires=..&h=1 -> master m3u8
+    async function vixsrcStreams(kind, tmdbId, season, episode) {
+        var referer = kind === 'tv'
+            ? 'https://vixsrc.to/tv/' + tmdbId + '/' + season + '/' + episode
+            : 'https://vixsrc.to/movie/' + tmdbId;
+        var apiUrl = kind === 'tv'
+            ? 'https://vixsrc.to/api/tv/' + tmdbId + '/' + season + '/' + episode
+            : 'https://vixsrc.to/api/movie/' + tmdbId;
+
+        var page = '';
+        try {
+            var api = await getText(apiUrl, { 'Referer': referer, 'Accept': 'application/json' });
+            var src = (JSON.parse(api) || {}).src;
+            if (!src) return [];
+            page = await getText('https://vixsrc.to' + src, { 'Referer': referer });
+        } catch (_) { return []; }
+
+        var token = (page.match(/'token'\s*:\s*'([^']+)'/) || [])[1];
+        var expires = (page.match(/'expires'\s*:\s*'([^']+)'/) || [])[1];
+        if (!token || !expires) return [];
+        var canFHD = /window\.canPlayFHD\s*=\s*true/.test(page);
+
+        var streams = [];
+        var servers = [];
+        try {
+            var sj = (page.match(/window\.streams\s*=\s*(\[[^\]]+\])/) || [])[1];
+            if (sj) {
+                JSON.parse(sj.replace(/\\"/g, '"')).forEach(function (s) {
+                    if (s && s.url) servers.push({ name: s.name || 'Server', url: s.url });
+                });
+            }
+        } catch (_) { servers = []; }
+        if (!servers.length) {
+            servers.push({ name: 'Server 1', url: 'https://vixsrc.to/playlist/' + tmdbId });
+        }
+
+        for (var i = 0; i < servers.length && i < 3; i++) {
+            try {
+                var u = servers[i].url;
+                u += (u.indexOf('?') >= 0 ? '&' : '?')
+                   + 'token=' + encodeURIComponent(token)
+                   + '&expires=' + encodeURIComponent(expires)
+                   + '&asn=' + (canFHD ? '&h=1' : '');
+                var pl = await getText(u, { 'Referer': referer });
+                if (pl.indexOf('#EXTM3U') === 0) {
+                    streams.push(mkStream({
+                        url: u,
+                        quality: 'VixSrc • ' + (servers[i].name || ('Server ' + (i + 1))) + ' • Auto',
+                        headers: { 'Referer': referer, 'User-Agent': UA }
+                    }));
+                }
+            } catch (_) { /* this vixsrc server failed — try the next */ }
+        }
+        return streams;
+    }
+
     async function loadStreams(url, cb) {
         try {
             var p = parseItemUrl(url);
             if (!p) return cb({ success: false, errorCode: 'BAD_URL', message: 'Unrecognized FMoviess URL: ' + url });
 
             var epq = parseEpisodeQuery(url);
-            var apiUrl;
-            if (p.kind === 'tv') {
-                if (!epq) return cb({ success: false, errorCode: 'BAD_URL', message: 'Episode information missing in URL' });
-                apiUrl = VIDORA + '/tv/' + p.tmdbId + '/' + epq.season + '/' + epq.episode;
-            } else {
-                apiUrl = VIDORA + '/movie/' + p.tmdbId;
+            var kind = p.kind;
+            var season = epq ? epq.season : null;
+            var episode = epq ? epq.episode : null;
+            if (kind === 'tv' && !epq) {
+                return cb({ success: false, errorCode: 'BAD_URL', message: 'Episode information missing in URL' });
             }
 
-            var data;
-            try {
-                var res = await http_get(apiUrl, {
-                    'User-Agent': UA,
-                    'Accept': 'application/json',
-                    'x-player-key': PLAYER_KEY,
-                    'Referer': PLAYER_REFERER,
-                    'Origin': PLAYER_REFERER.slice(0, -1)
-                });
-                var body = (res && typeof res === 'object') ? res.body : res;
-                var status = (res && typeof res === 'object') ? (res.status || res.statusCode || 0) : 0;
-                try { data = JSON.parse(typeof body === 'string' ? body : JSON.stringify(body)); }
-                catch (_) { data = null; }
-                if (!data && status) throw new Error('HTTP ' + status);
-            } catch (e) {
-                return cb({ success: false, errorCode: 'NO_STREAMS',
-                            message: 'Stream server did not respond — please retry.' });
-            }
+            // both providers in parallel — different CDNs, so if one is blocked
+            // or dead in the user's region the other still plays
+            var both = await Promise.all([
+                vidoraStreams(kind, p.tmdbId, season, episode).then(
+                    function (v) { return v; }, function () { return []; }),
+                vixsrcStreams(kind, p.tmdbId, season, episode).then(
+                    function (v) { return v; }, function () { return []; })
+            ]);
 
-            if (!data || data.error === 'Forbidden') {
-                return cb({ success: false, errorCode: 'NO_STREAMS', message: 'Stream server refused the request — please retry.' });
-            }
-            if (!data.result || !data.sources || !data.sources[0] || !data.sources[0].url) {
-                return cb({ success: false, errorCode: 'NO_STREAMS',
-                            message: (data && data.message) || 'No stream available for this title yet.' });
-            }
-
-            var master = data.sources[0].url;
-            var subs = [];
-            (data.sources[0].tracks || []).forEach(function (t) {
-                if (t && t.file && t.label) {
-                    subs.push({ url: t.file, label: t.label, lang: t.label });
-                }
-            });
-
-            var headers = { 'Referer': PLAYER_REFERER, 'User-Agent': UA };
-            var streams = [];
-
-            // Split the master playlist into per-quality options
-            try {
-                var body = await getText(master, { 'Referer': PLAYER_REFERER });
-                var lines = body.split('\n');
-                for (var i = 0; i < lines.length; i++) {
-                    if (lines[i].indexOf('#EXT-X-STREAM-INF') === 0) {
-                        var resM = lines[i].match(/RESOLUTION=(\d+)x(\d+)/i);
-                        var bwM = lines[i].match(/BANDWIDTH=(\d+)/);
-                        var next = '';
-                        for (var j = i + 1; j < lines.length; j++) {
-                            var t = lines[j].trim();
-                            if (t && t.charAt(0) !== '#') { next = t; break; }
-                        }
-                        if (!next) continue;
-                        if (next.indexOf('http') !== 0) {
-                            next = master.slice(0, master.lastIndexOf('/') + 1) + next;
-                        }
-                        var q = resM ? qualityFromResolution(parseInt(resM[1], 10), parseInt(resM[2], 10))
-                                     : (bwM ? Math.round(parseInt(bwM[1], 10) / 1000) + ' kbps' : 'Auto');
-                        streams.push(mkStream({
-                            url: next,
-                            quality: q,
-                            headers: headers,
-                            subtitles: subs.length ? subs : undefined
-                        }));
-                    }
-                }
-            } catch (_) { /* master fetch failed — fall back to the auto stream below */ }
+            var streams = both[0].concat(both[1]);
 
             if (!streams.length) {
-                streams.push(mkStream({
-                    url: master,
-                    quality: 'Auto',
-                    headers: headers,
-                    subtitles: subs.length ? subs : undefined
-                }));
+                return cb({ success: false, errorCode: 'NO_STREAMS',
+                            message: 'No stream available for this title yet (provider has not encoded it — try another title or retry later).' });
             }
-
-            // highest quality first
-            streams.sort(function (a, b) {
-                return (parseInt(b.quality, 10) || 0) - (parseInt(a.quality, 10) || 0);
-            });
-
             cb({ success: true, data: streams });
         } catch (e) {
             cb({ success: false, errorCode: 'ERROR', message: String((e && e.message) || e) });
