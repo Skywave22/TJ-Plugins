@@ -109,6 +109,37 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hindidubbed.provider.sky"
   },
   {
+    "packageName": "com.katmoviehd.skystream",
+    "name": "KatMovieHD",
+    "version": 1,
+    "baseUrl": "https://new.katmoviehd.top",
+    "domains": [
+      {
+        "name": "new.katmoviehd.top (primary)",
+        "url": "https://new.katmoviehd.top"
+      },
+      {
+        "name": "katworld.net mirror",
+        "url": "https://new.katmoviehd.top"
+      }
+    ],
+    "description": "KatMovieHD - Hindi dubbed & dual audio movies and web series. Watch online (StreamTape/StreamWish) + download mirrors (HubCloud)",
+    "authors": [
+      "Arena Agent"
+    ],
+    "languages": [
+      "hi",
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "Series",
+      "Anime"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.katmoviehd.skystream.sky"
+  },
+  {
     "packageName": "com.movieblast.provider",
     "name": "MovieBlast",
     "version": 1,
@@ -128,6 +159,40 @@
       "TvSeries"
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movieblast.provider.sky"
+  },
+  {
+    "packageName": "com.ssr.skystream",
+    "name": "SSR Movies",
+    "version": 1,
+    "baseUrl": "https://ssrmovies.moda",
+    "domains": [
+      {
+        "name": "ssrmovies.moda (primary)",
+        "url": "https://ssrmovies.moda"
+      },
+      {
+        "name": "ssrmovies.com",
+        "url": "https://ssrmovies.com"
+      },
+      {
+        "name": "ssrmovies.land",
+        "url": "https://ssrmovies.land"
+      }
+    ],
+    "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. Watch online + download mirrors",
+    "authors": [
+      "Arena Agent"
+    ],
+    "languages": [
+      "hi",
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "Series"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.ssr.skystream.sky"
   },
   {
     "packageName": "com.yenime.provider",
