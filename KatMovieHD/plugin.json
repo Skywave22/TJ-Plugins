@@ -1,15 +1,30 @@
 {
   "packageName": "com.katmoviehd.skystream",
   "name": "KatMovieHD",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://new.katmoviehd.top",
   "domains": [
-    { "name": "new.katmoviehd.top (primary)", "url": "https://new.katmoviehd.top" },
-    { "name": "katworld.net mirror", "url": "https://new.katmoviehd.top" }
+    {
+      "name": "new.katmoviehd.top (primary)",
+      "url": "https://new.katmoviehd.top"
+    },
+    {
+      "name": "katworld.net mirror",
+      "url": "https://new.katmoviehd.top"
+    }
   ],
   "description": "KatMovieHD - Hindi dubbed & dual audio movies and web series. Watch online (StreamTape/StreamWish) + download mirrors (HubCloud)",
-  "authors": ["Arena Agent"],
-  "languages": ["hi", "en"],
-  "categories": ["Movies", "Series", "Anime"],
+  "authors": [
+    "Arena Agent"
+  ],
+  "languages": [
+    "hi",
+    "en"
+  ],
+  "categories": [
+    "Movies",
+    "Series",
+    "Anime"
+  ],
   "isAdult": false
 }

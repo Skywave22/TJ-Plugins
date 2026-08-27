@@ -85,6 +85,19 @@
         return Promise.resolve();
     }
 
+    // Race a promise against a timer so a slow/blocked host can never hang the
+    // stream list forever (SkyStream's spinner has no per-request bound).
+    function withTimeout(promise, ms) {
+        if (typeof setTimeout !== 'function') return promise;
+        return new Promise(function (resolve, reject) {
+            var t = setTimeout(function () { reject(new Error('timeout')); }, ms);
+            promise.then(
+                function (v) { clearTimeout(t); resolve(v); },
+                function (e) { clearTimeout(t); reject(e); }
+            );
+        });
+    }
+
     function qualityFromText(t) {
         var m = String(t || '').match(/\b(2160p|1440p|1080p|720p|480p|360p)\b/i) || String(t || '').match(/\b4k\b/i);
         if (!m) return '';
@@ -348,7 +361,7 @@
     // ─────────────────────── linkszilla unlock ───────────────────────
 
     async function unlockLinkszilla(lzUrl) {
-        var html = await getText(lzUrl); // 302-chain ends on the unlocked page
+        var html = await withTimeout(getText(lzUrl), 12000); // 302-chain ends on the unlocked page
         var urls = [];
         var re = /href=["'](https?:\/\/[^"']+)["']/gi;
         var m;
@@ -383,7 +396,7 @@
 
     // watch-online.mom embed -> packed JWPlayer -> links.hls2 m3u8
     async function resolveWatchOnline(embedUrl, label) {
-        var html = await getText(embedUrl, 'https://watch-online.mom/');
+        var html = await withTimeout(getText(embedUrl, 'https://watch-online.mom/'), 12000);
         var pm = html.match(/eval\(function\(p,a,c,k,e,d\)[\s\S]*?<\/script>/);
         if (!pm) return null;
         var js = unpack(pm[0]);
@@ -429,15 +442,22 @@
                 return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No download links in this post.' });
             }
 
-            // unlock in a small parallel pool
+            // WWE/weekly posts can hold 99+ links — unlocking all of them would
+            // spin for minutes. Cap hard, and stop as soon as we have enough
+            // playable watch streams (the first unlock usually yields 3).
+            var MAX_TARGETS = (p.grp === ALL_LINKS_EPISODE) ? 10 : 8;
+            if (targets.length > MAX_TARGETS) targets = targets.slice(0, MAX_TARGETS);
+            var ENOUGH_STREAMS = 4;
+
             var streams = [];
+            var stop = false;
             var cursor = 0;
             async function runner() {
-                while (cursor < targets.length) {
+                while (cursor < targets.length && !stop) {
                     var t = targets[cursor++];
                     try {
-                        var mirrors = await unlockLinkszilla(t.url);
-                        for (var i = 0; i < mirrors.length; i++) {
+                        var mirrors = await withTimeout(unlockLinkszilla(t.url), 14000);
+                        for (var i = 0; i < mirrors.length && !stop; i++) {
                             var mu = mirrors[i];
                             var q = qualityFromText(t.label) || 'Link';
                             var size = sizeFromText(t.label);
@@ -447,7 +467,7 @@
                                 if (ws) streams.push(ws);
                             } else if (/hubcloud\.[a-z]+\/drive\//i.test(mu) && typeof loadExtractor === 'function') {
                                 try {
-                                    var ex = await loadExtractor(mu);
+                                    var ex = await withTimeout(loadExtractor(mu), 12000);
                                     if (ex && ex.length) {
                                         for (var x = 0; x < ex.length; x++) {
                                             if (ex[x] && ex[x].url) {
@@ -459,11 +479,12 @@
                                 } catch (_) {}
                             }
                         }
-                    } catch (_) { /* skip dead link */ }
+                        if (streams.length >= ENOUGH_STREAMS) stop = true;
+                    } catch (_) { /* dead/slow link — move on */ }
                 }
             }
             var pool = [];
-            for (var w = 0; w < Math.min(3, targets.length); w++) pool.push(runner());
+            for (var w = 0; w < Math.min(2, targets.length); w++) pool.push(runner());
             await Promise.all(pool);
 
             // quality-ordered, watch-online first

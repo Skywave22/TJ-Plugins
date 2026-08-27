@@ -180,7 +180,46 @@
         return getText(KMHD + path, headers);
     }
 
+    // streamtape embed -> direct mp4. The robotlink *div* holds a decoy; the
+    // real link is built by JS: innerHTML = '//host/get_video?' + ('xxxx…').substring(2).substring(1)
+    async function extractStreamTape(embedUrl) {
+        var html;
+        try {
+            html = await withTimeout(getText(embedUrl, { 'Referer': 'https://streamtape.com/' }), 12000);
+        } catch (_) { return null; }
+        var s = html.match(/robotlink'\)\.innerHTML\s*=\s*'([^']*)'\s*\+\s*\('([^']+)'\)\.substring\(2\)\.substring\(1\)/);
+        if (s) {
+            var built = s[1] + s[2].substring(2).substring(1);
+            return built.indexOf('//') === 0 ? 'https:' + built : built;
+        }
+        // older fallback: resolved div (some mirrors render it server-side)
+        var m = html.match(/id="robotlink"[^>]*>([^<]+)</);
+        if (m) {
+            var u = m[1].trim().replace(/^\/(?=[^\/])/, '//');
+            if (u.indexOf('//') === 0) return 'https:' + u;
+            if (u.indexOf('http') === 0) return u;
+        }
+        return null;
+    }
+
+    function withTimeout(promise, ms) {
+        if (typeof setTimeout !== 'function') return promise;
+        return new Promise(function (resolve, reject) {
+            var t = setTimeout(function () { reject(new Error('timeout')); }, ms);
+            promise.then(
+                function (v) { clearTimeout(t); resolve(v); },
+                function (e) { clearTimeout(t); reject(e); }
+            );
+        });
+    }
+
     // ─────────────────────────── catalog ───────────────────────────
+
+    function featuredPoster(post) {
+        var fm = post._embedded && post._embedded['wp:featuredmedia'];
+        if (fm && fm[0] && fm[0].source_url) return fm[0].source_url;
+        return PLACEHOLDER;
+    }
 
     function postToItem(post) {
         var pt = parseTitle(post.title && post.title.rendered || '');
@@ -195,14 +234,15 @@
         return mkItem({
             title: pt.name,
             url: url,
-            posterUrl: PLACEHOLDER,
+            posterUrl: featuredPoster(post),
+            bannerUrl: featuredPoster(post),
             type: isSeries ? 'series' : 'movie',
             year: pt.year
         });
     }
 
     async function fetchPosts(query) {
-        var posts = await getJson(API + '/posts?per_page=20&_fields=id,title,link,content,slug,categories&' + query);
+        var posts = await getJson(API + '/posts?per_page=20&_embed=wp:featuredmedia&' + query);
         return Array.isArray(posts) ? posts : [];
     }
 
@@ -255,7 +295,7 @@
     }
 
     async function fetchBySlug(slug) {
-        var posts = await getJson(API + '/posts?slug=' + encodeURIComponent(slug) + '&_fields=id,title,link,content,slug,categories');
+        var posts = await getJson(API + '/posts?slug=' + encodeURIComponent(slug) + '&_embed=wp:featuredmedia');
         return posts && posts[0] ? posts[0] : null;
     }
 
@@ -359,7 +399,8 @@
             var streams = [];
 
             if (p.mode === 'play' && p.arg) {
-                // episode watch links: streamtape / streamwish embeds -> extractors
+                // episode watch links — StreamTape resolved in-plugin (robotlink),
+                // StreamWish/hglink left to the app's extractors
                 var playHtml = await fetchKmhdPage('/play?id=' + p.arg, false);
                 var eps = parsePlayInfo(playHtml);
                 var epKey = (String(url).match(/[?&]ep=([\w-]+)/) || [])[1];
@@ -370,20 +411,29 @@
                 var tried = [];
                 if (ep.streamtape) {
                     tried.push('StreamTape');
-                    var s1 = await loadExtractorSafe('https://streamtape.com/e/' + ep.streamtape,
-                        'Watch • StreamTape • ' + (ep.quality || ''));
-                    if (s1) streams.push(s1);
+                    var direct = await extractStreamTape('https://streamtape.com/e/' + ep.streamtape);
+                    if (direct) {
+                        streams.push(mkStream({
+                            url: direct,
+                            quality: 'Watch • StreamTape • ' + (ep.quality || ''),
+                            headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/' }
+                        }));
+                    } else {
+                        var s1 = await loadExtractorSafe('https://streamtape.com/e/' + ep.streamtape,
+                            'Watch • StreamTape • ' + (ep.quality || ''));
+                        if (s1) streams.push(s1);
+                    }
                 }
                 if (ep.streamwish) {
                     tried.push('StreamWish');
-                    var s2 = await loadExtractorSafe('https://streamwish.to/e/' + ep.streamwish,
+                    var s2 = await loadExtractorSafe('https://hglink.to/e/' + ep.streamwish,
                         'Watch • StreamWish • ' + (ep.quality || ''));
                     if (s2) streams.push(s2);
                 }
                 if (!streams.length) {
                     return cb({ success: false, errorCode: 'NO_STREAMS',
                                 message: 'Watch servers for this episode (' + (tried.join(', ') || 'none') +
-                                         ') need the in-app extractor — update SkyStream and try again.' });
+                                         ') did not respond — try the 📦 Download episode or another quality post.' });
                 }
             } else if (p.mode === 'dl' && p.arg) {
                 // download mirrors: unlock cookie is a static value
@@ -425,12 +475,21 @@
                     if (eps2.length) {
                         var e0 = eps2[0];
                         if (e0.streamtape) {
-                            var s4 = await loadExtractorSafe('https://streamtape.com/e/' + e0.streamtape,
-                                'Watch • StreamTape • ' + (e0.quality || ''));
-                            if (s4) streams.push(s4);
+                            var d0 = await extractStreamTape('https://streamtape.com/e/' + e0.streamtape);
+                            if (d0) {
+                                streams.push(mkStream({
+                                    url: d0,
+                                    quality: 'Watch • StreamTape • ' + (e0.quality || ''),
+                                    headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/' }
+                                }));
+                            } else {
+                                var s4 = await loadExtractorSafe('https://streamtape.com/e/' + e0.streamtape,
+                                    'Watch • StreamTape • ' + (e0.quality || ''));
+                                if (s4) streams.push(s4);
+                            }
                         }
                         if (e0.streamwish) {
-                            var s5 = await loadExtractorSafe('https://streamwish.to/e/' + e0.streamwish,
+                            var s5 = await loadExtractorSafe('https://hglink.to/e/' + e0.streamwish,
                                 'Watch • StreamWish • ' + (e0.quality || ''));
                             if (s5) streams.push(s5);
                         }
