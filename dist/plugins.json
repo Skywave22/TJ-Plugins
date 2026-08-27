@@ -111,7 +111,7 @@
   {
     "packageName": "com.katmoviehd.skystream",
     "name": "KatMovieHD",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://new.katmoviehd.top",
     "domains": [
       {
@@ -163,7 +163,7 @@
   {
     "packageName": "com.ssr.skystream",
     "name": "SSR Movies",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://ssrmovies.moda",
     "domains": [
       {
