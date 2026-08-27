@@ -1,8 +1,8 @@
 /*
- * HiCine — SkyStream plugin
+ * HiCine — SkyStream plugin (v3)
  * Site:   https://www.hicine.sbs
  * API:    https://api.hicine.sbs
- * Source: Bollywood & Hollywood movies, WEB series, K-dramas, anime (Hindi dual-audio)
+ * Source: Bollywood & Hollywood movies, series, K-dramas, anime (Hindi dual-audio)
  *
  * Exports: getHome / search / load / loadStreams
  */
@@ -27,6 +27,9 @@
     };
     var PATH_TO_CT = {};
     Object.keys(COLLECTIONS).forEach(function (ct) { PATH_TO_CT[COLLECTIONS[ct].path] = ct; });
+    // aliases the site's own frontend uses
+    PATH_TO_CT['movies'] = 'movies';
+    PATH_TO_CT['series'] = 'series';
 
     var HOME_ROWS = [
         { name: 'Hollywood Movies', ct: 'movies' },
@@ -36,7 +39,10 @@
         { name: 'Anime',            ct: 'anime' }
     ];
 
-    var MAX_SEASONS = 15;
+    var MAX_SEASONS = 20;
+    var ZIP_EPISODE_NUMBER = 999;      // virtual "Season Complete Pack" (zip download)
+    var ALL_EPISODE_NUMBER = 998;      // virtual "All Episodes" (every single-episode link)
+    var BULK_EPISODE_CAP = 60;         // safety cap for the All-Episodes resolver
 
     // Worker server keys returned by /api/links -> friendly labels
     var SERVER_LABELS = {
@@ -47,8 +53,8 @@
         server1: 'Server 1',
         ten:     '10Gbps'
     };
-    // "ten" redirects to an ad-walled hubcloud interstitial that needs a browser,
-    // and "gofile" redirects to a gofile.io *page* (not a direct file) — skip both.
+    // "ten" redirects to an ad-walled hubcloud interstitial, "gofile" to a link
+    // page (not a direct file) — only used as a last-resort fallback.
     var SKIP_SERVERS = ['ten', 'gofile'];
 
     // ─────────────────────────── helpers ───────────────────────────
@@ -88,6 +94,60 @@
         return m ? (m[1] + m[2].toUpperCase()) : '';
     }
 
+    var QRANK = { '2160p': 5, '1440p': 4, '1080p': 3, '720p': 2, '480p': 1, '360p': 1 };
+
+    // pick the highest-quality variant of an episode
+    function pickBestVariant(variants) {
+        var best = null, bestScore = -1;
+        for (var i = 0; i < variants.length; i++) {
+            var score = QRANK[variants[i].quality] || 0;
+            if (score > bestScore) { bestScore = score; best = variants[i]; }
+        }
+        return best || variants[0];
+    }
+
+    var SERVER_PREFERENCE = ['fsl', 'server1', 'fsl2', 'pixel'];
+
+    // Fetch worker tokens once, shared by both resolvers.
+    // Throws Error('DEAD') when the worker confirms the link is gone (empty tokens).
+    async function fetchWorkerTokens(workerUrl) {
+        var qi = workerUrl.indexOf('?');
+        if (qi < 0) return null;
+        var base = workerUrl.slice(0, qi);
+        if (base.slice(-1) === '/') base = base.slice(0, -1); // "worker.dev/?x=1" -> "worker.dev"
+        var vcloud = getQueryParam(workerUrl, 'vcloud');
+        if (!vcloud) return null;
+        var data = await getJson(base + '/api/links?vcloud=' + encodeURIComponent(vcloud));
+        if (!data || !data.tokens || Object.keys(data.tokens).length === 0) {
+            var err = new Error('DEAD');
+            err.dead = true;
+            throw err;
+        }
+        return { base: base, vcloud: vcloud, data: data };
+    }
+
+    function buildGoStream(ctx, tokenKey, tk, quality, size) {
+        var label = (SERVER_LABELS[tokenKey] || tokenKey.toUpperCase());
+        if (quality) label += ' • ' + quality;
+        var fileSize = size || (ctx.data && ctx.data.size) || '';
+        if (fileSize) label += ' • ' + fileSize;
+        return mkStream({
+            url: ctx.base + '/go?type=' + encodeURIComponent(tokenKey)
+               + '&vcloud=' + encodeURIComponent(ctx.vcloud)
+               + '&ts=' + encodeURIComponent(tk.ts)
+               + '&sig=' + encodeURIComponent(tk.sig),
+            quality: label,
+            headers: { 'User-Agent': UA }
+        });
+    }
+
+    function sleep(ms) {
+        if (typeof setTimeout === 'function') {
+            return new Promise(function (r) { setTimeout(r, ms); });
+        }
+        return Promise.resolve();
+    }
+
     async function getJson(url) {
         var res = await http_get(url, {
             'User-Agent': UA,
@@ -117,7 +177,7 @@
         var s;
         try {
             s = new StreamResult({ url: obj.url, source: obj.source || obj.quality, headers: obj.headers });
-            s.quality = obj.quality; // older/newer runtimes label differently — set both
+            s.quality = obj.quality; // runtimes label streams differently — set both
         } catch (_) {
             s = obj;
         }
@@ -141,9 +201,10 @@
     // Item URLs are the real API detail URLs:
     //   https://api.hicine.sbs/api/hollywood_series/28295
     // Episode URLs are virtual paths on the same host:
-    //   https://api.hicine.sbs/api/hollywood_series/28295/season/1/episode/3
+    //   .../28295/season/2/episode/5          (a normal episode)
+    //   .../28295/season/1/episode/999        (whole-season "Complete Pack")
     function parseItemUrl(url) {
-        var m = String(url || '').match(/\/api\/([a-z_]+)\/(\d+)(?:\/season\/(\d+)\/episode\/(\d+))?/i);
+        var m = String(url || '').match(/\/api\/([a-z_-]+)\/(\d+)(?:\/season\/(\d+)\/episode\/(\d+))?/i);
         if (!m) return null;
         var ct = PATH_TO_CT[m[1].toLowerCase()];
         if (!ct) return null;
@@ -168,7 +229,7 @@
         var ct = forceCt || rec.contentType;
         var info = COLLECTIONS[ct];
         if (!info) {
-            // Unknown content type — try to sniff from categories
+            // Unknown content type — sniff from categories
             var cats = String(rec.categories || '');
             ct = /anime/i.test(cats) ? 'anime'
                : /bollywood/i.test(cats) ? (/series/i.test(cats) ? 'bolly_series' : 'bolly_movies')
@@ -187,7 +248,7 @@
     }
 
     // Movies: `links` is a block of lines:
-    //   https://worker.dev/?vcloud=https://vcloud.fit/xx, Link2, ..., Title 480p ..., 630MB
+    //   https://worker.dev/?vcloud=..., Link2, ..., Title 480p ..., 630MB
     function parseMovieLinks(linksField) {
         var out = [];
         String(linksField || '').split(/\r?\n/).forEach(function (line) {
@@ -221,10 +282,34 @@
             }
             if (!variants.length) {
                 // fallback: bare urls, no quality labels
-                var bare = rest.match(/https?:\/\/[^\s,:]+/g) || [];
+                var bare = rest.match(/https?:\/\/[^\s,]+/g) || [];
                 bare.forEach(function (u) { variants.push({ url: u, quality: 'auto' }); });
             }
             if (variants.length) out.push({ num: num, variants: variants });
+        });
+        return out;
+    }
+
+    // `season_zip` fields hold whole-season batch packs (one line per season):
+    //   Season 1 : https://worker/?vcloud=...,Title [770MB],480p : https://worker/...,...,720p
+    function parseSeasonZips(zipField) {
+        var out = [];
+        decodeEntities(String(zipField || '')).split(/\r?\n/).forEach(function (line) {
+            var sm = line.match(/season\s*(\d+)/i);
+            var season = sm ? parseInt(sm[1], 10) : 1;
+            var re = /https?:\/\/[^\s,]+/g;
+            var hits = [];
+            var m;
+            while ((m = re.exec(line)) !== null) hits.push({ url: m[0], start: m.index });
+            for (var i = 0; i < hits.length; i++) {
+                var seg = line.slice(hits[i].start, i + 1 < hits.length ? hits[i + 1].start : line.length);
+                out.push({
+                    season: season,
+                    workerUrl: hits[i].url,
+                    quality: qualityFromText(seg) || 'pack',
+                    size: sizeFromText(seg)
+                });
+            }
         });
         return out;
     }
@@ -234,47 +319,112 @@
     // Streams are returned as signed /go URLs; the player follows the 302 to the
     // direct file (R2 / PixelDrain). Never http_get the /go URL itself — that
     // would download the whole movie through the plugin sandbox.
-    async function resolveWorker(workerUrl, quality, size) {
-        var qi = workerUrl.indexOf('?');
-        if (qi < 0) return [];
-        var base = workerUrl.slice(0, qi);
-        if (base.slice(-1) === '/') base = base.slice(0, -1); // "worker.dev/?x=1" -> "worker.dev"
-        var vcloud = getQueryParam(workerUrl, 'vcloud');
-        if (!vcloud) return [];
-
-        var data = await getJson(base + '/api/links?vcloud=' + encodeURIComponent(vcloud));
-        var tokens = (data && data.tokens) || {};
-        var fileSize = (data && data.size) || size || '';
+    async function resolveWorker(workerUrl, quality, size, allowFallbackServers) {
+        var ctx = await fetchWorkerTokens(workerUrl);
+        if (!ctx) return [];
+        var tokens = (ctx.data && ctx.data.tokens) || {};
 
         var out = [];
-        Object.keys(tokens).forEach(function (t) {
-            if (SKIP_SERVERS.indexOf(t) >= 0) return;
+        var keys = Object.keys(tokens);
+        if (!allowFallbackServers) {
+            keys = keys.filter(function (t) { return SKIP_SERVERS.indexOf(t) < 0; });
+        }
+        keys.forEach(function (t) {
             var tk = tokens[t] || {};
             if (!tk.ts || !tk.sig) return;
-            var label = (SERVER_LABELS[t] || t.toUpperCase());
-            if (quality) label += ' • ' + quality;
-            if (fileSize) label += ' • ' + fileSize;
-
-            var goUrl = base + '/go?type=' + encodeURIComponent(t)
-                      + '&vcloud=' + encodeURIComponent(vcloud)
-                      + '&ts=' + encodeURIComponent(tk.ts)
-                      + '&sig=' + encodeURIComponent(tk.sig);
-
-            out.push(mkStream({
-                url: goUrl,
-                quality: label,
-                headers: { 'User-Agent': UA }
-            }));
+            out.push(buildGoStream(ctx, t, tk, quality, size));
         });
         return out;
     }
 
+    // Bulk mode: one link per file — try the most reliable server first, fall
+    // back to the next. Keeps "All Episodes" fast (1 request per episode).
+    async function resolveWorkerSingle(workerUrl, quality, labelPrefix) {
+        var ctx;
+        try {
+            ctx = await fetchWorkerTokens(workerUrl);
+        } catch (_) {
+            return null;
+        }
+        if (!ctx) return null;
+        var tokens = (ctx.data && ctx.data.tokens) || {};
+
+        var keys = Object.keys(tokens).filter(function (t) { return SKIP_SERVERS.indexOf(t) < 0; });
+        keys.sort(function (a, b) {
+            var ia = SERVER_PREFERENCE.indexOf(a); var ib = SERVER_PREFERENCE.indexOf(b);
+            return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+        });
+        for (var i = 0; i < keys.length; i++) {
+            var tk = tokens[keys[i]] || {};
+            if (!tk.ts || !tk.sig) continue;
+            var s = buildGoStream(ctx, keys[i], tk, quality, '');
+            if (labelPrefix) s.source = labelPrefix + ' • ' + s.source;
+            s.quality = s.source;
+            return s;
+        }
+        return null;
+    }
+
+    // Resolve one target with one retry; never throws. Dead links (confirmed by
+    // the worker) are dropped immediately without pointless retries.
+    async function resolveTargetSafe(target) {
+        var tries = 0;
+        while (tries < 2) {
+            tries++;
+            try {
+                var got = await resolveWorker(target.workerUrl, target.quality, target.size, false);
+                if (got.length) return got;
+            } catch (e) {
+                if (e && e.dead) return []; // confirmed dead — stop retrying
+            }
+            if (tries < 2) await sleep(350);
+        }
+        // last resort: allow the ad-walled/page hosts so *something* is listed
+        try {
+            return await resolveWorker(target.workerUrl, target.quality, target.size, true);
+        } catch (_) { /* fall through */ }
+        // generic extractor fallback for non-worker hosts
+        if (typeof loadExtractor === 'function' && target.workerUrl.indexOf('workers.dev') < 0) {
+            try {
+                var ex = await loadExtractor(target.workerUrl);
+                if (ex && ex.length) {
+                    var got2 = [];
+                    for (var x = 0; x < ex.length; x++) {
+                        if (ex[x] && ex[x].url) {
+                            ex[x].quality = (ex[x].quality || target.quality || 'Link');
+                            got2.push(ex[x]);
+                        }
+                    }
+                    return got2;
+                }
+            } catch (_) { /* extractor not available for this host */ }
+        }
+        return [];
+    }
+
+    // Small concurrency pool so we don't burst the worker with parallel calls
+    // (bursting triggers rate limits -> "no streams found").
+    async function resolveAllTargets(targets) {
+        var results = new Array(targets.length);
+        var cursor = 0;
+        var POOL = Math.min(2, targets.length);
+        async function runner() {
+            while (cursor < targets.length) {
+                var idx = cursor++;
+                results[idx] = await resolveTargetSafe(targets[idx]);
+            }
+        }
+        var workers = [];
+        for (var i = 0; i < POOL; i++) workers.push(runner());
+        await Promise.all(workers);
+        return results;
+    }
+
     // ─────────────────────────── getHome ───────────────────────────
 
-    async function fetchRow(path, forceCt, limit) {
-        var d = await getJson(API + '/api/' + path + '?offset=0&limit=' + (limit || 18));
-        var items = (d && Array.isArray(d.data)) ? d.data : (Array.isArray(d) ? d : []);
-        return items.map(function (r) { return toItem(r, forceCt); }).filter(Boolean);
+    async function fetchList(path, offset, limit) {
+        var d = await getJson(API + '/api/' + path + '?offset=' + offset + '&limit=' + limit);
+        return (d && Array.isArray(d.data)) ? d.data : (Array.isArray(d) ? d : []);
     }
 
     async function getHome(cb) {
@@ -298,7 +448,25 @@
 
             HOME_ROWS.forEach(function (row) {
                 names.push(row.name);
-                tasks.push(fetchRow(COLLECTIONS[row.ct].path, row.ct, 18));
+                tasks.push((async function () {
+                    if (row.ct === 'series') {
+                        // one wide fetch feeds BOTH the Hollywood Series row and the K-Drama row
+                        var wide = await fetchList(COLLECTIONS.series.path, 0, 100);
+                        var western = [], kdrama = [];
+                        for (var i = 0; i < wide.length; i++) {
+                            var rec = wide[i];
+                            if (/korean|k-drama/i.test(String(rec.categories || ''))) {
+                                if (kdrama.length < 18) kdrama.push(toItem(rec, 'series'));
+                            } else if (western.length < 18) {
+                                western.push(toItem(rec, 'series'));
+                            }
+                        }
+                        row._kdrama = kdrama.filter(Boolean);
+                        return western.filter(Boolean);
+                    }
+                    return (await fetchList(COLLECTIONS[row.ct].path, 0, 18))
+                        .map(function (r) { return toItem(r, row.ct); }).filter(Boolean);
+                })());
             });
 
             var settled = await Promise.all(tasks.map(function (p) {
@@ -311,6 +479,11 @@
             var data = {};
             for (var i = 0; i < names.length; i++) {
                 if (settled[i] && settled[i].length) data[names[i]] = settled[i];
+                // insert the K-Drama row right after Hollywood Series
+                if (names[i] === 'Hollywood Series') {
+                    var kd = HOME_ROWS[1]._kdrama;
+                    if (kd && kd.length) data['K-Drama'] = kd;
+                }
             }
 
             if (!Object.keys(data).length) {
@@ -326,13 +499,26 @@
 
     async function search(query, cb) {
         try {
-            if (!query) return cb({ success: false, errorCode: 'BAD_QUERY', message: 'Empty query' });
-            var d = await getJson(API + '/api/search/' + encodeURIComponent(query.trim()));
+            var q = String(query || '').trim();
+            if (!q) return cb({ success: true, data: [] });
+            var d = await getJson(API + '/api/search/' + encodeURIComponent(q));
             var items = (d && Array.isArray(d.data)) ? d.data : (Array.isArray(d) ? d : []);
-            var results = items.map(function (r) { return toItem(r); }).filter(Boolean);
-            if (!results.length) {
-                return cb({ success: false, errorCode: 'NOT_FOUND', message: 'No results for "' + query + '"' });
+
+            var results = [];
+            var seen = {};
+            for (var i = 0; i < items.length; i++) {
+                var rec = items[i];
+                if (!rec) continue;
+                var it = toItem(rec);
+                if (!it) continue;
+                // same title is often filed under both Bollywood & Hollywood — dedupe
+                var key = String(it.title).toLowerCase() + '|' + (it.year || '');
+                if (seen[key]) continue;
+                seen[key] = 1;
+                results.push(it);
             }
+
+            // Empty result is NOT an error — let the app render "no results" calmly
             cb({ success: true, data: results });
         } catch (e) {
             cb({ success: false, errorCode: 'ERROR', message: String((e && e.message) || e) });
@@ -373,6 +559,10 @@
                 var txt = det['season_' + s];
                 if (!txt) continue;
                 var eps = parseSeasonEpisodes(txt);
+                var seasonZips = parseSeasonZips(det['season_zip']).filter(function (z) {
+                    return z.season === s;
+                });
+
                 for (var i = 0; i < eps.length; i++) {
                     episodes.push(mkEpisode({
                         name: 'Episode ' + eps[i].num,
@@ -383,14 +573,54 @@
                         playbackPolicy: 'none'
                     }));
                 }
+
+                // Extra pseudo-episodes at the end of the season (bulk downloads)
+                if (eps.length) {
+                    // every single episode's link in one place — one server per episode
+                    episodes.push(mkEpisode({
+                        name: '📦 All Episodes — Download Links',
+                        url: episodeUrl(p.ct, p.id, s, ALL_EPISODE_NUMBER),
+                        season: s,
+                        episode: ALL_EPISODE_NUMBER,
+                        dubStatus: 'none',
+                        playbackPolicy: 'none'
+                    }));
+                }
+                if (seasonZips.length) {
+                    // whole-season zip pack(s) — verify the pack is still alive on the
+                    // worker before advertising it (dead packs are common)
+                    var packAlive = false;
+                    try {
+                        var packCtx = await fetchWorkerTokens(seasonZips[0].workerUrl);
+                        packAlive = !!packCtx;
+                    } catch (e) {
+                        packAlive = !(e && e.dead); // network hiccup -> keep the pack; confirmed dead -> drop
+                    }
+                    if (packAlive) {
+                        episodes.push(mkEpisode({
+                            name: '📦 Season ' + s + ' Complete Pack (ZIP)',
+                            url: episodeUrl(p.ct, p.id, s, ZIP_EPISODE_NUMBER),
+                            season: s,
+                            episode: ZIP_EPISODE_NUMBER,
+                            dubStatus: 'none',
+                            playbackPolicy: 'none'
+                        }));
+                    }
+                }
             }
 
             if (!episodes.length) {
-                // Record has no season fields — if it has movie-style links, treat as movie
-                if (!parseMovieLinks(det.links).length) {
-                    return cb({ success: false, errorCode: 'NO_EPISODES', message: 'No episodes found for this title' });
+                // No season data at all — movie-style `links`? then treat as a movie
+                if (parseMovieLinks(det.links).length) {
+                    item.type = 'movie';
+                } else {
+                    // Genuinely nothing uploaded yet — return the info page calmly
+                    // instead of throwing an exception in the user's face.
+                    item.episodes = [];
+                    item.description = (item.description ? item.description + '\n\n' : '')
+                        + '⚠ Links for this title have not been uploaded on HiCine yet — check back later.';
+                    return cb({ success: true, data: mkItem(item) });
                 }
-                item.type = 'movie';
             }
 
             // Movies (and movie-like items) get a single pseudo-episode —
@@ -406,8 +636,7 @@
                 })];
             }
 
-            // Episodes MUST live inside the MultimediaItem (data.episodes),
-            // not beside it in the callback payload.
+            // Episodes MUST live inside the MultimediaItem (data.episodes)
             item.episodes = episodes;
             cb({ success: true, data: mkItem(item) });
         } catch (e) {
@@ -429,17 +658,42 @@
 
             // Collect every (workerUrl, quality) target for this movie / episode
             var targets = [];
+            var bulkMode = false;
+            var bulkLabelPrefix = '';
             if (p.season != null && p.ep != null) {
-                var eps = parseSeasonEpisodes(det['season_' + p.season]);
-                var ep = null;
-                for (var i = 0; i < eps.length; i++) if (eps[i].num === p.ep) ep = eps[i];
-                if (!ep) {
-                    return cb({ success: false, errorCode: 'NOT_FOUND',
-                                message: 'Episode ' + p.ep + ' not found in season ' + p.season });
+                var seasonText = det['season_' + p.season] || '';
+                var eps = parseSeasonEpisodes(seasonText);
+
+                if (p.ep === ZIP_EPISODE_NUMBER) {
+                    // whole-season complete pack (zip download)
+                    parseSeasonZips(det['season_zip']).filter(function (z) {
+                        return z.season === p.season;
+                    }).forEach(function (z) {
+                        targets.push({ workerUrl: z.workerUrl, quality: (z.quality !== 'pack' ? z.quality : 'Pack'), size: z.size });
+                    });
+                } else if (p.ep === ALL_EPISODE_NUMBER) {
+                    // every single episode of the season, best quality, one server each
+                    bulkMode = true;
+                    var capped = eps.slice(0, BULK_EPISODE_CAP);
+                    capped.forEach(function (e) {
+                        var best = pickBestVariant(e.variants);
+                        targets.push({
+                            workerUrl: best.url,
+                            quality: best.quality === 'auto' ? '' : best.quality,
+                            bulkLabel: 'E' + e.num
+                        });
+                    });
+                } else {
+                    var ep = null;
+                    for (var i = 0; i < eps.length; i++) if (eps[i].num === p.ep) ep = eps[i];
+                    if (!ep) {
+                        return cb({ success: false, errorCode: 'NOT_FOUND',
+                                    message: 'Episode ' + p.ep + ' not found in season ' + p.season });
+                    }
+                    ep.variants.forEach(function (v) {
+                        targets.push({ workerUrl: v.url, quality: v.quality, size: '' });
+                    });
                 }
-                ep.variants.forEach(function (v) {
-                    targets.push({ workerUrl: v.url, quality: v.quality, size: '' });
-                });
             } else {
                 parseMovieLinks(det.links).forEach(function (l) {
                     targets.push({ workerUrl: l.workerUrl, quality: l.quality, size: l.size });
@@ -447,41 +701,34 @@
             }
 
             if (!targets.length) {
-                return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No stream links published for this title yet' });
+                return cb({ success: false, errorCode: 'NO_STREAMS',
+                            message: 'No download links uploaded for this title yet — check back later.' });
             }
 
             var streams = [];
-            var resolvedAll = await Promise.all(targets.map(async function (target) {
-                var got = [];
-                try {
-                    var resolved = await resolveWorker(target.workerUrl, target.quality, target.size);
-                    for (var r = 0; r < resolved.length; r++) got.push(resolved[r]);
-                } catch (_) {
-                    // Worker failed for this quality — try remaining targets
+            if (bulkMode) {
+                // "All Episodes": resolve one server per episode, small concurrency pool
+                var cursor = 0;
+                async function bulkRunner() {
+                    while (cursor < targets.length) {
+                        var t = targets[cursor++];
+                        try {
+                            var st = await resolveWorkerSingle(t.workerUrl, t.quality, t.bulkLabel);
+                            if (st) streams.push(st);
+                        } catch (_) { /* skip this episode's link */ }
+                    }
                 }
-                // Generic extractor fallback for non-worker hosts (gofile, pixeldrain, ...)
-                if (!got.length && typeof loadExtractor === 'function'
-                        && /^https?:\/\//.test(target.workerUrl)
-                        && target.workerUrl.indexOf('workers.dev') < 0) {
-                    try {
-                        var ex = await loadExtractor(target.workerUrl);
-                        if (ex && ex.length) {
-                            for (var x = 0; x < ex.length; x++) {
-                                if (ex[x] && ex[x].url) {
-                                    ex[x].quality = (ex[x].quality || target.quality || 'Link');
-                                    got.push(ex[x]);
-                                }
-                            }
-                        }
-                    } catch (_) { /* extractor not available for this host */ }
-                }
-                return got;
-            }));
-            resolvedAll.forEach(function (batch) {
-                for (var b = 0; b < batch.length; b++) streams.push(batch[b]);
-            });
+                var pool = [];
+                for (var w = 0; w < Math.min(3, targets.length); w++) pool.push(bulkRunner());
+                await Promise.all(pool);
+            } else {
+                var batches = await resolveAllTargets(targets);
+                batches.forEach(function (batch) {
+                    for (var b = 0; b < batch.length; b++) streams.push(batch[b]);
+                });
+            }
 
-            // De-duplicate identical signed URLs (rare: same file on two keys)
+            // De-duplicate identical signed URLs
             var seen = {};
             var unique = [];
             streams.forEach(function (s2) {
@@ -490,7 +737,7 @@
 
             if (!unique.length) {
                 return cb({ success: false, errorCode: 'NO_STREAMS',
-                            message: 'All HiCine servers failed to sign a link (tokens may have expired — retry)' });
+                            message: 'HiCine servers did not respond (links may be dead or rate-limited) — please retry.' });
             }
             cb({ success: true, data: unique });
         } catch (e) {
