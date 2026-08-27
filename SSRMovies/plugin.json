@@ -1,0 +1,16 @@
+{
+  "packageName": "com.ssr.skystream",
+  "name": "SSR Movies",
+  "version": 1,
+  "baseUrl": "https://ssrmovies.moda",
+  "domains": [
+    { "name": "ssrmovies.moda (primary)", "url": "https://ssrmovies.moda" },
+    { "name": "ssrmovies.com", "url": "https://ssrmovies.com" },
+    { "name": "ssrmovies.land", "url": "https://ssrmovies.land" }
+  ],
+  "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. Watch online + download mirrors",
+  "authors": ["Arena Agent"],
+  "languages": ["hi", "en"],
+  "categories": ["Movies", "Series"],
+  "isAdult": false
+}
