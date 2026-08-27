@@ -481,4 +481,12 @@
             }
             cb({ success: true, data: unique });
         } catch (e) {
-       
+            cb({ success: false, errorCode: 'ERROR', message: String((e && e.message) || e) });
+        }
+    }
+    globalThis.getHome = getHome;
+    globalThis.search = search;
+    globalThis.load = load;
+    globalThis.loadStreams = loadStreams;
+
+})();
