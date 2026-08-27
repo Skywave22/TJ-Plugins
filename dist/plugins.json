@@ -1,26 +1,5 @@
 [
   {
-    "packageName": "com.allmovieland.provider",
-    "name": "AllMovieLand",
-    "version": 1,
-    "baseUrl": "https://allmovieland.io",
-    "description": "AllMovieLand streaming provider with multi-language support. TMDB catalog (trending, search, seasons & episodes) + the site's own stream resolver (player domain -> p3 token -> playlist POST -> m3u8). Ported from Hindi-Nuvio.",
-    "authors": [
-      "Skywave22"
-    ],
-    "languages": [
-      "en",
-      "hi",
-      "ta",
-      "te"
-    ],
-    "categories": [
-      "Movie",
-      "TvSeries"
-    ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.allmovieland.provider.sky"
-  },
-  {
     "packageName": "com.fmoviess.skystream",
     "name": "FMoviess",
     "version": 2,
@@ -149,25 +128,6 @@
       "TvSeries"
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movieblast.provider.sky"
-  },
-  {
-    "packageName": "com.pakdramas.provider",
-    "name": "Pakistani Dramas",
-    "version": 6,
-    "baseUrl": "https://www.youtube.com",
-    "description": "Pakistani dramas from 13 official YouTube channels (HUM TV, ARY Digital, HAR PAL GEO, Express TV, Green TV, Aan TV, A Plus, BOL, Urdu 1, LTN Family, TV One, Hum Sitaray, PTV Home). Series grouped with auto-updating episodes. On-device 720p/1080p (fragmented-MP4 HLS built in pure JS, no ffmpeg/yt-dlp/server) with 360p MP4 fallback.",
-    "authors": [
-      "PakDramasPlugin"
-    ],
-    "languages": [
-      "en",
-      "ur"
-    ],
-    "categories": [
-      "Movie",
-      "TvSeries"
-    ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.pakdramas.provider.sky"
   },
   {
     "packageName": "com.yenime.provider",
