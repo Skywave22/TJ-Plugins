@@ -60,7 +60,7 @@
   {
     "packageName": "com.hicine.skystream",
     "name": "HiCine",
-    "version": 1,
+    "version": 6,
     "baseUrl": "https://api.hicine.sbs",
     "domains": [
       {
@@ -70,7 +70,7 @@
     ],
     "description": "HiCine - Bollywood & Hollywood movies, series and anime (Hindi dual-audio). Movies, WEB series, K-dramas and anime from hicine.sbs",
     "authors": [
-      "Arena Agent"
+      "Happy"
     ],
     "languages": [
       "hi",
