@@ -193,5 +193,24 @@
     ],
     "isAdult": false,
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.ssr.skystream.sky"
+  },
+  {
+    "packageName": "com.subdub.skystream",
+    "name": "SubDubAnime",
+    "version": 1,
+    "baseUrl": "https://www.subdubanime.site",
+    "description": "SubDubAnime (subdubanime.site) - Hindi & English dubbed/subbed anime: series, seasons and movies via the Blakite API. Direct HLS per episode (up to 1080p where available). Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "TvSeries",
+      "Movie"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.subdub.skystream.sky"
   }
 ]
