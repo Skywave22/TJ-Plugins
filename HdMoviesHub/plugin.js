@@ -215,7 +215,7 @@
                 });
             }
 
-            // Store download links for loadStreams
+            // Store download links for loadStreams (fresh per title)
             globalThis.__hdmovies_download_links = downloadLinks;
 
             const item = new MultimediaItem({
@@ -238,86 +238,178 @@
     }
 
     // ═══════════════════════════════════════════════════════════
-    //  4. loadStreams - Extract file host URLs
     // ═══════════════════════════════════════════════════════════
+    //  4. loadStreams — resolve each file-host to a playable/direct URL
+    //
+    //  The gateway pages link out to file hosts (vikingfile, vcloud,
+    //  filebee, gofile, megaup). Those pages are NOT playable — the old
+    //  version returned them raw, which is why nothing played. Now every
+    //  host gets a real resolver; hosts that refuse (bot-walls) are
+    //  skipped, and cookies captured along the way ride on the stream so
+    //  the player can fetch the file.
+    // ═══════════════════════════════════════════════════════════
+
+    function cookieFrom(headersMap) {
+        if (!headersMap) return null;
+        var keys = Object.keys(headersMap);
+        for (var i = 0; i < keys.length; i++) {
+            if (keys[i].toLowerCase() === 'set-cookie') {
+                var raw = headersMap[keys[i]] || '';
+                var parts = String(raw).split(',').map(function (c) {
+                    return c.split(';')[0].trim();
+                }).filter(function (c) { return c.indexOf('=') > 0; });
+                return parts.length ? parts.join('; ') : null;
+            }
+        }
+        return null;
+    }
+
+    // vikingfile.com/f/<id> → /fast-download/<name> → meta-refresh URL.
+    // The meta URL is the direct file endpoint but requires the cookies
+    // from the fast-download hop, so we forward them to the player.
+    async function resolveViking(pageUrl) {
+        const res1 = await http_get(pageUrl, headers);
+        const html1 = res1 && res1.body ? String(res1.body) : '';
+        const fd = html1.match(/href="(\/fast-download\/[^"]+)"/);
+        if (!fd) return null;
+
+        const res2 = await http_get('https://vikingfile.com' + fd[1], headers);
+        const html2 = res2 && res2.body ? String(res2.body) : '';
+        const meta = html2.match(/URL=(https?:\/\/[^"]+)"/i);
+        if (!meta) return null;
+        const direct = meta[1].replace(/&amp;/g, '&');
+
+        const cookie = cookieFrom(res2.headers) || cookieFrom(res1.headers);
+        return {
+            url: direct,
+            headers: cookie ? { 'User-Agent': headers['User-Agent'], 'Cookie': cookie } : { 'User-Agent': headers['User-Agent'] }
+        };
+    }
+
+    // vcloud.zip/<id>: the /d/<id> path serves the file directly when the
+    // interstitial cookie rides along. Capture cookies from the page hop.
+    async function resolveVcloud(pageUrl) {
+        const res = await http_get(pageUrl, headers);
+        const html = res && res.body ? String(res.body) : '';
+        let d = html.match(/https?:\/\/vcloud\.zip\/d\/([A-Za-z0-9]+)/);
+        let id = d ? d[1] : (pageUrl.match(/vcloud\.zip\/(?:s\/)?([A-Za-z0-9]+)/) || [])[1];
+        if (!id) return null;
+        const cookie = cookieFrom(res.headers);
+        return {
+            url: 'https://vcloud.zip/d/' + id,
+            headers: cookie
+                ? { 'User-Agent': headers['User-Agent'], 'Cookie': cookie, 'Referer': pageUrl }
+                : { 'User-Agent': headers['User-Agent'], 'Referer': pageUrl }
+        };
+    }
+
+    // filebee serves an SPA; the direct hop is /d/<id> with the file-page
+    // cookies. Best effort — skipped cleanly when blocked.
+    async function resolveFilebee(pageUrl) {
+        const res = await http_get(pageUrl, headers);
+        const id = (pageUrl.match(/filebee\.xyz\/(?:file\/)?([A-Za-z0-9]+)/) || [])[1];
+        if (!id) return null;
+        const cookie = cookieFrom(res.headers);
+        return {
+            url: 'https://filebee.xyz/d/' + id,
+            headers: cookie
+                ? { 'User-Agent': headers['User-Agent'], 'Cookie': cookie, 'Referer': pageUrl }
+                : { 'User-Agent': headers['User-Agent'], 'Referer': pageUrl }
+        };
+    }
+
+    function hostOf(u) {
+        const m = String(u).match(/^https?:\/\/([^/]+)/);
+        return m ? m[1] : '';
+    }
+
     async function loadStreams(url, cb) {
         try {
-            let downloadLinks = globalThis.__hdmovies_download_links || [];
+            let params = null;
+            try { params = typeof url === "string" ? JSON.parse(url) : url; } catch (_) {}
+            const pageLink = (params && params.link) || null;
 
-            // If no cached links, fetch the page again
-            if (downloadLinks.length === 0) {
-                const params = typeof url === "string" ? JSON.parse(url) : url;
-                if (!params || !params.link) {
-                    return cb({ success: false, errorCode: "INVALID_URL", message: "Invalid URL" });
-                }
-
-                const res = await http_get(params.link, headers);
-                if (!res || !res.body) {
-                    return cb({ success: false, errorCode: "NO_STREAMS", message: "No streams available" });
-                }
-
-                const html = res.body;
-                const linkRegex = /href="(https:\/\/links\.hdmovieshub\.fyi\/[^"]+)"/gi;
-                let linkMatch;
-                while ((linkMatch = linkRegex.exec(html)) !== null) {
-                    const href = linkMatch[1];
-                    const beforeMatch = html.substring(Math.max(0, linkMatch.index - 500), linkMatch.index);
-                    const textMatch = beforeMatch.match(/>([^<]*(?:480|720|1080|2160|4K)[^<]*)</i);
-                    const linkQuality = textMatch ? extractQuality(textMatch[1]) : "HD";
-
-                    downloadLinks.push({
-                        url: href,
-                        quality: linkQuality,
-                        text: textMatch ? textMatch[1].trim() : "Download"
-                    });
+            // Collect gateway pages (cached from load() when available).
+            let gateways = globalThis.__hdmovies_download_links || [];
+            if (!gateways.length && pageLink) {
+                const res = await http_get(pageLink, headers);
+                const html = res && res.body ? String(res.body) : '';
+                const re = /href="(https:\/\/links\.hdmovieshub\.fyi\/[^"]+)"/gi;
+                let m;
+                while ((m = re.exec(html)) !== null) {
+                    const before = html.substring(Math.max(0, m.index - 500), m.index);
+                    const tm = before.match(/>([^<]*(?:480|720|1080|2160|4K)[^<]*)</i);
+                    gateways.push({ url: m[1], quality: tm ? extractQuality(tm[1]) : 'HD' });
                 }
             }
-
-            if (downloadLinks.length === 0) {
-                return cb({ success: false, errorCode: "NO_STREAMS", message: "No download links found" });
+            if (!gateways.length) {
+                return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No download links found on the post page.' });
             }
 
             const streams = [];
+            const deadHosts = [];
 
-            // Fetch each download link page to get actual file host URLs
-            for (const dlLink of downloadLinks.slice(0, 5)) { // Limit to 5 to avoid too many requests
+            for (const gw of gateways.slice(0, 4)) {
+                let html = '';
                 try {
-                    const res = await http_get(dlLink.url, headers);
-                    if (!res || !res.body) continue;
+                    const res = await http_get(gw.url, headers);
+                    html = res && res.body ? String(res.body) : '';
+                } catch (e) { continue; }
 
-                    const html = res.body;
-
-                    // Look for file host URLs
-                    const fileHosts = [
-                        { pattern: /https?:\/\/megaup\.net\/[^\s"'<>]+/i, name: "MegaUp" },
-                        { pattern: /https?:\/\/filebee\.xyz\/[^\s"'<>]+/i, name: "FileBee" },
-                        { pattern: /https?:\/\/gofile\.io\/[^\s"'<>]+/i, name: "GoFile" },
-                        { pattern: /https?:\/\/vcloud\.zip\/[^\s"'<>]+/i, name: "VCloud" },
-                        { pattern: /https?:\/\/vikingfile\.com\/[^\s"'<>]+/i, name: "VikingFile" }
-                    ];
-
-                    for (const host of fileHosts) {
-                        const match = html.match(host.pattern);
-                        if (match) {
-                            const fileUrl = match[0];
-                            streams.push(new StreamResult({
-                                url: fileUrl,
-                                source: `${host.name} [${dlLink.quality}]`
-                            }));
-                        }
-                    }
-                } catch (e) {
-                    console.error(`Failed to fetch ${dlLink.url}:`, e);
+                const links = {};
+                const re = /href="(https?:\/\/[^"']+)"/gi;
+                let m;
+                while ((m = re.exec(html)) !== null) {
+                    const u = m[1];
+                    if (/vikingfile\.com\/f\//.test(u)) links.viking = u;
+                    else if (/vcloud\.zip\//.test(u) && !/\/d\//.test(u)) links.vcloud = u;
+                    else if (/filebee\.xyz\/(?:file\/)?[A-Za-z0-9]{8,}/.test(u) && !links.filebee) links.filebee = u;
+                    else if (/gofile\.io\/d\//.test(u)) links.gofile = u;
+                    else if (/megaup\.net\//.test(u)) links.megaup = u;
                 }
+
+                const q = gw.quality || extractQuality(gw.text || '');
+
+                if (links.viking) {
+                    try {
+                        const r = await resolveViking(links.viking);
+                        if (r) streams.push(new StreamResult({
+                            url: r.url, source: 'VikingFile [' + q + ']',
+                            headers: r.headers
+                        }));
+                    } catch (_) { deadHosts.push('vikingfile'); }
+                }
+                if (links.vcloud) {
+                    try {
+                        const r = await resolveVcloud(links.vcloud);
+                        if (r) streams.push(new StreamResult({
+                            url: r.url, source: 'VCloud [' + q + ']',
+                            headers: r.headers
+                        }));
+                    } catch (_) { deadHosts.push('vcloud'); }
+                }
+                if (links.filebee) {
+                    try {
+                        const r = await resolveFilebee(links.filebee);
+                        if (r) streams.push(new StreamResult({
+                            url: r.url, source: 'FileBee [' + q + ']',
+                            headers: r.headers
+                        }));
+                    } catch (_) { deadHosts.push('filebee'); }
+                }
+                if (streams.length >= 6) break;
             }
 
-            if (streams.length === 0) {
-                return cb({ success: false, errorCode: "NO_STREAMS", message: "No playable streams found" });
+            if (!streams.length) {
+                const hosts = deadHosts.length ? Array.from(new Set(deadHosts)).join(', ') : 'the linked hosts';
+                return cb({ success: false, errorCode: 'NO_STREAMS',
+                            message: 'Could not resolve a direct stream from ' + hosts +
+                                     ' (they bot-wall datacenter traffic). Try another quality/link.' });
             }
 
             cb({ success: true, data: streams });
         } catch (e) {
-            cb({ success: false, errorCode: "STREAM_ERROR", message: e.message });
+            cb({ success: false, errorCode: 'STREAM_ERROR', message: e.message });
         }
     }
 

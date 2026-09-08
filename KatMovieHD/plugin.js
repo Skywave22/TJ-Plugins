@@ -213,6 +213,111 @@
         });
     }
 
+    // ─────────────────── direct host resolvers (in-plugin) ───────────────────
+    // The SkyStream engine has no loadExtractor(), so every file-host that we
+    // can resolve must be resolved here. Verified live chains (2026-09):
+    //   hubcloud  /drive/ID -> id="download" -> gamerxyt.com/hubcloud.php ->
+    //             signed *.r2.cloudflarestorage.com/... direct file (8h TTL)
+    //   gdflix    /file/ID -> /cloud/<ts>/ID page -> "<hex>::<hex>/<name>?bytes=" direct
+    //   pixeldrain /u/ID  -> pixeldrain.com/api/file/ID?download (direct)
+
+    function fileNameFromUrl(u) {
+        var f = (String(u).match(/\/([^\/?&]+?)(?:[?&]|$)/) || [])[1] || '';
+        try { f = decodeURIComponent(f); } catch (e) {}
+        return f.replace(/\.zip$/i, '').slice(0, 60);
+    }
+
+    function titleFromBody(html) {
+        return ((html || '').match(/<title>([^<]{4,120})<\/title>/) || [])[1] || '';
+    }
+
+    function pixeldrainDirect(u) {
+        var m = String(u).match(/pixeldrain\.(?:com|dev)\/u\/([A-Za-z0-9]+)/);
+        return m ? 'https://pixeldrain.com/api/file/' + m[1] + '?download' : null;
+    }
+
+    async function resolveHubcloud(pageUrl) {
+        var html = await withTimeout(getText(pageUrl, { 'Referer': 'https://hubcloud.cx/' }), 15000);
+        var dl = (html.match(/id=["']download["'][^>]*href=["']([^"']+)["']/) ||
+                  html.match(/href=["']([^"']*hubcloud\.php[^"']+)["']/) || [])[1];
+        var out = [];
+        if (dl) {
+            dl = dl.replace(/&amp;/g, '&');
+            if (/hubcloud\.php|gamerxyt/.test(dl)) {
+                var d2 = await withTimeout(getText(dl, { 'Referer': pageUrl }), 15000);
+                var r2 = (d2.match(/https:\/\/[^"'\s<>]*r2\.cloudflarestorage\.com[^"'\s<>]+/) || [])[0];
+                if (r2) out.push(r2);
+                var px = (d2.match(/https:\/\/pixel\.hubcloud\.cx\/\?id=[^"'\s<>]+/) || [])[0];
+                if (px) out.push(px);
+                if (!out.length) {
+                    var pd = (d2.match(/https:\/\/pixeldrain\.(?:com|dev)\/u\/[A-Za-z0-9]+/) || [])[0];
+                    if (pd) { var dd = pixeldrainDirect(pd); if (dd) out.push(dd); }
+                }
+            } else if (/r2\.cloudflarestorage\.com|pixel\.hubcloud/.test(dl)) {
+                out.push(dl);
+            }
+        }
+        return out;
+    }
+
+    async function resolveGdflix(pageUrl) {
+        var html = await withTimeout(getText(pageUrl, { 'Referer': 'https://gdflix.dev/' }), 15000);
+        var cloud = (html.match(/href=["']([^"']*\/cloud\/[^"']+)["']/) || [])[1];
+        if (!cloud) return [];
+        cloud = cloud.replace(/&amp;/g, '&');
+        if (cloud.indexOf('http') !== 0) {
+            var b = (pageUrl.match(/^(https?:\/\/[^\/]+)/) || [])[1];
+            if (!b) return [];
+            cloud = b + cloud;
+        }
+        var c2 = await withTimeout(getText(cloud, { 'Referer': pageUrl }), 15000);
+        var out = [], seen = {}, m;
+        var re = /https?:\/\/[^\s"'<>]+::[^\s"'<>]+\/[^"'\s<>]+/g;
+        while ((m = re.exec(c2))) {
+            var u = m[0];
+            if (seen[u]) continue;
+            if (!/\/[A-Za-z0-9_.-]+\.(mkv|mp4|zip)(\?|$)/i.test(u) && !/\?bytes=\d+/.test(u)) continue;
+            seen[u] = 1; out.push(u);
+            if (out.length >= 2) break;
+        }
+        return out;
+    }
+
+    // scan post HTML for direct file-host links and resolve the resolvable ones
+    function findDirectLinks(content) {
+        var out = [], seen = {}, re = /href=["'](https?:\/\/[^"']+)["']/gi, m;
+        while ((m = re.exec(String(content || '')))) {
+            var u = m[1].replace(/&amp;/g, '&');
+            if (!/(gdflix\.(?:dev|io)|hubcloud\.(?:cx|club|fans)|pixeldrain\.(?:com|dev))\//.test(u)) continue;
+            if (/admin|login|dashboard|#|\.(css|js|png|svg|gif)(\?|$)/.test(u)) continue;
+            if (seen[u]) continue;
+            seen[u] = 1; out.push(u);
+        }
+        return out.slice(0, 8);
+    }
+
+    async function resolveContentDirects(content) {
+        var urls = findDirectLinks(content), out = [];
+        for (var i = 0; i < urls.length && out.length < 6; i++) {
+            var u = urls[i], got = [];
+            try {
+                if (/pixeldrain\./.test(u)) { var d = pixeldrainDirect(u); if (d) got = [d]; }
+                else if (/hubcloud\./.test(u)) got = await resolveHubcloud(u);
+                else if (/gdflix\./.test(u)) got = await resolveGdflix(u);
+            } catch (e) { got = []; }
+            for (var j = 0; j < got.length; j++) {
+                var host = /pixeldrain/.test(got[j]) ? 'PixelDrain' : /hubcloud|pixel\./.test(u + got[j]) ? 'HubCloud' : 'GDFlix';
+                var fn = fileNameFromUrl(got[j]) || titleFromBody(got[j] === u ? u : '') || '';
+                out.push(mkStream({
+                    url: got[j],
+                    quality: 'File • ' + host + (fn ? ' • ' + fn : ''),
+                    headers: { 'User-Agent': UA, 'Referer': u }
+                }));
+            }
+        }
+        return out;
+    }
+
     // ─────────────────────────── catalog ───────────────────────────
 
     function featuredPoster(post) {
@@ -397,6 +502,10 @@
             if (!post) return cb({ success: false, errorCode: 'NOT_FOUND', message: 'Post not found' });
 
             var streams = [];
+            var directP = resolveContentDirects((post.content && post.content.rendered) || '');
+            function safeDirect() {
+                return directP.catch(function () { return []; });
+            }
 
             if (p.mode === 'play' && p.arg) {
                 // episode watch links — StreamTape resolved in-plugin (robotlink),
@@ -431,6 +540,9 @@
                     if (s2) streams.push(s2);
                 }
                 if (!streams.length) {
+                    streams = streams.concat(await safeDirect());
+                }
+                if (!streams.length) {
                     return cb({ success: false, errorCode: 'NO_STREAMS',
                                 message: 'Watch servers for this episode (' + (tried.join(', ') || 'none') +
                                          ') did not respond — try the 📦 Download episode or another quality post.' });
@@ -440,7 +552,8 @@
                 var fileHtml = await fetchKmhdPage('/file/' + p.arg, true);
                 var f = parseFileLinks(fileHtml);
                 var q = qualityFromText(f.name) || 'Download';
-                var order = ['hubdrive_res', 'streamtape_res', 'streamwish_res', 'gdflix_res', 'katdrive_res', 'sendcm_res', 'clicknupload_res', 'ffast_res', 'fichier_res'];
+                var order = ['hubdrive_res', 'gdflix_res', 'streamtape_res', 'streamwish_res', 'katdrive_res', 'sendcm_res', 'clicknupload_res', 'ffast_res', 'fichier_res'];
+                var unresolvable = [];
                 for (var k = 0; k < order.length; k++) {
                     var key = order[k];
                     if (!f.links[key]) continue;
@@ -448,18 +561,57 @@
                     var full = host.base + f.links[key];
                     var label = 'Download • ' + host.label + ' • ' + q;
                     if (key === 'hubdrive_res') {
-                        var s3 = await loadExtractorSafe(full, label);
-                        if (s3) { streams.push(s3); continue; }
+                        // hubcloud drive -> resolvable to signed direct file
+                        try {
+                            var hc = await resolveHubcloud(full);
+                            for (var h1 = 0; h1 < hc.length; h1++) {
+                                var fn1 = fileNameFromUrl(hc[h1]);
+                                streams.push(mkStream({
+                                    url: hc[h1],
+                                    quality: label + (fn1 ? '' : ''),
+                                    headers: { 'User-Agent': UA, 'Referer': full }
+                                }));
+                            }
+                            if (hc.length) continue;
+                        } catch (e) {}
+                        unresolvable.push(host.label);
+                        continue;
                     }
-                    // non-extractable hosts still listed for external-browser download
-                    streams.push(mkStream({
-                        url: full,
-                        quality: label,
-                        headers: { 'User-Agent': UA, 'Referer': KMHD + '/' }
-                    }));
+                    if (key === 'gdflix_res') {
+                        try {
+                            var gf = await resolveGdflix(full);
+                            for (var g1 = 0; g1 < gf.length; g1++) {
+                                streams.push(mkStream({
+                                    url: gf[g1],
+                                    quality: label,
+                                    headers: { 'User-Agent': UA, 'Referer': full }
+                                }));
+                            }
+                            if (gf.length) continue;
+                        } catch (e) {}
+                        unresolvable.push(host.label);
+                        continue;
+                    }
+                    // StreamTape embed codes can appear on file pages too
+                    if (key === 'streamtape_res') {
+                        var st6 = await extractStreamTape('https://streamtape.com/e/' + f.links[key]);
+                        if (st6) {
+                            streams.push(mkStream({ url: st6, quality: label,
+                                headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/' } }));
+                            continue;
+                        }
+                        unresolvable.push(host.label);
+                        continue;
+                    }
+                    unresolvable.push(host.label);
                 }
                 if (!streams.length) {
-                    return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No download mirrors available for this pack.' });
+                    streams = streams.concat(await safeDirect());
+                }
+                if (!streams.length) {
+                    return cb({ success: false, errorCode: 'NO_STREAMS',
+                                message: 'Download mirrors (' + (unresolvable.join(', ') || 'none') +
+                                         ') are browser-download hosts this app cannot resolve in-app — open the post in a browser, or try the ▶ Watch episode / another quality post.' });
                 }
             } else {
                 // plain movie url: try the post's own links
@@ -500,10 +652,20 @@
                     var f2 = parseFileLinks(fh);
                     var q2 = qualityFromText(f2.name) || 'Download';
                     if (f2.links.hubdrive_res) {
-                        var s6 = await loadExtractorSafe('https://hubcloud.cx/drive/' + f2.links.hubdrive_res,
-                            'Download • HubCloud • ' + q2);
-                        if (s6) streams.push(s6);
+                        try {
+                            var hc2 = await resolveHubcloud('https://hubcloud.cx/drive/' + f2.links.hubdrive_res);
+                            for (var h2 = 0; h2 < hc2.length; h2++) {
+                                streams.push(mkStream({
+                                    url: hc2[h2],
+                                    quality: 'Download • HubCloud • ' + q2,
+                                    headers: { 'User-Agent': UA, 'Referer': 'https://hubcloud.cx/' }
+                                }));
+                            }
+                        } catch (e) {}
                     }
+                }
+                if (!streams.length) {
+                    streams = streams.concat(await safeDirect());
                 }
                 if (!streams.length) {
                     return cb({ success: false, errorCode: 'NO_STREAMS',
