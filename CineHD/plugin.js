@@ -25,6 +25,7 @@
     const KEY = "439c478a771f35c05022f9feabcca01c"; // repo-wide public TMDB key
     const VLA = "https://api.vidlove.cc";
     const PLAYER_REF = "https://player.vidlove.cc/";
+    const VROCK = "https://vidrock.net";
     const SITE = "https://cinehd.vc";
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
@@ -226,6 +227,17 @@
 
     // ─────────────────────────── streams ───────────────────────────
 
+    function withTimeout(promise, ms) {
+        if (typeof setTimeout !== "function") return promise;
+        return new Promise(function (resolve, reject) {
+            const t = setTimeout(function () { reject(new Error("timeout")); }, ms);
+            promise.then(
+                function (v) { clearTimeout(t); resolve(v); },
+                function (e) { clearTimeout(t); reject(e); }
+            );
+        });
+    }
+
     function qualityFromManifest(manifest) {
         const resolutions = String(manifest || "").match(/RESOLUTION=(\d+)x(\d+)/g) || [];
         let maxH = 0;
@@ -261,45 +273,165 @@
         };
     }
 
+    // ─── vidrock: /api/{movie/<id>|tv/<id>/<s>/<e>} → named servers with
+    // AES-256-GCM encrypted urls (base64url(iv||ct||tag), key hard-coded in
+    // their bundle). Decrypted urls are direct m3u8 / streamrk playlists.
+    const VROCK_KEY_HEX = "7f3e9c2a8b5d1f4e6a9c3b7d2e5f8a1c4b6d9e2f5a8c1b4d7e9f2a5c8b1d4e7f";
+
+    function hexToB64(hex) {
+        const B64C = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        const bytes = [];
+        for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+        let out = "";
+        for (let i = 0; i < bytes.length; i += 3) {
+            const b1 = bytes[i], b2 = bytes[i + 1], b3 = bytes[i + 2];
+            out += B64C.charAt(b1 >> 2);
+            out += B64C.charAt(((b1 & 3) << 4) | (isNaN(b2) ? 0 : (b2 >> 4)));
+            out += isNaN(b2) ? "=" : B64C.charAt(((b2 & 15) << 2) | (isNaN(b3) ? 0 : (b3 >> 6)));
+            out += isNaN(b3) ? "=" : B64C.charAt(b3 & 63);
+        }
+        return out;
+    }
+    const VROCK_KEY_B64 = hexToB64(VROCK_KEY_HEX);
+
+    function b64urlToB64(token) {
+        let std = String(token).replace(/-/g, "+").replace(/_/g, "/");
+        const pad = std.length % 4;
+        if (pad === 2) std += "==";
+        else if (pad === 3) std += "=";
+        else if (pad === 1) throw new Error("bad b64url length");
+        return std;
+    }
+
+    // base64url(iv||ct||tag): the first 16 base64 chars = exactly the 12-byte IV.
+    async function vidrockDecrypt(token) {
+        const std = b64urlToB64(token);
+        const ivB64 = std.slice(0, 16);
+        const dataB64 = std.slice(16);
+        const plain = await crypto.decryptAES(dataB64, VROCK_KEY_B64, ivB64, { mode: "gcm" });
+        return String(plain);
+    }
+
+    async function vidrockSources(apiPath) {
+        const res = await http_get(VROCK + "/api/" + apiPath, {
+            "User-Agent": UA,
+            "Referer": VROCK + "/"
+        });
+        if (!res || !res.body) return [];
+        let j;
+        try { j = JSON.parse(res.body); } catch (e) { return []; }
+        const out = [];
+        const names = Object.keys(j);
+        for (let i = 0; i < names.length; i++) {
+            const name = names[i];
+            const s = j[name];
+            if (!s || typeof s !== "object" || !s.url) continue;
+            let decrypted = null;
+            try { decrypted = await vidrockDecrypt(s.url); } catch (e) { continue; }
+            if (!/^https?:\/\//.test(decrypted)) continue;
+            out.push({ name: name, url: decrypted, type: s.type, language: s.language || "" });
+        }
+        return out;
+    }
+
+    // streamrk playlist → [{resolution, url}] direct mp4s
+    async function streamrkMp4s(playlistUrl, label) {
+        const out = [];
+        try {
+            const res = await withTimeout(http_get(playlistUrl, {
+                "User-Agent": UA,
+                "Referer": VROCK + "/"
+            }), 12000);
+            if (!res || !res.body) return out;
+            const arr = JSON.parse(res.body);
+            if (!Array.isArray(arr)) return out;
+            arr.sort(function (a, b) { return (b.resolution || 0) - (a.resolution || 0); });
+            for (let i = 0; i < Math.min(2, arr.length); i++) {
+                if (!arr[i].url || String(arr[i].url).indexOf("http") !== 0) continue;
+                out.push({
+                    name: label + " • MP4 " + (arr[i].resolution || "?") + "p",
+                    url: arr[i].url,
+                    headers: { "User-Agent": UA, "Referer": VROCK + "/" }
+                });
+            }
+        } catch (e) {}
+        return out;
+    }
+
     async function loadStreams(url, cb) {
         try {
             const p = parseUrl(url);
             if (!p) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized CineHD url" });
 
-            const variants = [
-                { label: "", s: "" },
-                { label: "Alt 1", s: "&sources=warden" },
-                { label: "Alt 2", s: "&sources=cinefreak" },
-                { label: "Alt 3", s: "&sources=moviebox" }
-            ];
-
-            const base = p.type === "tv"
+            const vlBase = p.type === "tv"
                 ? "/tv?id=" + encodeURIComponent(p.id) + "&season=" + encodeURIComponent(p.s || 1) + "&episode=" + encodeURIComponent(p.e || 1) + "&mode=json"
                 : "/movie?id=" + encodeURIComponent(p.id) + "&mode=json";
 
+            // Hindi/multi-audio family first (user preference), then the rest
+            const vlHindi = [
+                { label: "MovieBox",   s: "&sources=moviebox" },
+                { label: "MovieBox 2", s: "&sources=moviebox2" }
+            ];
+            const vlRest = [
+                { label: "Best",         s: "" },
+                { label: "Grand Warden", s: "&sources=warden" },
+                { label: "PEKKA",        s: "&sources=cinefreak" },
+                { label: "VidAPI",       s: "&sources=vidapi" },
+                { label: "IPCloud",      s: "&sources=ipcloud" },
+                { label: "TCloud",       s: "&sources=tcloud" }
+            ];
+
+            const vrPath = p.type === "tv"
+                ? "tv/" + encodeURIComponent(p.id) + "/" + encodeURIComponent(p.s || 1) + "/" + encodeURIComponent(p.e || 1)
+                : "movie/" + encodeURIComponent(p.id);
+
             const streams = [];
             const seen = {};
-            for (const v of variants) {
-                let src = null;
-                try { src = await vidloveSource(base + v.s); } catch (e) { src = null; }
-                if (!src || seen[src.url]) continue;
-                seen[src.url] = 1;
+            function addStream(label, url, headers) {
+                if (!url || seen[url]) return;
+                seen[url] = 1;
                 streams.push(mkStream({
-                    url: src.url,
-                    source: "CineHD" + (v.label ? " • " + v.label : "") + " • " + src.quality,
-                    headers: {
-                        "User-Agent": UA,
-                        "Referer": PLAYER_REF
-                    }
+                    url: url,
+                    source: label,
+                    headers: headers || STREAM_HEADERS
                 }));
-                if (streams.length >= 3) break;
             }
+            async function addVidlove(variants) {
+                for (const v of variants) {
+                    if (streams.length >= 12) break;
+                    let src = null;
+                    try { src = await vidloveSource(vlBase + v.s); } catch (e) { src = null; }
+                    if (!src) continue;
+                    addStream(v.label + " - " + src.quality, src.url, STREAM_HEADERS);
+                }
+            }
+
+            // 1) vidlove Hindi family (MovieBox) - default per user preference
+            await addVidlove(vlHindi);
+
+            // 2) vidrock servers (Nova/Atlas/Luna/Orion hls + Astra mp4)
+            let vr = [];
+            try { vr = await vidrockSources(vrPath); } catch (e) { vr = []; }
+            for (const v of vr) {
+                if (v.type === "mp4" && /streamrk\.site\/playlist/.test(v.url)) {
+                    const mp4s = await streamrkMp4s(v.url, "Rock " + v.name);
+                    for (const m of mp4s) addStream(m.name, m.url, m.headers);
+                } else {
+                    addStream("Rock " + v.name + (v.language ? " - " + v.language : "") + " - HLS", v.url, {
+                        "User-Agent": UA,
+                        "Referer": VROCK + "/"
+                    });
+                }
+            }
+
+            // 3) remaining vidlove servers
+            await addVidlove(vlRest);
 
             if (!streams.length) {
                 return cb({
                     success: false,
                     errorCode: "NO_STREAMS",
-                    message: "No stream source available for this title right now — the CineHD player API returned nothing for it."
+                    message: "No stream source available for this title right now - both CineHD player APIs returned nothing for it. Try another title."
                 });
             }
             cb({ success: true, data: streams });
@@ -307,8 +439,6 @@
             cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
         }
     }
-
-    // ─────────────────────────── export ───────────────────────────
 
     globalThis.getHome = getHome;
     globalThis.search = search;

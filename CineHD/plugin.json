@@ -1,9 +1,9 @@
 {
   "packageName": "com.cinehd.skystream",
   "name": "CineHD",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://cinehd.vc",
-  "description": "CineHD (cinehd.vc) - Movies & series catalog with multi-quality HLS streams (360p-1080p). TMDB catalog + JSON stream API, verified live.",
+  "description": "CineHD (cinehd.vc) - Movies & series with 8+ servers per title (MovieBox Hindi family, Rock HLS/MP4, VidAPI and more, up to 1080p). TMDB catalog, AES-decrypted Rock servers, verified live.",
   "authors": [
     "Skywave22"
   ],
