@@ -326,9 +326,12 @@ const GUEST_JWTS = [
 
     function qRank(s) { const m = String(s || "").match(/(\d{3,4})/); return m ? parseInt(m[1], 10) : 0; }
 
-    // One play call per variant (main / hindi dub), top-3 resolutions each.
-    // Their file CDN (bcdnxw.hakunaymatata.com) rate-limits per IP —
-    // fewer listed links = fewer player probes = fewer 429 windows.
+    // One play call per variant (main / hindi dub), BEST link only.
+    // Their file CDN (bcdnxw.hakunaymatata.com — same family NetMirror
+    // uses) rate-limits PER IP with a sticky window: every fresh link a
+    // player probes re-arms it. One best-quality link per audio variant
+    // (max 2 per play) keeps the request count at the floor the site's
+    // own player would generate.
     async function playCall(sid, dp, se, ep) {
         if (!sid || !dp) return [];
         let qs = "subjectId=" + encodeURIComponent(sid) +
@@ -341,7 +344,7 @@ const GUEST_JWTS = [
             return s && s.url && !s.vipLocked;
         });
         streams.sort(function (a, b) { return qRank(b.resolutions) - qRank(a.resolutions); });
-        return streams.slice(0, 3);
+        return streams.slice(0, 1);
     }
 
     async function loadStreams(url, cb) {
