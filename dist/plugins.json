@@ -28,7 +28,7 @@
   {
     "packageName": "dev.hdmovieshub.plugin",
     "name": "HDMoviesHub",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://hdmovieshub.fyi",
     "description": "Download Hollywood, Bollywood & South Indian Movies and Web Series in HD - Dual Audio 480p, 720p, 1080p, 4K",
     "authors": [
