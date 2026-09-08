@@ -421,11 +421,21 @@
             let flow2 = wbUrl ? fetchPlayerPage(wbUrl).catch(function () { return []; }) : Promise.resolve([]);
             const both = await Promise.all([flow1, flow2]);
 
+            function qRank(label) {
+                const m = String(label).match(/(\d{3,4})\s*p/i);
+                return m ? parseInt(m[1], 10) : 0;
+            }
+            function normLabel(label) {
+                const m = String(label).match(/(\d{3,4})\s*p/i);
+                return m ? m[1] + "p" : String(label);
+            }
+            both[0].sort(function (a, b) { return qRank(b.label) - qRank(a.label); });
+            both[1].sort(function (a, b) { return qRank(b.label) - qRank(a.label); });
             for (let i = 0; i < both[0].length; i++) {
-                pushStream(streams, seen, "NM Direct - " + both[0][i].label, both[0][i].url);
+                pushStream(streams, seen, "NM Direct - " + normLabel(both[0][i].label), both[0][i].url);
             }
             for (let i = 0; i < both[1].length; i++) {
-                pushStream(streams, seen, "NM Hub - " + both[1][i].label, both[1][i].url);
+                pushStream(streams, seen, "NM Hub - " + normLabel(both[1][i].label), both[1][i].url);
             }
 
             if (!streams.length) {
