@@ -431,11 +431,15 @@
             }
             both[0].sort(function (a, b) { return qRank(b.label) - qRank(a.label); });
             both[1].sort(function (a, b) { return qRank(b.label) - qRank(a.label); });
-            for (let i = 0; i < both[0].length; i++) {
-                pushStream(streams, seen, "NM Direct - " + normLabel(both[0][i].label), both[0][i].url);
+            // Cap entries per flow: their file CDN (bcdnxw.hakunaymatata.com)
+            // rate-limits PER IP — fewer listed links = fewer client probes =
+            // far less likely to trip the 429 window. Same host anyway.
+            const top0 = both[0].slice(0, 3), top1 = both[1].slice(0, 3);
+            for (let i = 0; i < top0.length; i++) {
+                pushStream(streams, seen, "NM Direct - " + normLabel(top0[i].label), top0[i].url);
             }
-            for (let i = 0; i < both[1].length; i++) {
-                pushStream(streams, seen, "NM Hub - " + normLabel(both[1][i].label), both[1][i].url);
+            for (let i = 0; i < top1.length; i++) {
+                pushStream(streams, seen, "NM Hub - " + normLabel(top1[i].label), top1[i].url);
             }
 
             if (!streams.length) {
