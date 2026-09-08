@@ -90,6 +90,25 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hindidubbed.provider.sky"
   },
   {
+    "packageName": "com.kdramamaza.skystream",
+    "name": "KDramaMaza",
+    "version": 1,
+    "baseUrl": "https://kdramasmaza.net",
+    "description": "KDramaMaza (kdramasmaza.net) - Korean, Chinese, Turkish & Japanese dramas in Hindi/Urdu dubbed. Full episode lists, direct-file servers (HubCloud + GDFlix, up to 1080p WEB-DL dual-audio). Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en",
+      "hi",
+      "ur"
+    ],
+    "categories": [
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.kdramamaza.skystream.sky"
+  },
+  {
     "packageName": "com.katmoviehd.skystream",
     "name": "KatMovieHD",
     "version": 4,
