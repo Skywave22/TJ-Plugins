@@ -2,7 +2,7 @@
   {
     "packageName": "com.cinehd.skystream",
     "name": "CineHD",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://cinehd.vc",
     "description": "CineHD (cinehd.vc) - Movies & series catalog with multi-quality HLS streams (360p-1080p). TMDB catalog + JSON stream API, verified live.",
     "authors": [
