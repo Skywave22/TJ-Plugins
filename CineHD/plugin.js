@@ -535,23 +535,23 @@
         } catch (e) { return {}; }
     }
 
-    const NX_PROVIDERS = ["rive-citadel", "awsind", "nitro", "mhbox", "holly", "stvv", "castle"];
+    const NX_PROVIDERS = ["rive-citadel", "mhbox", "awsind", "nitro", "watchout", "castle", "vidapi", "hdhub4u", "stvv", "holly", "bkl-blast", "rive-primevids", "streamflix", "rive-flowcast", "rive-quasar", "ophm", "rive-guru"];
 
     async function nxshaSources(p) {
         const out = [];
         try {
             const q1 = nxEncode({ tmdbId: String(p.id), imdb_id: "", type: p.type, season: p.s || 0, episode: p.e || 0 });
-            const r1 = await withTimeout(http_get(NX_BASE + "/api/servers?q=" + q1, { "User-Agent": UA, "Referer": NX_BASE + "/" }), 15000);
+            const r1 = await withTimeout(http_get(NX_BASE + "/api/servers?q=" + q1, { "User-Agent": UA, "Referer": NX_BASE + "/" }), 12000);
             if (!r1 || !r1.body) return out;
             const sv = await nxDecode(JSON.parse(r1.body)._hash);
-            const servers = (sv.servers || []).filter(function (x) { return x && x.web_support && NX_PROVIDERS.indexOf(x.scraper) >= 0; });
-            const CHUNK = 4;
+            const servers = (sv.servers || []).filter(function (x) { return x && NX_PROVIDERS.indexOf(x.scraper) >= 0; });
+            const CHUNK = 6;
             for (let i = 0; i < servers.length; i += CHUNK) {
                 const batch = servers.slice(i, i + CHUNK);
                 const results = await Promise.all(batch.map(async function (srv) {
                     try {
                         const q2 = nxEncode({ ex_lang: true, provider: srv.scraper, tmdbId: String(p.id), imdb_id: "", type: p.type, season: p.s || 0, episode: p.e || 0 });
-                        const r2 = await withTimeout(http_get(NX_BASE + "/api/sources?q=" + q2, { "User-Agent": UA, "Referer": NX_BASE + "/" }), 15000);
+                        const r2 = await withTimeout(http_get(NX_BASE + "/api/sources?q=" + q2, { "User-Agent": UA, "Referer": NX_BASE + "/" }), 12000);
                         const so = await nxDecode(JSON.parse(r2.body)._hash);
                         return (so.sources || []).map(function (x) { return { server: srv.name, src: x }; });
                     } catch (e) { return []; }
@@ -618,29 +618,58 @@
             // 2) nxsha servers (Nitro / MhPly Hindi dub / Citadel / AwsPly…)
             let nx = [];
             try { nx = await nxshaSources(p); } catch (e) { nx = []; }
+            const NX_PRETTY = { "nitro": "Nitro", "mhbox": "MhPly", "rive-citadel": "Citadel", "awsind": "AwsPly", "watchout": "Watchout", "castle": "CastVid", "vidapi": "VidPi", "hdhub4u": "HDHub", "stvv": "Stvvid", "holly": "Lolly", "bkl-blast": "MbBlast", "rive-primevids": "Prvibd", "streamflix": "StremFx", "rive-flowcast": "River", "rive-quasar": "Kutti", "ophm": "Ophm", "rive-guru": "Gbru" };
+            const NX_JUNK = /^(nitro|pitro|aitro|watchout|streamflix|hguide|tcloud|dcloud|ipcloud)$/i;
             function nxLabel(item) {
-                const lb = (item.src.label || item.src.quality || "").replace(/\s+/g, " ").trim();
-                return item.server + " - " + (lb || "Stream");
+                const srv = NX_PRETTY[item.src.provider] || String(item.server || item.src.provider || "Server").replace(/\s*-\s*\[.*?\]\s*/g, "").replace(/\[.*?\]\s*/g, "").trim();
+                let lb = String(item.src.label || item.src.quality || "").replace(/\s+/g, " ").trim();
+                lb = lb.replace(/\s*:\s*[\d,p]+\s*$/, "")          // "Hindi dub : 1080,720,480" -> "Hindi dub"
+                       .replace(/\s*\|\s*(WEB-DL|BluRay|HDRip|WEBRip|HDTV)\b/gi, "")
+                       .replace(/^\[[^\]]+\]\s*-\s*/, "")
+                       .replace(/\s*\|\s*/g, " ")
+                       .replace(/\bhdbox\s*/i, "")
+                       .trim();
+                if (!lb || NX_JUNK.test(lb)) lb = "multi-audio"; // master carries named language tracks
+                return srv + " - " + lb;
             }
-            const seenSrv = {};
-            const nxHindi = [], nxOther = [];
+            // Dedupe identical playlists (the API lists the same file under
+            // several language labels for some servers) - prefer the Hindi label.
+            const byPath = {};
             for (const item of nx) {
                 if (!item.src || !item.src.url) continue;
                 if (/embed/i.test(item.src.type || "")) continue;
-                const lb = item.src.label || "";
+                const lb = String(item.src.label || "");
                 if (/\bsub\b/i.test(lb)) continue; // subtitle-only variants
-                const per = seenSrv[item.src.provider] || (seenSrv[item.src.provider] = { h: 0, o: 0 });
-                if (/hindi/i.test(lb)) {
+                const path = String(item.src.url).split("?")[0];
+                const cur = byPath[path];
+                if (!cur || (!/hindi|\u0939\u093f\u0928\u094d\u0926\u0940/i.test(cur.src.label || "") && /hindi|\u0939\u093f\u0928\u094d\u0926\u0940/i.test(lb))) byPath[path] = item;
+            }
+            // Rank: dedicated-Hindi first, then other languages, unnamed
+            // multi-audio files (generic "Track 1/2" in the player) last.
+            const seenSrv = {};
+            const nxHindi = [], nxOther = [], nxLast = [];
+            for (const item of Object.values(byPath)) {
+                const lb = String(item.src.label || "");
+                const per = seenSrv[item.src.provider] || (seenSrv[item.src.provider] = { h: 0, o: 0, l: 0 });
+                const unlabeledMulti = /\.mkv(\?|$)/i.test(item.src.url) || /multi/i.test(String(item.src.url).split("?")[0]);
+                const isHindi = !unlabeledMulti && /hindi|\u0939\u093f\u0928\u094d\u0926\u0940/i.test(lb) && !/hdbox/i.test(lb);
+                if (unlabeledMulti) {
+                    if (per.l >= 1) continue;
+                    per.l++; nxLast.push(item);
+                } else if (isHindi) {
                     if (per.h >= 2) continue;
                     per.h++; nxHindi.push(item);
                 } else {
-                    if (per.o >= 1) continue; // one representative non-Hindi per server
+                    if (per.o >= 1) continue;
                     per.o++; nxOther.push(item);
                 }
             }
-            for (const item of nxHindi.concat(nxOther)) {
+            for (const item of nxHindi.concat(nxOther, nxLast)) {
                 if (streams.length >= 16) break;
-                addStream(nxLabel(item) + (item.src.type === "mpd" ? " (DASH)" : ""), item.src.url, {
+                let tag = "";
+                if (item.src.type === "mpd") tag = " (DASH)";
+                else if (/\.mkv(\?|$)/i.test(item.src.url) || /multi/i.test(String(item.src.url).split("?")[0])) tag = " (multi-audio)";
+                addStream(nxLabel(item) + tag, item.src.url, {
                     "User-Agent": UA,
                     "Referer": NX_BASE + "/"
                 });
