@@ -131,13 +131,40 @@
     }
 
     async function apiGet(path) {
-        const r = await withTimeout(http_get(API + path, Object.assign({ "User-Agent": UA }, JSON_HDR)), 25000);
+        const r = await withTimeout(http_get(path.indexOf("http") === 0 ? path : API + path, Object.assign({ "User-Agent": UA }, JSON_HDR)), 25000);
         try { return JSON.parse((r && r.body) || "{}"); } catch (e) { return {}; }
+    }
+
+    function sleep(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+
+    // detail cache: load() stores what it fetched, loadStreams reuses it
+    // (one less round-trip at play time + survives transient API flaps)
+    const detailCache = {};
+
+    // Detail fetch with retry + cross-type fallback: the site's own data is
+    // inconsistent (movies listed under /tv and vice versa), so we try both
+    // routes and remember the result per tmdbId.
+    async function getDetail(mt, id) {
+        if (detailCache[id]) return detailCache[id];
+        const paths = ["/" + mt + "/" + id, "/" + (mt === "tv" ? "movie" : "tv") + "/" + id];
+        for (let attempt = 0; attempt < 2; attempt++) {
+            for (let pi = 0; pi < paths.length; pi++) {
+                try {
+                    const j = await apiGet(paths[pi] + (paths[pi].indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now());
+                    const it = j && j.results && j.results[0];
+                    if (it && it.title) { detailCache[id] = it; return it; }
+                } catch (e) {}
+            }
+            if (attempt === 0) await sleep(600);
+        }
+        return detailCache[id] || null;
     }
 
     function toItem(r) {
         if (!r || !r.id || !r.title) return null;
-        const mt = r.media_type === "tv" ? "tv" : "movie";
+        const mt = r.media_type === "movie" || r.media_type === "tv"
+            ? r.media_type
+            : (/\sS\d/i.test(String(r.title)) ? "tv" : "movie");
         return mkItem({
             title: String(r.title).trim(),
             url: JSON.stringify({ mt: mt, id: String(r.id) }),
@@ -204,26 +231,24 @@
             try { p = JSON.parse(url); } catch (e) { p = null; }
             if (!p || !p.id || !p.mt) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized NetMirror url" });
 
-            const j = await apiGet("/" + (p.mt === "tv" ? "tv" : "movie") + "/" + p.id);
-            const it = (j && j.results && j.results[0]);
-            if (!it) return cb({ success: false, errorCode: "NOT_FOUND", message: "Title not found" });
-
-            const title = String(it.title || "").trim();
-            const poster = it.backdrop_path || "";
+            const it = await getDetail(p.mt, p.id);
+            const title = (it && it.title ? String(it.title) : String(p.t || "")).trim() || "Title";
+            const poster = (it && it.backdrop_path) || "";
             const episodes = [];
 
             if (p.mt === "movie") {
+                // No API dependency for the button: the episode payload carries
+                // everything loadStreams needs (it re-fetches detail itself).
                 episodes.push(mkEpisode({
                     name: "Full Movie",
                     url: JSON.stringify({ mt: "movie", id: String(p.id), t: title }),
                     season: 1,
                     episode: 1,
                     posterUrl: poster,
-                    description: (it.dis || "").slice(0, 300)
+                    description: it ? (it.dis || "").slice(0, 300) : ""
                 }));
             } else {
-                const seasons = it.season || [];
-                if (!seasons.length) return cb({ success: false, errorCode: "NO_EPISODES", message: "No seasons listed for this title yet." });
+                const seasons = (it && it.season) || [];
                 for (let si = 0; si < seasons.length; si++) {
                     const s = parseInt(seasons[si].se, 10) || (si + 1);
                     const total = parseInt(seasons[si].ep, 10) || 0;
@@ -238,8 +263,19 @@
                         }));
                     }
                 }
+                // API unreachable right now: still light up the Play button
+                // with a first-episode entry (loadStreams retries at play time).
+                if (!episodes.length) {
+                    episodes.push(mkEpisode({
+                        name: "S1 E01",
+                        url: JSON.stringify({ mt: "tv", id: String(p.id), s: 1, e: 1, t: title }),
+                        season: 1,
+                        episode: 1,
+                        posterUrl: poster,
+                        description: title
+                    }));
+                }
             }
-            if (!episodes.length) return cb({ success: false, errorCode: "NO_EPISODES", message: "No episodes listed yet." });
 
             cb({
                 success: true,
@@ -249,11 +285,11 @@
                     posterUrl: poster,
                     bannerUrl: poster,
                     type: p.mt === "tv" ? "tv" : "movie",
-                    year: parseInt(String(it.release_date || "").slice(0, 4), 10) || null,
-                    description: (it.dis || "").slice(0, 700),
-                    score: it.vote_average ? parseFloat(it.vote_average) : null,
-                    duration: it.duration ? parseInt(it.duration, 10) : null,
-                    tags: String(it.genre || "").split(",").map(function (g) { return g.trim(); }).filter(function (g) { return g; }).slice(0, 4),
+                    year: it ? (parseInt(String(it.release_date || "").slice(0, 4), 10) || null) : null,
+                    description: it ? (it.dis || "").slice(0, 700) : "",
+                    score: it && it.vote_average ? parseFloat(it.vote_average) : null,
+                    duration: it && it.duration ? parseInt(it.duration, 10) : null,
+                    tags: it ? String(it.genre || "").split(",").map(function (g) { return g.trim(); }).filter(function (g) { return g; }).slice(0, 4) : [],
                     episodes: episodes
                 })
             });
@@ -328,9 +364,8 @@
             try { p = JSON.parse(url); } catch (e) { p = null; }
             if (!p || !p.id || !p.mt) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized episode url" });
 
-            const j = await apiGet("/" + (p.mt === "tv" ? "tv" : "movie") + "/" + p.id);
-            const it = (j && j.results && j.results[0]);
-            if (!it) return cb({ success: false, errorCode: "NOT_FOUND", message: "Title not found" });
+            const it = await getDetail(p.mt, p.id);
+            if (!it) return cb({ success: false, errorCode: "NO_STREAMS", message: "NetMirror source is not responding right now — please try again in a moment." });
 
             const title = String(it.title || "").trim();
             const ts = Math.floor(Date.now() / 1000);
@@ -343,7 +378,10 @@
             const seen = {};
 
             // flow 1: embed_json servers (mostly movies)
-            const servers = it.embed_json || [];
+            let servers = it.embed_json || [];
+            if (typeof servers === "string") {
+                try { servers = JSON.parse(servers); } catch (e) { servers = []; }
+            }
             let be = null;
             for (let i = 0; i < servers.length; i++) {
                 if (Number(servers[i].se) === s && Number(servers[i].ep) === e) { be = servers[i]; break; }
