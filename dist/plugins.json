@@ -75,7 +75,7 @@
     "name": "Hindi Dubbed",
     "version": 1,
     "baseUrl": "https://www.youtube.com",
-    "description": "Hollywood Hindi dubbed, South Indian Hindi dubbed, Bollywood and Hindi cartoon/anime — all from 20 official YouTube channels (Goldmines network, Aditya, Bhavani, Volga, DRJ, Shemaroo, Ultra, Pen, Rajshri, B4U, Pokémon Hindi, Discovery Kids). Full movies appear as single items; web series are grouped with auto-updating episodes. Fully on-device: 720p/1080p fMP4 HLS + merged HLS built in pure JS (no ffmpeg/yt-dlp/server), with 360p MP4 fallback.",
+    "description": "Hollywood Hindi dubbed, South Indian Hindi dubbed, Bollywood and Hindi cartoon/anime \u2014 all from 20 official YouTube channels (Goldmines network, Aditya, Bhavani, Volga, DRJ, Shemaroo, Ultra, Pen, Rajshri, B4U, Pok\u00e9mon Hindi, Discovery Kids). Full movies appear as single items; web series are grouped with auto-updating episodes. Fully on-device: 720p/1080p fMP4 HLS + merged HLS built in pure JS (no ffmpeg/yt-dlp/server), with 360p MP4 fallback.",
     "authors": [
       "HindiDubbedPlugin"
     ],
@@ -159,25 +159,6 @@
       "TvSeries"
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movieblast.provider.sky"
-  },
-  {
-    "packageName": "com.movieboxhd.skystream",
-    "name": "MovieBoxHD",
-    "version": 1,
-    "baseUrl": "https://movieboxhd.net",
-    "description": "MovieBoxHD (movieboxhd.net) - trending, popular series & movies, Nollywood, anime and more. Direct signed MP4 servers up to 1080p with Hindi-dub tracks when available. Verified live.",
-    "authors": [
-      "Skywave22"
-    ],
-    "languages": [
-      "en",
-      "hi"
-    ],
-    "categories": [
-      "Movie",
-      "TvSeries"
-    ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movieboxhd.skystream.sky"
   },
   {
     "packageName": "com.netmirror.skystream",
