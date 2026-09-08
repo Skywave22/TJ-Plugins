@@ -161,6 +161,25 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movieblast.provider.sky"
   },
   {
+    "packageName": "com.netmirror.skystream",
+    "name": "NetMirror",
+    "version": 1,
+    "baseUrl": "https://netmirror.center",
+    "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime & Reality TV, heavy on Hindi content. Signed direct-file servers per title/episode (R2 + quality-labeled MP4s, up to 1080p). Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.netmirror.skystream.sky"
+  },
+  {
     "packageName": "com.ssr.skystream",
     "name": "SSR Movies",
     "version": 3,
