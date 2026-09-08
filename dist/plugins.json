@@ -163,9 +163,9 @@
   {
     "packageName": "com.netmirror.skystream",
     "name": "NetMirror",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://netmirror.center",
-    "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime & Reality TV, heavy on Hindi content. Signed direct-file servers per title/episode (R2 + quality-labeled MP4s, up to 1080p). v2: resilient details (retry + cross-type + cached), play button always available. Verified live.",
+    "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime & Reality TV, heavy on Hindi content. Signed direct-file servers per title/episode (R2 + quality-labeled MP4s, up to 1080p). v3: all servers - Direct + Hub flows in parallel with 6 mirror failover hosts, works on movies with broken embeds. Verified live.",
     "authors": [
       "Skywave22"
     ],
