@@ -375,9 +375,9 @@
 
     // P.A.C.K.E.R unpacker (watch-online.mom player) — same algorithm as
     // SkyStream's getAndUnpack; native when available.
-    function unpack(packedScript) {
+    async function unpack(packedScript) {
         if (typeof getAndUnpack === 'function') {
-            try { return getAndUnpack(packedScript); } catch (_) {}
+            try { return await getAndUnpack(packedScript); } catch (_) {}
         }
         var m = String(packedScript).match(/\}\(['"]([\s\S]+?)['"],(\d+),(\d+),'([\s\S]*?)'\.split\('\|'\)/);
         if (!m) return '';
@@ -399,7 +399,7 @@
         var html = await withTimeout(getText(embedUrl, 'https://watch-online.mom/'), 12000);
         var pm = html.match(/eval\(function\(p,a,c,k,e,d\)[\s\S]*?<\/script>/);
         if (!pm) return null;
-        var js = unpack(pm[0]);
+        var js = await unpack(pm[0]);
         if (!js) return null;
         var um = js.match(/["']hls2["']\s*:\s*["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/)
              || js.match(/["']hls3["']\s*:\s*["'](https?:\/\/[^"']+)["']/)

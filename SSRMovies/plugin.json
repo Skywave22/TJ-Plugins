@@ -1,7 +1,7 @@
 {
   "packageName": "com.ssr.skystream",
   "name": "SSR Movies",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://ssrmovies.moda",
   "domains": [
     {

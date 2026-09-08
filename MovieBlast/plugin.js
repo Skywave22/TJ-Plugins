@@ -8,6 +8,45 @@
 (function () {
     "use strict";
 
+    // ─────────────────────────────────────────────────────────────────
+    //  fetch compat for the SkyStream JS sandbox: the engine exposes
+    //  http_get/http_post but no global fetch (xhr polyfill disabled),
+    //  and this plugin's helpers call fetch() directly. Map the subset
+    //  of the Response API we use (ok/status/text/json/headers.get).
+    // ─────────────────────────────────────────────────────────────────
+    if (typeof fetch === "undefined") {
+        var __sbFetch = function (url, options) {
+            options = options || {};
+            var method = String(options.method || "GET").toUpperCase();
+            var headers = options.headers || {};
+            var body = options.body;
+            var p = (method === "GET" || method === "HEAD")
+                ? http_get(url, headers)
+                : http_post(url, { headers: headers, body: body == null ? "" : String(body) });
+            return Promise.resolve(p).then(function (res) {
+                var status = res && typeof res.status === "number" ? res.status : 0;
+                var text = res == null ? "" : String(res && res.body != null ? res.body : res);
+                var map = (res && res.headers) || {};
+                return {
+                    ok: status >= 200 && status < 300,
+                    status: status,
+                    statusText: "",
+                    url: String(url),
+                    headers: {
+                        get: function (name) {
+                            var k = String(name).toLowerCase();
+                            if (map[k] !== undefined) return map[k];
+                            return map[name] !== undefined ? map[name] : null;
+                        }
+                    },
+                    text: function () { return Promise.resolve(text); },
+                    json: function () { return Promise.resolve(JSON.parse(text)); }
+                };
+            });
+        };
+        globalThis.fetch = __sbFetch;
+    }
+
     var TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
     var TMDB_BASE = "https://api.themoviedb.org/3";
     var IMG = "https://image.tmdb.org/t/p/";

@@ -123,7 +123,7 @@
     // extract kmhd anchors from post content: {kind:'play'|'file'|'pack', id, label}
     function parseKmhdLinks(contentHtml) {
         var out = [];
-        var re = /<a[^>]+href=["'](?:https?:\/\/links\.kmhd\.me)?\/(play|file|pack)\/?(?:\?id=|=)?([A-Za-z0-9_-]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        var re = /<a[^>]+href=["'](?:https?:\/\/links\.kmhd\.(?:me|eu))?\/(play|file|pack)\/?(?:\?id=|=)?([A-Za-z0-9_-]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
         var m;
         while ((m = re.exec(contentHtml)) !== null) {
             var label = stripTags(m[3]);
@@ -139,7 +139,7 @@
         var m;
         while ((m = re.exec(playHtml)) !== null) {
             var fname = m[2];
-            if (!/\.(mkv|mp4|avi)/i.test(fname)) continue;
+            if (!/(?:\.|\s)(mkv|mp4|avi)\b/i.test(fname)) continue;
             var rest = m[3] || '';
             var st = (rest.match(/streamtape_res:"([^"]*)"/) || [])[1];
             var sw = (rest.match(/streamwish_res:"([^"]*)"/) || [])[1];
