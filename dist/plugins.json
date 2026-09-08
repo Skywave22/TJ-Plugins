@@ -28,7 +28,7 @@
   {
     "packageName": "dev.hdmovieshub.plugin",
     "name": "HDMoviesHub",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://hdmovieshub.fyi",
     "description": "Download Hollywood, Bollywood & South Indian Movies and Web Series in HD - Dual Audio 480p, 720p, 1080p, 4K",
     "authors": [
@@ -93,7 +93,7 @@
   {
     "packageName": "com.katmoviehd.skystream",
     "name": "KatMovieHD",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://new.katmoviehd.top",
     "domains": [
       {
