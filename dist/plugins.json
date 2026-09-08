@@ -180,6 +180,25 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.moviebox.skystream.sky"
   },
   {
+    "packageName": "com.movieboxhd.skystream",
+    "name": "MovieBoxHD",
+    "version": 1,
+    "baseUrl": "https://movieboxhd.net",
+    "description": "MovieBoxHD (movieboxhd.net) - trending, popular series & movies, Nollywood, anime and more. Direct signed MP4 servers up to 1080p with Hindi-dub tracks when available. Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movieboxhd.skystream.sky"
+  },
+  {
     "packageName": "com.netmirror.skystream",
     "name": "NetMirror",
     "version": 5,
