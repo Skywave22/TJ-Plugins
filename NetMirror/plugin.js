@@ -340,14 +340,27 @@
         return out;
     }
 
+    // All play-page mirrors (the app's "Server 1..6"): same backends, try
+    // in order until one yields streams — pure failover for dead/geo'd hosts.
+    const MIRRORS = [
+        { host: PLAY,                       php: null },            // bet.watch21.shop/play
+        { host: "https://play.watch21.shop/play", php: null },
+        { host: "https://limit.watch22.shop/play", php: null },
+        { host: "https://bet.watch22.shop/play",   php: null },
+        { host: "https://spedostream2.shop/play",  php: null },
+        { host: "https://dv.watch22.shop/play",    php: "watchbox2.php" }  // alt script name
+    ];
+
     async function fetchPlayerPage(playUrl) {
-        const hosts = [PLAY, "https://play.watch21.shop/play"];
-        for (let i = 0; i < hosts.length; i++) {
+        for (let i = 0; i < MIRRORS.length; i++) {
+            const m = MIRRORS[i];
+            let u = playUrl;
+            if (m.php) u = u.replace(/\/[a-z0-9]+\.php\?/i, "/" + m.php + "?");
             try {
-                const r = await withTimeout(http_get(playUrl.replace(PLAY, hosts[i]), {
+                const r = await withTimeout(http_get(u, {
                     "User-Agent": UA,
                     "Referer": SITE + "/"
-                }), 25000);
+                }), 15000);
                 const html = (r && r.body) || "";
                 if (html.length > 2000 && !/Not Found\. or Unauthorised/i.test(html.slice(0, 400))) {
                     const parsed = parsePlayerPage(html);
@@ -377,7 +390,7 @@
             const streams = [];
             const seen = {};
 
-            // flow 1: embed_json servers (mostly movies)
+            // flow 1: embed_json servers (named player pages, mostly movies)
             let servers = it.embed_json || [];
             if (typeof servers === "string") {
                 try { servers = JSON.parse(servers); } catch (e) { servers = []; }
@@ -388,25 +401,31 @@
             }
             if (!be && servers.length === 1) be = servers[0];
 
+            // flow 2: watchbox quality-list page — works for TV AND movies
+            // (several movies have empty/broken embed_json; watchbox still
+            // serves their 480P/1080P files)
+            let wbUrl = null;
+            if (it.subjectid && it.dp) {
+                const na = encodeURIComponent(btoa(unescape(encodeURIComponent(title))));
+                wbUrl = PLAY + "/watchbox.php?id=" + it.subjectid + "&se=" + s + "&ep=" + e +
+                    "&dp=" + it.dp + "&na=" + na + auth;
+            }
+
+            let flow1 = [];
             if (be) {
                 const playUrl = PLAY + "/" + be.name + ".php?url=" + encodeURIComponent(be.url) +
                     "&size=" + encodeURIComponent(be.size || "") + "&se=" + (be.se || 0) + "&ep=" + (be.ep || 0) +
                     "&name=" + encodeURIComponent(be.name) + auth;
-                const links = await fetchPlayerPage(playUrl);
-                for (let i = 0; i < links.length; i++) {
-                    pushStream(streams, seen, "NetMirror - " + links[i].label, links[i].url);
-                }
+                flow1 = fetchPlayerPage(playUrl).catch(function () { return []; });
             }
+            let flow2 = wbUrl ? fetchPlayerPage(wbUrl).catch(function () { return []; }) : Promise.resolve([]);
+            const both = await Promise.all([flow1, flow2]);
 
-            // flow 2: watchbox (tv, and movies without embed_json)
-            if (!streams.length && it.subjectid && it.dp) {
-                const na = encodeURIComponent(btoa(unescape(encodeURIComponent(title))));
-                const wbUrl = PLAY + "/watchbox.php?id=" + it.subjectid + "&se=" + s + "&ep=" + e +
-                    "&dp=" + it.dp + "&na=" + na + auth;
-                const links = await fetchPlayerPage(wbUrl);
-                for (let i = 0; i < links.length; i++) {
-                    pushStream(streams, seen, "NetMirror - " + links[i].label, links[i].url);
-                }
+            for (let i = 0; i < both[0].length; i++) {
+                pushStream(streams, seen, "NM Direct - " + both[0][i].label, both[0][i].url);
+            }
+            for (let i = 0; i < both[1].length; i++) {
+                pushStream(streams, seen, "NM Hub - " + both[1][i].label, both[1][i].url);
             }
 
             if (!streams.length) {
