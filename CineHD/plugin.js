@@ -151,7 +151,21 @@
                     description: d.overview || "",
                     score: d.vote_average ? Math.round(d.vote_average * 10) / 10 : null,
                     duration: d.runtime ? parseInt(d.runtime, 10) : null,
-                    tags: (d.genres || []).map(function (g) { return g.name; }).slice(0, 4)
+                    tags: (d.genres || []).map(function (g) { return g.name; }).slice(0, 4),
+                    // The app only enables the Play button when the details
+                    // carry a non-empty episodes list — wrap movies in one
+                    // synthetic "Full Movie" episode (same as MovieBlast).
+                    episodes: [mkEpisode({
+                        name: "Full Movie",
+                        url: itemUrl("movie", p.id, d.title),
+                        season: 1,
+                        episode: 1,
+                        posterUrl: poster(d.poster_path, "w500"),
+                        description: d.overview || "",
+                        rating: d.vote_average ? Math.round(d.vote_average * 10) / 10 : null,
+                        runtime: d.runtime ? parseInt(d.runtime, 10) : null,
+                        airDate: d.release_date || null
+                    })]
                 });
                 return cb({ success: true, data: item });
             }
@@ -177,12 +191,14 @@
                     if (!sj || !sj.episodes) continue;
                     for (const ep of sj.episodes) {
                         episodes.push(mkEpisode({
-                            title: ep.name || ("Episode " + ep.episode_number),
+                            name: ep.name || ("Episode " + ep.episode_number),
                             url: JSON.stringify({ type: "tv", id: p.id, s: sj.season_number, e: ep.episode_number, title: d.name }),
                             season: sj.season_number,
                             episode: ep.episode_number,
                             posterUrl: poster(ep.still_path, "w500"),
                             description: ep.overview || "",
+                            rating: ep.vote_average ? Math.round(ep.vote_average * 10) / 10 : null,
+                            runtime: ep.runtime ? parseInt(ep.runtime, 10) : null,
                             airDate: ep.air_date || null
                         }));
                     }
