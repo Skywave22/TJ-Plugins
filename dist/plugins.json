@@ -26,25 +26,6 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.fmoviess.skystream.sky"
   },
   {
-    "packageName": "dev.hdmovieshub.plugin",
-    "name": "HDMoviesHub",
-    "version": 3,
-    "baseUrl": "https://hdmovieshub.fyi",
-    "description": "Download Hollywood, Bollywood & South Indian Movies and Web Series in HD - Dual Audio 480p, 720p, 1080p, 4K",
-    "authors": [
-      "SkyDev"
-    ],
-    "languages": [
-      "hi",
-      "en"
-    ],
-    "categories": [
-      "Movies",
-      "TV Shows"
-    ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/dev.hdmovieshub.plugin.sky"
-  },
-  {
     "packageName": "com.hicine.skystream",
     "name": "HiCine",
     "version": 6,
