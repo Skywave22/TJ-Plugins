@@ -1,0 +1,18 @@
+{
+  "packageName": "com.moviebox.skystream",
+  "name": "MovieBox",
+  "version": 1,
+  "baseUrl": "https://movie-box.co",
+  "description": "MovieBox (movie-box.co) - Netflix-style rows: trending, popular series & movies, Nollywood, anime and more. Tokenless signed MP4 servers up to 1080p per title/episode, Hindi-dub streams appended when available. Verified live.",
+  "authors": [
+    "Skywave22"
+  ],
+  "languages": [
+    "en",
+    "hi"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries"
+  ]
+}
