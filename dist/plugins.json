@@ -1,5 +1,23 @@
 [
   {
+    "packageName": "com.cinehd.skystream",
+    "name": "CineHD",
+    "version": 1,
+    "baseUrl": "https://cinehd.vc",
+    "description": "CineHD (cinehd.vc) - Movies & series catalog with multi-quality HLS streams (360p-1080p). TMDB catalog + JSON stream API, verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.cinehd.skystream.sky"
+  },
+  {
     "packageName": "com.fmoviess.skystream",
     "name": "FMoviess",
     "version": 2,
