@@ -541,17 +541,17 @@
         const out = [];
         try {
             const q1 = nxEncode({ tmdbId: String(p.id), imdb_id: "", type: p.type, season: p.s || 0, episode: p.e || 0 });
-            const r1 = await withTimeout(http_get(NX_BASE + "/api/servers?q=" + q1, { "User-Agent": UA, "Referer": NX_BASE + "/" }), 12000);
+            const r1 = await withTimeout(http_get(NX_BASE + "/api/servers?q=" + q1, { "User-Agent": UA, "Referer": NX_BASE + "/" }), 8000);
             if (!r1 || !r1.body) return out;
             const sv = await nxDecode(JSON.parse(r1.body)._hash);
             const servers = (sv.servers || []).filter(function (x) { return x && NX_PROVIDERS.indexOf(x.scraper) >= 0; });
-            const CHUNK = 6;
+            const CHUNK = 32;
             for (let i = 0; i < servers.length; i += CHUNK) {
                 const batch = servers.slice(i, i + CHUNK);
                 const results = await Promise.all(batch.map(async function (srv) {
                     try {
                         const q2 = nxEncode({ ex_lang: true, provider: srv.scraper, tmdbId: String(p.id), imdb_id: "", type: p.type, season: p.s || 0, episode: p.e || 0 });
-                        const r2 = await withTimeout(http_get(NX_BASE + "/api/sources?q=" + q2, { "User-Agent": UA, "Referer": NX_BASE + "/" }), 12000);
+                        const r2 = await withTimeout(http_get(NX_BASE + "/api/sources?q=" + q2, { "User-Agent": UA, "Referer": NX_BASE + "/" }), 8000);
                         const so = await nxDecode(JSON.parse(r2.body)._hash);
                         return (so.sources || []).map(function (x) { return { server: srv.name, src: x }; });
                     } catch (e) { return []; }
@@ -602,22 +602,33 @@
                     headers: headers || STREAM_HEADERS
                 }));
             }
-            async function addVidlove(variants) {
+            // ── fetch ALL provider families in parallel, then assemble in
+            //    priority order from already-fetched data (was sequential:
+            //    vidlove-Hindi → nxsha → vidrock → vidlove-rest) ──
+            async function fetchVidlove(variants) {
+                const out = [];
                 for (const v of variants) {
-                    if (streams.length >= 12) break;
-                    let src = null;
-                    try { src = await vidloveSource(vlBase + v.s); } catch (e) { src = null; }
-                    if (!src) continue;
-                    addStream(v.label + " - " + src.quality, src.url, STREAM_HEADERS);
+                    let s = null;
+                    try { s = await vidloveSource(vlBase + v.s); } catch (e) { s = null; }
+                    out.push({ label: v.label, src: s });
                 }
+                return out;
             }
+            const [nxRes, vrRes, vlHRes, vlRRes] = await Promise.all([
+                nxshaSources(p).catch(function () { return []; }),
+                vidrockSources(vrPath).catch(function () { return []; }),
+                fetchVidlove(vlHindi),
+                fetchVidlove(vlRest)
+            ]);
+            const nx = nxRes, vr = vrRes;
 
             // 1) vidlove Hindi family (MovieBox) - default per user preference
-            await addVidlove(vlHindi);
+            for (const v of vlHRes) {
+                if (streams.length >= 12) break;
+                if (v.src) addStream(v.label + " - " + v.src.quality, v.src.url, STREAM_HEADERS);
+            }
 
             // 2) nxsha servers (Nitro / MhPly Hindi dub / Citadel / AwsPly…)
-            let nx = [];
-            try { nx = await nxshaSources(p); } catch (e) { nx = []; }
             const NX_PRETTY = { "nitro": "Nitro", "mhbox": "MhPly", "rive-citadel": "Citadel", "awsind": "AwsPly", "watchout": "Watchout", "castle": "CastVid", "vidapi": "VidPi", "hdhub4u": "HDHub", "stvv": "Stvvid", "holly": "Lolly", "bkl-blast": "MbBlast", "rive-primevids": "Prvibd", "streamflix": "StremFx", "rive-flowcast": "River", "rive-quasar": "Kutti", "ophm": "Ophm", "rive-guru": "Gbru" };
             const NX_JUNK = /^(nitro|pitro|aitro|watchout|streamflix|hguide|tcloud|dcloud|ipcloud)$/i;
             function nxLabel(item) {
@@ -676,8 +687,6 @@
             }
 
             // 3) vidrock servers (Nova/Atlas/Luna/Orion hls + Astra mp4)
-            let vr = [];
-            try { vr = await vidrockSources(vrPath); } catch (e) { vr = []; }
             for (const v of vr) {
                 if (v.type === "mp4" && /streamrk\.site\/playlist/.test(v.url)) {
                     const mp4s = await streamrkMp4s(v.url, "Rock " + v.name);
@@ -691,7 +700,10 @@
             }
 
             // 4) remaining vidlove servers
-            await addVidlove(vlRest);
+            for (const v of vlRRes) {
+                if (streams.length >= 16) break;
+                if (v.src) addStream(v.label + " - " + v.src.quality, v.src.url, STREAM_HEADERS);
+            }
 
             if (!streams.length) {
                 return cb({

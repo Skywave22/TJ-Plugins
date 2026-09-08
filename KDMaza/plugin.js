@@ -135,49 +135,61 @@
     const GD_KEY = "acbe2066696a1d44345698deb3d9ebf9ae9bbdfd";
 
     async function resolveGdflix(pageUrl) {
-        const out = [];
-        try {
-            const fid = (String(pageUrl).match(/\/file\/([A-Za-z0-9]+)/) || [])[1];
-            if (!fid) return out;
-            const postUrl = "https://new3.gdflix.io/file/" + fid;
-            // warm the host first: the GET primes any Cloudflare cookies the
-            // engine persists per-host and gives us the filename for quality
-            await getText(postUrl, { "Referer": SITE + "/" });
-            const r = await withTimeout(http_post(postUrl, {
+        const fid = (String(pageUrl).match(/\/file\/([A-Za-z0-9]+)/) || [])[1];
+        if (!fid) return { host: "GDFlix", urls: [], instant: [] };
+        const postUrl = "https://new3.gdflix.io/file/" + fid;
+        // warm the host first: primes any Cloudflare cookies the engine
+        // persists per-host (node-fetch gets challenged here, the app is not)
+        await getText(postUrl, { "Referer": SITE + "/" });
+        async function post(action, pathBase) {
+            const r = await withTimeout(http_post("https://new3.gdflix.io/" + pathBase + "/" + fid, {
                 "User-Agent": UA,
                 "Referer": postUrl,
                 "x-token": "new3.gdflix.io",
                 "Content-Type": "application/x-www-form-urlencoded"
-            }, "action=direct&key=" + GD_KEY + "&action_token="), 20000);
-            let api = {};
-            try { api = JSON.parse((r && r.body) || "{}"); } catch (e) {}
-            let u = String(api.url || "").replace(/&amp;/g, "&");
-            if (!u) return out;
+            }, "action=" + action + "&key=" + GD_KEY + "&action_token="), 15000);
+            try { return JSON.parse((r && r.body) || "{}"); } catch (e) { return {}; }
+        }
+        // instant (single POST -> direct googleusercontent URL) and
+        // direct (drive id -> usercontent confirm form) run in parallel
+        const [inst, dir] = await Promise.all([
+            post("instant", "mfile").catch(function () { return {}; }),
+            post("direct", "file").catch(function () { return {}; })
+        ]);
+        const instant = [];
+        const iu = String(inst.url || "").replace(/&amp;/g, "&");
+        if (!inst.error && iu.indexOf("http") === 0) instant.push(iu);
+        const direct = [];
+        let u = String(dir.url || "").replace(/&amp;/g, "&");
+        if (!dir.error && u.indexOf("http") === 0) {
             const gid = (u.match(/[?&]id=([A-Za-z0-9_-]{10,})/) || [])[1];
             if (/drive\.google\.com/.test(u) && gid) {
-                const chtml = await getText("https://drive.usercontent.google.com/download?id=" + gid + "&export=download", { "Referer": "https://drive.google.com/" });
-                const action = (chtml.match(/action="([^"]+)"/) || [])[1] || "";
-                if (action) {
-                    const fields = [];
-                    const fr = /name="([^"]+)"\s+value="([^"]*)"/g;
-                    let fm;
-                    while ((fm = fr.exec(chtml))) fields.push(fm[1] + "=" + encodeURIComponent(fm[2]).replace(/%20/g, "+"));
-                    if (fields.length) out.push(action + "?" + fields.join("&"));
-                }
-                if (!out.length) out.push("https://drive.google.com/uc?export=download&id=" + gid);
+                try {
+                    const chtml = await getText("https://drive.usercontent.google.com/download?id=" + gid + "&export=download", { "Referer": "https://drive.google.com/" });
+                    const action = (chtml.match(/action="([^"]+)"/) || [])[1] || "";
+                    if (action) {
+                        const fields = [];
+                        const fr = /name="([^"]+)"\s+value="([^"]*)"/g;
+                        let fm;
+                        while ((fm = fr.exec(chtml))) fields.push(fm[1] + "=" + encodeURIComponent(fm[2]).replace(/%20/g, "+"));
+                        if (fields.length) direct.push(action + "?" + fields.join("&"));
+                    }
+                } catch (e) {}
+                if (!direct.length) direct.push("https://drive.google.com/uc?export=download&id=" + gid);
             } else {
-                out.push(u);
+                direct.push(u);
             }
-        } catch (e) {}
-        return out;
+        }
+        return { host: "GDFlix", urls: direct, instant: instant };
     }
+
 
     async function resolveHost(url) {
         try {
-            if (/hubcloud\./.test(url)) return { host: "HubCloud", urls: await resolveHubcloud(url) };
-            if (/gdflix\./.test(url))  return { host: "GDFlix",  urls: await resolveGdflix(url) };
+            if (/hubcloud\./.test(url)) return { host: "HubCloud", urls: await resolveHubcloud(url), instant: [] };
+            if (/gdflix\./.test(url))  return await resolveGdflix(url);
         } catch (e) {}
-        return { host: "", urls: [] };
+        return { host: "", urls: [], instant: [] };
     }
 
     // ─────────────────────── catalog: home ────────────────────────
@@ -319,31 +331,48 @@
             const links = (p && p.links) || [];
             if (!links.length) return cb({ success: false, errorCode: "BAD_URL", message: "No host links on this episode" });
 
-            // HubCloud first (proven direct R2), then GDFlix
+            // Resolve every host in parallel (HubCloud + GDFlix chains at
+            // once) — sequential resolution was the slow path.
             const ordered = links.slice().sort(function (a, b) {
                 return (/hubcloud/.test(b) ? 1 : 0) - (/hubcloud/.test(a) ? 1 : 0);
             });
+            const results = await Promise.all(ordered.map(function (u) {
+                return resolveHost(u).catch(function () { return { host: "", urls: [], instant: [] }; });
+            }));
 
             const streams = [];
-            let seen = {};
-            for (let i = 0; i < ordered.length && streams.length < 8; i++) {
-                const res = await resolveHost(ordered[i]);
-                for (let j = 0; j < res.urls.length; j++) {
-                    const u = res.urls[j].split("?url=")[0] === res.urls[j] ? res.urls[j] : res.urls[j];
-                    const key = u.split("?")[0];
-                    if (seen[key]) continue;
-                    seen[key] = 1;
-                    const q = qualityFromName(u) || "";
-                    streams.push(mkStream({
-                        url: u,
-                        source: (res.host || "Host") + (q ? " - " + q : "") + (j > 0 ? " #" + (j + 1) : ""),
-                        quality: q || "auto",
-                        headers: { "User-Agent": UA },
-                        isDirect: true
-                    }));
+            const seen = {};
+            function pushStream(label, u, ref) {
+                const key = String(u).split("?")[0];
+                if (!u || seen[key]) return;
+                seen[key] = 1;
+                if (streams.length >= 8) return;
+                const q = qualityFromName(u) || "";
+                streams.push(mkStream({
+                    url: u,
+                    source: label + (q ? " - " + q : ""),
+                    quality: q || "auto",
+                    headers: { "User-Agent": UA },
+                    isDirect: true
+                }));
+            }
+            // order: HubCloud, GDFlix instant (fastest direct), GDFlix direct
+            for (let i = 0; i < results.length; i++) {
+                const res = results[i];
+                if (/hubcloud/i.test(res.host || "")) {
+                    for (let j = 0; j < (res.urls || []).length; j++) pushStream(res.host + (j > 0 ? " #" + (j + 1) : ""), res.urls[j]);
                 }
             }
-
+            for (let i = 0; i < results.length; i++) {
+                const res = results[i];
+                if (/gdflix/i.test(res.host || "")) {
+                    for (let j = 0; j < (res.instant || []).length; j++) pushStream(res.host + " - Instant", res.instant[j]);
+                    for (let j = 0; j < (res.urls || []).length; j++) pushStream(res.host + (j > 0 ? " #" + (j + 1) : ""), res.urls[j]);
+                } else if (res.host && !/hubcloud/i.test(res.host)) {
+                    for (let j = 0; j < (res.instant || []).length; j++) pushStream(res.host + " - Instant", res.instant[j]);
+                    for (let j = 0; j < (res.urls || []).length; j++) pushStream(res.host + (j > 0 ? " #" + (j + 1) : ""), res.urls[j]);
+                }
+            }
             if (!streams.length) {
                 return cb({
                     success: false,

@@ -1,9 +1,9 @@
 {
   "packageName": "com.kdramamaza.skystream",
   "name": "KDramaMaza",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://kdramasmaza.net",
-  "description": "KDramaMaza (kdramasmaza.net) - Korean, Chinese, Turkish & Japanese dramas in Hindi/Urdu dubbed. Full episode lists, direct-file servers (HubCloud + GDFlix, up to 1080p WEB-DL dual-audio). Verified live.",
+  "description": "KDramaMaza (kdramasmaza.net) - Korean, Chinese, Turkish & Japanese dramas in Hindi/Urdu dubbed. Full episode lists, fast parallel resolution with HubCloud + GDFlix Instant direct-file servers (up to 1080p WEB-DL dual-audio). Verified live.",
   "authors": [
     "Skywave22"
   ],
