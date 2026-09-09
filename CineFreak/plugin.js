@@ -29,6 +29,14 @@
     //           The URLs are DIRECT files on Cloudflare R2
     //           (pub-*.r2.dev) — verified HTTP 206 on Range with no
     //           Referer/Origin needed. User-Agent only.
+    //
+    //  APP CONTRACT (SkyStream engine): every exported function takes a
+    //  callback and MUST resolve exactly once with
+    //      { success: true, data: <payload> }   on success
+    //      { success: false, errorCode, message } on failure
+    //  Returning a raw Map is rejected by the engine
+    //  (JsPluginException UNKNOWN_ERROR) — envelope is mandatory.
+    //  Episode objects use `name` (not `title`) + int season/episode.
     // ═══════════════════════════════════════════════════════════
 
     const SITE       = "https://cinefreak.net";
@@ -131,40 +139,51 @@
         return out;
     }
 
-    async function getHome() {
-        const rows = {};
-        await Promise.all(HOME_CATS.map(async function (c) {
-            try {
-                const html = await withTimeout(fetchHtml(SITE + c.path), 25000);
-                const items = parseCards(html, c.type);
-                if (items.length) rows[c.row] = items;
-            } catch (e) { /* row skipped */ }
-        }));
-        return rows;
+    async function getHome(cb) {
+        try {
+            const rows = {};
+            await Promise.all(HOME_CATS.map(async function (c) {
+                try {
+                    const html = await withTimeout(fetchHtml(SITE + c.path), 25000);
+                    const items = parseCards(html, c.type);
+                    if (items.length) rows[c.row] = items;
+                } catch (e) { /* row skipped */ }
+            }));
+            if (!Object.keys(rows).length) {
+                return cb({ success: false, errorCode: "HOME_ERROR", message: "CineFreak catalog unavailable right now." });
+            }
+            cb({ success: true, data: rows });
+        } catch (e) {
+            cb({ success: false, errorCode: "HOME_ERROR", message: String((e && e.message) || e) });
+        }
     }
 
     // ─────────────────────────── search ────────────────────────────
 
-    async function search(query) {
-        const q = String(query || "").trim();
-        if (!q) return [];
-        const url = SITE + "/search-api.php?q=" + encodeURIComponent(q) + "&pg=1";
-        const j = await withTimeout(fetchJson(url), 25000);
-        const results = (j && j.results) || [];
-        const out = [];
-        for (let i = 0; i < results.length && out.length < 30; i++) {
-            const r = results[i] || {};
-            if (!r.l) continue;
-            const isTv = /series|drama|show|anime|tv\b/i.test(String(r.c || ""));
-            out.push(mkItem({
-                title: cleanTitle(r.t),
-                url: JSON.stringify({ slug: String(r.l) }),
-                posterUrl: r.i ? decodeEntities(r.i) : "",
-                bannerUrl: r.i ? decodeEntities(r.i) : "",
-                type: isTv ? "tv" : "movie"
-            }));
+    async function search(query, cb) {
+        try {
+            const q = String(query || "").trim();
+            if (!q) return cb({ success: true, data: [] });
+            const url = SITE + "/search-api.php?q=" + encodeURIComponent(q) + "&pg=1";
+            const j = await withTimeout(fetchJson(url), 25000);
+            const results = (j && j.results) || [];
+            const out = [];
+            for (let i = 0; i < results.length && out.length < 30; i++) {
+                const r = results[i] || {};
+                if (!r.l) continue;
+                const isTv = /series|drama|show|anime|tv\b/i.test(String(r.c || ""));
+                out.push(mkItem({
+                    title: cleanTitle(r.t),
+                    url: JSON.stringify({ slug: String(r.l) }),
+                    posterUrl: r.i ? decodeEntities(r.i) : "",
+                    bannerUrl: r.i ? decodeEntities(r.i) : "",
+                    type: isTv ? "tv" : "movie"
+                }));
+            }
+            cb({ success: true, data: out });
+        } catch (e) {
+            cb({ success: false, errorCode: "SEARCH_ERROR", message: String((e && e.message) || e) });
         }
-        return out;
     }
 
     // ─────────────────────────── detail ────────────────────────────
@@ -181,55 +200,67 @@
         try { return JSON.parse(raw); } catch (e) { return null; }
     }
 
-    async function load(url) {
-        let p = null;
-        try { p = JSON.parse(url); } catch (e) { p = null; }
-        if (!p || !p.slug) throw new Error("Unrecognized item url");
-        const slug = String(p.slug);
-        const html = await fetchHtml(SITE + "/" + slug + "/");
+    async function load(url, cb) {
+        try {
+            let p = null;
+            try { p = JSON.parse(url); } catch (e) { p = null; }
+            if (!p || !p.slug) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized item url" });
+            const slug = String(p.slug);
+            const html = await fetchHtml(SITE + "/" + slug + "/");
 
-        const tM = html.match(/<meta property="og:title" content="([^"]*)"/);
-        const imgM = html.match(/<meta property="og:image" content="([^"]*)"/);
-        const title = tM ? cleanTitle(tM[1]) : cleanTitle(slug.replace(/-/g, " "));
-        const poster = imgM ? decodeEntities(imgM[1]) : "";
+            const tM = html.match(/<meta property="og:title" content="([^"]*)"/);
+            const imgM = html.match(/<meta property="og:image" content="([^"]*)"/);
+            const title = tM ? cleanTitle(tM[1]) : cleanTitle(slug.replace(/-/g, " "));
+            const poster = imgM ? decodeEntities(imgM[1]) : "";
 
-        const data = extractDataset(html);
-        const episodes = [];
+            const data = extractDataset(html);
+            const isSeries = !!(data && data.type === "series");
+            const episodes = [];
 
-        if (data && data.type === "series" && Array.isArray(data.seasons) && data.seasons.length) {
-            for (let si = 0; si < data.seasons.length; si++) {
-                const season = data.seasons[si] || {};
-                const eps = season.episodes || [];
-                const sName = String(season.season_name || ("Season " + (si + 1)));
-                for (let ei = 0; ei < eps.length; ei++) {
-                    const ep = eps[ei] || {};
-                    if (!ep.sources) continue;
-                    const num = String(ep.ep_num || (ei + 1));
-                    const epTitle = String(ep.ep_title || ("Episode " + num));
-                    const meta = String(ep.ep_meta || "");
-                    episodes.push(mkEpisode({
-                        title: sName + " · " + epTitle + (meta ? " · " + meta : ""),
-                        url: JSON.stringify({ slug: slug, s: si, e: ei })
-                    }));
+            if (isSeries && Array.isArray(data.seasons) && data.seasons.length) {
+                for (let si = 0; si < data.seasons.length; si++) {
+                    const season = data.seasons[si] || {};
+                    const eps = season.episodes || [];
+                    const sName = String(season.season_name || ("Season " + (si + 1)));
+                    for (let ei = 0; ei < eps.length; ei++) {
+                        const ep = eps[ei] || {};
+                        if (!ep.sources) continue;
+                        const num = parseInt(String(ep.ep_num || (ei + 1)), 10) || (ei + 1);
+                        const epTitle = String(ep.ep_title || ("Episode " + num));
+                        const meta = String(ep.ep_meta || "");
+                        episodes.push(mkEpisode({
+                            name: sName + " · " + epTitle + (meta ? " · " + meta : ""),
+                            url: JSON.stringify({ slug: slug, s: si, e: ei }),
+                            season: si + 1,
+                            episode: num
+                        }));
+                    }
                 }
             }
-        }
-        if (!episodes.length) {
-            // movie (or series post without per-episode data): single play-all
-            episodes.push(mkEpisode({
-                title: "Play Full Movie",
-                url: JSON.stringify({ slug: slug, s: -1, e: -1 })
-            }));
-        }
+            if (!episodes.length) {
+                // movie (or series post without per-episode data): single play-all
+                episodes.push(mkEpisode({
+                    name: "Play Full Movie",
+                    url: JSON.stringify({ slug: slug, s: -1, e: -1 }),
+                    season: 1,
+                    episode: 1
+                }));
+            }
 
-        return mkItem({
-            title: title,
-            url: url,
-            posterUrl: poster,
-            bannerUrl: poster,
-            type: (data && data.type === "series") ? "tv" : "movie",
-            episodes: episodes
-        });
+            cb({
+                success: true,
+                data: mkItem({
+                    title: title,
+                    url: url,
+                    posterUrl: poster,
+                    bannerUrl: poster,
+                    type: isSeries ? "tv" : "movie",
+                    episodes: episodes
+                })
+            });
+        } catch (e) {
+            cb({ success: false, errorCode: "DETAIL_ERROR", message: String((e && e.message) || e) });
+        }
     }
 
     // ─────────────────────────── streams ───────────────────────────
@@ -274,28 +305,31 @@
         return out.slice(0, 10);
     }
 
-    async function loadStreams(url) {
-        let p = null;
-        try { p = JSON.parse(url); } catch (e) { p = null; }
-        if (!p || !p.slug) throw new Error("Unrecognized episode url");
-        const slug = String(p.slug);
+    async function loadStreams(url, cb) {
+        try {
+            let p = null;
+            try { p = JSON.parse(url); } catch (e) { p = null; }
+            if (!p || !p.slug) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized episode url" });
+            const slug = String(p.slug);
 
-        // cache the page across episode switches inside one call session
-        const html = await fetchHtml(SITE + "/" + slug + "/");
-        const data = extractDataset(html);
-        if (!data) throw new Error("No stream data on page (download-only post?)");
+            const html = await fetchHtml(SITE + "/" + slug + "/");
+            const data = extractDataset(html);
+            if (!data) return cb({ success: false, errorCode: "NO_STREAMS", message: "No stream data on this page (download-only post?)" });
 
-        let sources = null;
-        if (p.s >= 0 && Array.isArray(data.seasons) && data.seasons[p.s]) {
-            const eps = data.seasons[p.s].episodes || [];
-            const ep = eps[p.e] || eps[0];
-            sources = ep && ep.sources;
+            let sources = null;
+            if (p.s >= 0 && Array.isArray(data.seasons) && data.seasons[p.s]) {
+                const eps = data.seasons[p.s].episodes || [];
+                const ep = eps[p.e] || eps[0];
+                sources = ep && ep.sources;
+            }
+            if (!sources) sources = data.sources;
+
+            const streams = await resolveSources(sources);
+            if (!streams.length) return cb({ success: false, errorCode: "NO_STREAMS", message: "No playable source right now — try again in a moment." });
+            cb({ success: true, data: streams });
+        } catch (e) {
+            cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
         }
-        if (!sources) sources = data.sources;
-
-        const streams = await resolveSources(sources);
-        if (!streams.length) throw new Error("No playable source right now — try again in a moment.");
-        return streams;
     }
 
     // ─────────────────────────── exports ───────────────────────────
@@ -306,3 +340,4 @@
     globalThis.loadStreams = loadStreams;
 
 })();
+                                                                             
