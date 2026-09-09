@@ -1,0 +1,18 @@
+{
+  "packageName": "com.m321.skystream",
+  "name": "321Movies",
+  "version": 1,
+  "baseUrl": "https://321movies.xyz",
+  "description": "321Movies (321movies.xyz) - TMDB-powered catalog: trending, popular and top-rated movies & TV. The site's own multi-source player delivers up to 1080p HLS/MP4 with English, Hindi and Tamil tracks. Verified live.",
+  "authors": [
+    "Skywave22"
+  ],
+  "languages": [
+    "en",
+    "hi"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries"
+  ]
+}
