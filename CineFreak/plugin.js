@@ -104,15 +104,15 @@
     }
 
     // ─────────────────────── poster fix ────────────────────────────
-    // image.tmdb.org is blocked/unreachable on some ISPs — route TMDB
-    // posters through the wsrv.nl image proxy (reachable everywhere).
-    // Site-hosted posters (cineimg.xyz, cinefreak.ch, …) stay untouched.
+    // External image hosts (image.tmdb.org, cineimg.xyz, …) are blocked on
+    // some ISPs — route every external poster through the weserv.nl image
+    // proxy (reachable everywhere). Same-site URLs pass through unchanged.
     function fixPoster(u) {
         const s = decodeEntities(u || "");
-        if (s.indexOf("image.tmdb.org/") !== -1) {
-            return "https://images.weserv.nl/?url=" + encodeURIComponent(s.replace(/^https?:\/\//, ""));
-        }
-        return s;
+        if (!s || s.indexOf("http") !== 0) return s;
+        if (s.indexOf("cinefreak.net/") !== -1) return s;
+        if (s.indexOf("images.weserv.nl/") !== -1) return s;
+        return "https://images.weserv.nl/?url=" + encodeURIComponent(s.replace(/^https?:\/\//, ""));
     }
 
     // ─────────────────────── language labels ───────────────────────
@@ -264,9 +264,20 @@
             const html = await fetchHtml(SITE + "/" + slug + "/");
 
             const tM = html.match(/<meta property="og:title" content="([^"]*)"/);
-            const imgM = html.match(/<meta property="og:image" content="([^"]*)"/);
             const title = tM ? cleanTitle(tM[1]) : cleanTitle(slug.replace(/-/g, " "));
-            const poster = imgM ? fixPoster(imgM[1]) : "";
+            // og:image on this site is a rank-math SEO overlay URL that
+            // returns 404 HTML (renders as a black square). The real poster
+            // is the first TMDB/cineimg image embedded in the page body.
+            let poster = "";
+            const imgScan = /https:\/\/(?:image\.tmdb\.org|cineimg\.xyz)\/[^"'\s)]+\.(?:jpg|jpeg|png|webp)/g;
+            let im, firstImg = null;
+            while ((im = imgScan.exec(html)) !== null) { firstImg = im[0]; break; }
+            if (firstImg) {
+                poster = fixPoster(firstImg);
+            } else {
+                const imgM = html.match(/<meta property="og:image" content="([^"]*)"/);
+                if (imgM && imgM[1].indexOf("admin-ajax") < 0) poster = fixPoster(imgM[1]);
+            }
 
             const data = extractDataset(html);
             const isSeries = !!(data && data.type === "series");
@@ -396,4 +407,4 @@
 
 })();
 
-            
+        
