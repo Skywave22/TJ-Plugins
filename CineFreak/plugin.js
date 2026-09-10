@@ -117,31 +117,43 @@
 
     // ─────────────────────── language labels ───────────────────────
     // Stream files are named like "CINEFREAK.TOP - Title [Hindi] 720p
-    // ESub.mkv" — surface that audio language on the stream label.
+    // ESub.mkv". Dual-audio files (e.g. "[Hindi-Malayalam]") contain BOTH
+    // audio tracks in ONE file — labelled as Dual Audio so users switch
+    // language via the PLAYER's audio-track menu, not by picking a stream.
     function langOf(url) {
         let s = "";
         try { s = decodeURIComponent(String(url || "")); } catch (e) { s = String(url || ""); }
-        const dual = /\bdual[ ._-]*audio\b|multi[ ._-]*audio/i.test(s);
         const known = ["Hindi", "English", "Bengali", "Bangla", "Tamil", "Telugu", "Kannada",
                        "Malayalam", "Punjabi", "Marathi", "Urdu", "Turkish", "Chinese", "Mandarin",
                        "Cantonese", "Japanese", "Korean", "Spanish", "Indonesian", "Arabic", "French"];
         const found = [];
-        const bracketRe = /\[([A-Za-z][A-Za-z ]{2,20})\]/g;
+        const addLang = function (tag) {
+            for (let i = 0; i < known.length; i++) {
+                if (tag.toLowerCase() === known[i].toLowerCase()) {
+                    if (found.indexOf(known[i]) < 0) found.push(known[i]);
+                    return;
+                }
+            }
+        };
+        // bracket tags, including hyphen/slash/comma separated lists:
+        // [Hindi], [Hindi-Malayalam], [Hindi/Tamil], [Hindi, Telugu] ...
+        const bracketRe = /\[([A-Za-z][A-Za-z \-+/,&]{1,30})\]/g;
         let m;
         while ((m = bracketRe.exec(s)) !== null) {
-            const tag = m[1].trim();
-            for (let i = 0; i < known.length; i++) {
-                if (tag.toLowerCase() === known[i].toLowerCase()) { found.push(known[i]); break; }
-            }
+            m[1].split(/[\-+/,& ]+/).forEach(function (tok) {
+                if (tok.length >= 3) addLang(tok);
+            });
         }
         if (!found.length) {
             for (let i = 0; i < known.length; i++) {
-                if (new RegExp("\\b" + known[i] + "\\b", "i").test(s)) found.push(known[i]);
+                if (found.indexOf(known[i]) < 0 && new RegExp("\\b" + known[i] + "\\b", "i").test(s)) found.push(known[i]);
             }
         }
+        const dual = found.length >= 2 || /\bdual[ ._-]*audio\b|multi[ ._-]*audio/i.test(s);
         if (dual) {
-            const others = found.filter(function (x) { return x !== "Hindi"; });
-            return "Hindi + " + (others[0] || "English") + " (Dual Audio)";
+            // Hindi first when present (Hindi-first site)
+            found.sort(function (a, b) { return (b === "Hindi" ? 1 : 0) - (a === "Hindi" ? 1 : 0); });
+            return found.slice(0, 2).join(" + ") + " (Dual Audio)";
         }
         return found[0] || null;
     }
@@ -384,4 +396,4 @@
 
 })();
 
-                
+            
