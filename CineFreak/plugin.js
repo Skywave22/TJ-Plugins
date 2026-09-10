@@ -103,6 +103,49 @@
         return s || decodeEntities(t);
     }
 
+    // ─────────────────────── poster fix ────────────────────────────
+    // image.tmdb.org is blocked/unreachable on some ISPs — route TMDB
+    // posters through the wsrv.nl image proxy (reachable everywhere).
+    // Site-hosted posters (cineimg.xyz, cinefreak.ch, …) stay untouched.
+    function fixPoster(u) {
+        const s = decodeEntities(u || "");
+        if (s.indexOf("image.tmdb.org/") !== -1) {
+            return "https://images.weserv.nl/?url=" + encodeURIComponent(s.replace(/^https?:\/\//, ""));
+        }
+        return s;
+    }
+
+    // ─────────────────────── language labels ───────────────────────
+    // Stream files are named like "CINEFREAK.TOP - Title [Hindi] 720p
+    // ESub.mkv" — surface that audio language on the stream label.
+    function langOf(url) {
+        let s = "";
+        try { s = decodeURIComponent(String(url || "")); } catch (e) { s = String(url || ""); }
+        const dual = /\bdual[ ._-]*audio\b|multi[ ._-]*audio/i.test(s);
+        const known = ["Hindi", "English", "Bengali", "Bangla", "Tamil", "Telugu", "Kannada",
+                       "Malayalam", "Punjabi", "Marathi", "Urdu", "Turkish", "Chinese", "Mandarin",
+                       "Cantonese", "Japanese", "Korean", "Spanish", "Indonesian", "Arabic", "French"];
+        const found = [];
+        const bracketRe = /\[([A-Za-z][A-Za-z ]{2,20})\]/g;
+        let m;
+        while ((m = bracketRe.exec(s)) !== null) {
+            const tag = m[1].trim();
+            for (let i = 0; i < known.length; i++) {
+                if (tag.toLowerCase() === known[i].toLowerCase()) { found.push(known[i]); break; }
+            }
+        }
+        if (!found.length) {
+            for (let i = 0; i < known.length; i++) {
+                if (new RegExp("\\b" + known[i] + "\\b", "i").test(s)) found.push(known[i]);
+            }
+        }
+        if (dual) {
+            const others = found.filter(function (x) { return x !== "Hindi"; });
+            return "Hindi + " + (others[0] || "English") + " (Dual Audio)";
+        }
+        return found[0] || null;
+    }
+
     // ───────────────────── home (category rows) ────────────────────
 
     const HOME_CATS = [
@@ -131,8 +174,8 @@
             out.push(mkItem({
                 title: cleanTitle(rawTitle),
                 url: JSON.stringify({ slug: slug }),
-                posterUrl: decodeEntities(img[1]),
-                bannerUrl: decodeEntities(img[1]),
+                posterUrl: fixPoster(img[1]),
+                bannerUrl: fixPoster(img[1]),
                 type: forcedType || "movie"
             }));
         }
@@ -175,8 +218,8 @@
                 out.push(mkItem({
                     title: cleanTitle(r.t),
                     url: JSON.stringify({ slug: String(r.l) }),
-                    posterUrl: r.i ? decodeEntities(r.i) : "",
-                    bannerUrl: r.i ? decodeEntities(r.i) : "",
+                    posterUrl: fixPoster(r.i),
+                    bannerUrl: fixPoster(r.i),
                     type: isTv ? "tv" : "movie"
                 }));
             }
@@ -211,7 +254,7 @@
             const tM = html.match(/<meta property="og:title" content="([^"]*)"/);
             const imgM = html.match(/<meta property="og:image" content="([^"]*)"/);
             const title = tM ? cleanTitle(tM[1]) : cleanTitle(slug.replace(/-/g, " "));
-            const poster = imgM ? decodeEntities(imgM[1]) : "";
+            const poster = imgM ? fixPoster(imgM[1]) : "";
 
             const data = extractDataset(html);
             const isSeries = !!(data && data.type === "series");
@@ -289,7 +332,7 @@
             if (!r || !r.url) continue;
             out.push(mkStream({
                 url: String(r.url),
-                source: "CineFreak · " + String(r.quality || "Auto"),
+                source: "CineFreak · " + String(r.quality || "Auto") + (langOf(r.url) ? " · " + langOf(r.url) : ""),
                 headers: STREAM_HEADERS,
                 isDirect: true
             }));
@@ -340,4 +383,5 @@
     globalThis.loadStreams = loadStreams;
 
 })();
-                                                                             
+
+                
