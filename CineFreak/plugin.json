@@ -1,15 +1,16 @@
 {
   "packageName": "com.cinefreak.skystream",
   "name": "CineFreak",
-  "version": 1,
+  "version": 3,
   "baseUrl": "https://cinefreak.net",
-  "description": "CineFreak (cinefreak.net) - Bollywood, Hollywood, Hindi dubbed movies, web series & K-Drama. Multi-quality direct streams (480p-1080p) from the site's own CDN. Verified live.",
+  "description": "CineFreak (cinefreak.net) - Bollywood, Hollywood, Hindi dubbed movies, web series & K-Drama. Multi-quality direct streams with honest language labels (dual-audio files marked, switch audio in player). Verified live.",
   "authors": [
     "Skywave22"
   ],
   "languages": [
+    "hi",
     "en",
-    "hi"
+    "mal"
   ],
   "categories": [
     "Movie",
