@@ -45,35 +45,56 @@
         }
     }
 
+    const FALLBACK_TMDB_BASES = [
+        "https://skyflixer.skyflixer1.workers.dev/api",
+        "https://skyflixer.batman18677.workers.dev/api",
+        "https://skyflixer.superman88911u.workers.dev/api",
+        "https://skyflixer.univers-9009.workers.dev/api"
+    ];
+
     function getTmdbApiBase() {
-        // Use SkyFlixer worker for TMDB metadata (no key required) - reliable
-        // Fallback to manifest.baseUrl if it points to worker, else use skyflixer worker
         let base = (typeof manifest !== 'undefined' && manifest.baseUrl) ? manifest.baseUrl : "";
         if (base.includes("workers.dev")) {
             base = base.replace(/\/+$/, "");
             if (!base.endsWith("/api")) base = base + "/api";
             return base;
         }
-        return "https://skyflixer.skyflixer1.workers.dev/api";
+        return FALLBACK_TMDB_BASES[0];
+    }
+
+    function getAllTmdbBases() {
+        const primary = getTmdbApiBase();
+        const list = [primary];
+        for (const b of FALLBACK_TMDB_BASES) if (!list.includes(b)) list.push(b);
+        return list;
     }
 
     async function apiFetch(path, options = {}) {
-        const apiBase = getTmdbApiBase();
-        const url = path.startsWith("http") ? path : apiBase + (path.startsWith("/") ? path : "/" + path);
-        const headers = {
-            "Origin": "https://rivestream.ru",
-            "Referer": "https://rivestream.ru/",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json",
-            ...(options.headers || {})
-        };
-        const res = await fetch(url, { ...options, headers });
-        if (!res.ok) {
-            const txt = await res.text().catch(() => "");
-            throw new Error(`HTTP ${res.status} for ${path} - ${txt.slice(0,300)}`);
+        const bases = getAllTmdbBases();
+        let lastErr = null;
+        for (const apiBase of bases) {
+            const url = path.startsWith("http") ? path : apiBase + (path.startsWith("/") ? path : "/" + path);
+            const headers = {
+                "Origin": "https://rivestream.ru",
+                "Referer": "https://rivestream.ru/",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json",
+                ...(options.headers || {})
+            };
+            try {
+                const res = await fetch(url, { ...options, headers });
+                if (!res.ok) {
+                    const txt = await res.text().catch(() => "");
+                    throw new Error(`HTTP ${res.status} for ${path} - ${txt.slice(0,300)}`);
+                }
+                const text = await res.text();
+                try { return JSON.parse(text); } catch { return text; }
+            } catch (e) {
+                lastErr = e;
+                continue;
+            }
         }
-        const text = await res.text();
-        try { return JSON.parse(text); } catch { return text; }
+        throw lastErr || new Error("All TMDB bases failed for " + path);
     }
 
     function tmdbToItem(item) {
@@ -90,26 +111,120 @@
         return new MultimediaItem({ title, url, type, posterUrl: poster, bannerUrl: backdrop, description: item.overview || "", year, score: item.vote_average || 0 });
     }
 
+    function unpackPacker(p, a, c, k) {
+        try {
+            for (let i = c - 1; i >= 0; i--) {
+                if (k[i]) {
+                    let key = i.toString(a);
+                    const re = new RegExp("\\b" + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\b", "g");
+                    p = p.replace(re, k[i]);
+                }
+            }
+            return p;
+        } catch { return p; }
+    }
+
+    function extractHanerixLinks(html) {
+        const streams = [];
+        if (!html) return streams;
+        try {
+            let packed = null, base = 0, count = 0, dict = [];
+            const evalMatch = html.match(/eval\(function\(p,a,c,k,e,d\)\{[^}]+\}\('([^']*)',\s*(\d+),\s*(\d+),\s*'([^']*)'\.split\('\|'\)/);
+            if (evalMatch) {
+                packed = evalMatch[1];
+                base = parseInt(evalMatch[2], 10);
+                count = parseInt(evalMatch[3], 10);
+                dict = evalMatch[4].split('|');
+            } else {
+                const m2 = html.match(/eval\(function\(p,a,c,k,e,d\)[\s\S]*?\('(.*?)',\s*(\d+),\s*(\d+),\s*'(.*?)'\.split/);
+                if (m2) {
+                    packed = m2[1];
+                    base = parseInt(m2[2], 10);
+                    count = parseInt(m2[3], 10);
+                    dict = m2[4].split('|');
+                }
+            }
+            let unpacked = null;
+            if (packed && base && count && dict.length) {
+                unpacked = unpackPacker(packed, base, count, dict);
+            } else {
+                unpacked = html;
+            }
+            const masterRe = /https?:\/\/[^"'\\\s]+\/[^"'\\\s]*master\.m3u8[^"'\\\s]*/g;
+            const hlsRe = /"hls\d*"\s*:\s*"([^"]+)"|'hls\d*'\s*:\s*'([^']+)'/g;
+            const streamRe = /\/stream\/[^"'\\\s]+\.m3u8/g;
+            let candidates = [];
+            const httpsM3u8 = (unpacked.match(masterRe) || []).concat((html.match(masterRe) || []));
+            candidates = candidates.concat(httpsM3u8);
+            let match;
+            while ((match = hlsRe.exec(unpacked)) !== null) {
+                const url = match[1] || match[2];
+                if (url) candidates.push(url);
+            }
+            while ((match = hlsRe.exec(html)) !== null) {
+                const url = match[1] || match[2];
+                if (url) candidates.push(url);
+            }
+            const relStreams = (unpacked.match(streamRe) || []).concat((html.match(streamRe) || []));
+            for (const rel of relStreams) {
+                if (rel.startsWith("/")) candidates.push("https://hanerix.com" + rel);
+                else candidates.push(rel);
+            }
+            const seen = {};
+            for (let u of candidates) {
+                if (!u) continue;
+                u = u.replace(/\\u002F/g, "/").replace(/\\\//g, "/").replace(/\\"/g, '"').trim();
+                if (u.startsWith("/")) u = "https://hanerix.com" + u;
+                if (seen[u]) continue;
+                if (u.includes("image.tmdb.org")) continue;
+                if (u.length > 2000) continue;
+                seen[u] = true;
+                let quality = "StreamHG";
+                if (u.includes("hls2") || u.includes("480") || u.includes("513")) quality = "StreamHG - 480p";
+                else if (u.includes("hls4") || u.includes("1080") || u.includes("2255")) quality = "StreamHG - 1080p";
+                else if (u.includes("720") || u.includes("1095")) quality = "StreamHG - 720p";
+                else if (u.includes("master")) quality = "StreamHG - Auto";
+                streams.push(new StreamResult({
+                    url: u,
+                    quality: quality,
+                    headers: { "Referer": "https://hanerix.com/", "Origin": "https://hanerix.com", "User-Agent": "Mozilla/5.0" }
+                }));
+            }
+        } catch {}
+        return streams;
+    }
+
     function extractStreamsFromHtml(html, label) {
         const found = []; const seen = {};
         if (!html || typeof html !== 'string') return found;
-        const m3u8 = html.match(/https?:\/\/[^\s"'\\<>]+?\.m3u8[^\s"'\\<>]*/g) || [];
-        const mp4 = html.match(/https?:\/\/[^\s"'\\<>]+?\.mp4[^\s"'\\<>]*/g) || [];
+        if (html.includes("hanerix.com") || html.includes("jwplayer") || html.includes("hls4") || html.includes("eval(function(p,a,c,k,e,d)")) {
+            const hanerix = extractHanerixLinks(html);
+            if (hanerix.length > 0) return hanerix;
+        }
+        const m3u8 = html.match(/https?:\/\/[^\\s\"'<>]+?\.m3u8[^\\s\"'<>]*/g) || [];
+        const mp4 = html.match(/https?:\/\/[^\\s\"'<>]+?\.mp4[^\\s\"'<>]*/g) || [];
+        const fileMatches = html.match(/file\s*:\s*["'](https?:\/\/[^"']+\.(?:m3u8|mp4)[^"']*)["']/gi) || [];
         const all = m3u8.concat(mp4);
+        for (const fm of fileMatches) {
+            const uMatch = fm.match(/https?:\/\/[^"']+/);
+            if (uMatch) all.push(uMatch[0]);
+        }
         for (let i = 0; i < all.length; i++) {
             let u = all[i].replace(/\\u002F/g, "/").replace(/\\\//g, "/");
             if (seen[u]) continue;
             if (u.includes("image.tmdb.org")) continue;
-            if (u.length > 1500) continue;
-            if (u.includes(".jpg") || u.includes(".png") || u.includes(".webp")) continue;
+            if (u.length > 2000) continue;
+            if (u.includes(".jpg") || u.includes(".png") || u.includes(".webp") || u.includes(".svg")) continue;
+            if (u.includes("google") && u.includes("ads")) continue;
             seen[u] = true;
             found.push(new StreamResult({ url: u, quality: label || "auto", headers: { "Referer": "https://rivestream.ru/", "Origin": "https://rivestream.ru" } }));
         }
         return found;
     }
 
-    // RiveStream providers extracted from rivestream.ru/_next/static/chunks/2427-*.js
+    // RiveStream providers - curated + reliable external
     const PROVIDERS = [
+        // Starred curated (most reliable)
         { label: "VidsrcMe", value: "VID", star: true, category: "curated", movie: id => `https://vidsrc.sh/embed/movie/${id}`, tv: (id,s,e) => `https://vidsrc.sh/embed/tv/${id}/${s}/${e}` },
         { label: "Best-Server Prime", value: "PRIME", star: true, category: "curated", movie: id => `https://primesrc.me/embed/movie?tmdb=${id}`, tv: (id,s,e) => `https://primesrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}` },
         { label: "Multi Most-Server", value: "SUP", star: true, category: "multi", movie: id => `https://multiembed.mov/?video_id=${id}&tmdb=1`, tv: (id,s,e) => `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}` },
@@ -123,79 +238,41 @@
         { label: "111Movies", value: "111M", star: false, category: "multi", movie: id => `https://111movies.net/movie/${id}?autoplay=1`, tv: (id,s,e) => `https://111movies.net/tv/${id}/${s}/${e}?autoplay=1` },
         { label: "VidZee Multi", value: "VIDZ", star: true, category: "multi", movie: id => `https://player.vidzee.wtf/embed/movie/${id}`, tv: (id,s,e) => `https://player.vidzee.wtf/embed/tv/${id}/${s}/${e}` },
         { label: "Vidora HD", value: "VIDORA", star: true, category: "curated", movie: id => `https://vidora.net/movie/${id}?autoplay=true`, tv: (id,s,e) => `https://vidora.net/tv/${id}/${s}/${e}?autoplay=true` },
-        { label: "VidFast Multi", value: "VIDF", star: true, category: "multi", movie: id => `https://vidfast.pro/movie/${id}`, tv: (id,s,e) => `https://vidfast.pro/tv/${id}/${s}/${e}` },
-        { label: "Peachify", value: "PEACH", star: false, category: "multi", movie: id => `https://peachify.top/embed/movie/${id}?autoPlay=true`, tv: (id,s,e) => `https://peachify.top/embed/tv/${id}/${s}/${e}?autoPlay=true` },
-        { label: "FilmKu Aggregator", value: "AGG", star: false, category: "legacy", movie: id => `https://filmku.stream/embed/${id}`, tv: (id,s,e) => `https://filmku.stream/embed/${id}/${s}/${e}` },
-        { label: "VidSrc Pro", value: "PRO", star: false, category: "legacy", movie: id => `https://vidsrc.pro/embed/movie/${id}`, tv: (id,s,e) => `https://vidsrc.pro/embed/tv/${id}/${s}/${e}` },
-        { label: "VidSrc CC", value: "EMB", star: false, category: "legacy", movie: id => `https://vidsrc.cc/v2/embed/movie/${id}`, tv: (id,s,e) => `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}` },
-        { label: "MultiEmbed Direct", value: "MULTI", star: false, category: "multi", movie: id => `https://multiembed.mov/directstream.php?video_id=${id}&tmdb=1`, tv: (id,s,e) => `https://multiembed.mov/directstream.php?video_id=${id}&tmdb=1&s=${s}&e=${e}` },
-        { label: "GodDrive", value: "GOD", star: false, category: "multi", movie: id => `https://godriveplayer.com/player.php?tmdb=${id}`, tv: (id,s,e) => `https://godriveplayer.com/player.php?type=series&tmdb=${id}&season=${s}&episode=${e}` },
-        { label: "VidJoy Ad-Free", value: "VIDJ", star: false, category: "single", movie: id => `https://vidjoy.pro/embed/movie/${id}?adFree=true`, tv: (id,s,e) => `https://vidjoy.pro/embed/tv/${id}/${s}/${e}?adFree=true` },
-        { label: "Vidsrc VIP Single", value: "ONE", star: false, category: "single", movie: id => `https://vidsrc.vip/embed/movie/${id}`, tv: (id,s,e) => `https://vidsrc.vip/embed/tv/${id}/${s}/${e}` },
-        { label: "AnyEmbed", value: "ANY", star: false, category: "single", movie: id => `https://anyembed.xyz/movie/${id}`, tv: (id,s,e) => `https://anyembed.xyz/tv/${id}/${s}/${e}` },
-        { label: "PStream MovieWeb", value: "WEB", star: false, category: "single", movie: id => `https://iframe.pstream.mov/embed/tmdb-movie-${id}`, tv: (id,s,e) => `https://iframe.pstream.mov/embed/tmdb-tv-${id}/${s}/${e}` },
-        { label: "NL Vidsrc", value: "NL", star: false, category: "regional", movie: id => `https://player.vidsrc.nl/embed/movie/${id}`, tv: (id,s,e) => `https://player.vidsrc.nl/embed/tv/${id}/${s}/${e}` },
-        { label: "TurboVid", value: "TURBO", star: false, category: "single", movie: id => `https://turbovid.eu/api/req/movie/${id}`, tv: (id,s,e) => `https://turbovid.eu/api/req/tv/${id}/${s}/${e}` },
-        { label: "Vidsrc RIP", value: "RIP", star: false, category: "single", movie: id => `https://vidsrc.rip/embed/movie/${id}`, tv: (id,s,e) => `https://vidsrc.rip/embed/tv/${id}/${s}/${e}` },
-        { label: "Vidsrc SU", value: "VSU", star: false, category: "single", movie: id => `https://vidsrc.su/embed/movie/${id}`, tv: (id,s,e) => `https://vidsrc.su/embed/tv/${id}/${s}/${e}` },
-        { label: "TechNeo Anime", value: "ANIME", star: false, category: "regional", movie: id => `https://vid.techneo.fun/tmdb/movies/${id}`, tv: (id,s,e) => `https://vid.techneo.fun/tmdb/tv/${id}/${s}/${e}` },
-        { label: "MoviesAPI Club", value: "CLUB", star: false, category: "legacy", movie: id => `https://moviesapi.club/movie/${id}`, tv: (id,s,e) => `https://moviesapi.club/tv/${id}-${s}-${e}` },
-        { label: "WarezCDN", value: "WARE", star: false, category: "legacy", movie: id => `https://embed.warezcdn.com/filme/${id}`, tv: (id,s,e) => `https://embed.warezcdn.com/serie/${id}/${s}/${e}` },
-        { label: "VidSrc WTF Prime", value: "RGS2", star: false, category: "regional", movie: id => `https://www.vidsrc.wtf/4/movie/${id}`, tv: (id,s,e) => `https://www.vidsrc.wtf/4/tv/${id}/${s}/${e}` },
-        { label: "VidSrc WTF Indian", value: "RGS", star: false, category: "regional", movie: id => `https://www.vidsrc.wtf/2/movie/${id}`, tv: (id,s,e) => `https://www.vidsrc.wtf/2/tv/${id}/${s}/${e}` },
-        { label: "Frembed French", value: "FRE", star: false, category: "regional", movie: id => `https://frembed.mom/api/film.php?id=${id}`, tv: (id,s,e) => `https://frembed.mom/api/serie.php?id=${id}&sa=${s}&epi=${e}` },
-        { label: "InsertUnit Russian", value: "RUS", star: false, category: "regional", movie: id => `https://api.insertunit.ws/embed/imdb/${id}`, tv: (id,s,e) => `https://api.insertunit.ws/embed/tv/${id}/${s}/${e}` },
-        { label: "2Embed", value: "EMBED", star: false, category: "multi", movie: id => `https://www.2embed.cc/embed/${id}`, tv: (id,s,e) => `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}` },
-        { label: "AutoEmbed", value: "AUTO", star: false, category: "multi", movie: id => `https://player.autoembed.cc/embed/movie/${id}?server=1`, tv: (id,s,e) => `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}?server=1` }
+        { label: "VidFast Multi", value: "VIDF", star: true, category: "multi", movie: id => `https://vidfast.pro/movie/${id}`, tv: (id,s,e) => `https://vidfast.pro/tv/${id}/${s}/${e}` }
+    ];
+
+    const EXTRA_RELIABLE = [
+        // These use IMDB id and are known to work with SkyStream extractors
+        { label: "Vidsrc XYZ", movie: imdb => `https://vidsrc.xyz/embed/movie?imdb=${imdb}`, tv: (imdb,s,e) => `https://vidsrc.xyz/embed/tv?imdb=${imdb}&season=${s}&episode=${e}` },
+        { label: "2Embed CC", movie: imdb => `https://www.2embed.cc/embed/${imdb}`, tv: (imdb,s,e) => `https://www.2embed.cc/embedtv/${imdb}&s=${s}&e=${e}` },
+        { label: "AutoEmbed", movie: tmdb => `https://autoembed.co/movie/tmdb/${tmdb}`, tv: (tmdb,s,e) => `https://autoembed.co/tv/tmdb/${tmdb}-${s}-${e}` },
+        { label: "Vidsrc To", movie: imdb => `https://vidsrc.to/embed/movie/${imdb}`, tv: (imdb,s,e) => `https://vidsrc.to/embed/tv/${imdb}/${s}/${e}` },
+        { label: "SuperEmbed", movie: imdb => `https://multiembed.mov/directstream.php?video_id=${imdb}&tmdb=0`, tv: (imdb,s,e) => `https://multiembed.mov/directstream.php?video_id=${imdb}&tmdb=0&s=${s}&e=${e}` }
     ];
 
     async function getHome(cb) {
         try {
             const endpoints = [
                 { path: "/tmdb/trending/all/week", title: "Trending Now" },
-                { path: "/tmdb/trending/all/day", title: "Top 10 Today" },
                 { path: "/tmdb/discover/movie?sort_by=primary_release_date.desc&page=1&vote_count.gte=10", title: "Latest Movies" },
                 { path: "/tmdb/discover/tv?sort_by=first_air_date.desc&page=1&vote_count.gte=10", title: "Latest TV Shows" },
-                { path: "/tmdb/movie/upcoming?page=1", title: "Upcoming Movies" },
-                { path: "/tmdb/tv/airing_today?page=1", title: "Airing Today" },
                 { path: "/tmdb/movie/popular?page=1", title: "Popular Movies" },
                 { path: "/tmdb/tv/popular?page=1", title: "Popular TV Shows" },
                 { path: "/tmdb/movie/top_rated?page=1", title: "Top Rated Movies" },
                 { path: "/tmdb/tv/top_rated?page=1", title: "Top Rated TV Shows" },
-                { path: "/tmdb/movie/now_playing?page=1", title: "Now Playing" },
-                { path: "/tmdb/tv/on_the_air?page=1", title: "On The Air" },
                 { path: "/tmdb/discover/movie?with_original_language=hi&sort_by=popularity.desc&page=1", title: "Bollywood - Hindi Movies" },
-                { path: "/tmdb/discover/tv?with_original_language=hi&sort_by=popularity.desc&page=1", title: "Hindi TV Shows & Web Series" },
-                { path: "/tmdb/discover/movie?with_original_language=ta&sort_by=popularity.desc&page=1", title: "Tamil Movies" },
-                { path: "/tmdb/discover/movie?with_original_language=te&sort_by=popularity.desc&page=1", title: "Telugu Movies" },
-                { path: "/tmdb/discover/movie?with_original_language=ml&sort_by=popularity.desc&page=1", title: "Malayalam Movies" },
-                { path: "/tmdb/discover/movie?with_original_language=kn&sort_by=popularity.desc&page=1", title: "Kannada Movies" },
                 { path: "/tmdb/discover/movie?with_original_language=en&sort_by=popularity.desc&page=1&vote_count.gte=100", title: "Hollywood Hindi Dubbed" },
-                { path: "/tmdb/discover/movie?with_original_language=en&sort_by=popularity.desc&page=2&vote_count.gte=100", title: "Hollywood Hindi Dubbed - More" },
                 { path: "/tmdb/discover/movie?with_original_language=en&sort_by=vote_average.desc&vote_count.gte=500&page=1", title: "Dual Audio Movies - Hindi + English" },
                 { path: "/tmdb/discover/tv?with_original_language=en&sort_by=popularity.desc&page=1", title: "Dual Audio Series - Hindi + English" },
                 { path: "/tmdb/discover/movie?with_origin_country=IN&with_original_language=hi&sort_by=popularity.desc&page=2", title: "South Indian Hindi Dubbed" },
+                { path: "/tmdb/discover/movie?with_original_language=ta&sort_by=popularity.desc&page=1", title: "Tamil Movies" },
+                { path: "/tmdb/discover/movie?with_original_language=te&sort_by=popularity.desc&page=1", title: "Telugu Movies" },
                 { path: "/tmdb/discover/tv?with_genres=16&with_origin_country=JP&sort_by=popularity.desc&page=1", title: "Anime - Japanese Sub" },
                 { path: "/tmdb/discover/tv?with_genres=16&with_original_language=hi&sort_by=popularity.desc&page=1", title: "Anime - Hindi Dubbed" },
-                { path: "/tmdb/discover/movie?with_genres=16&sort_by=popularity.desc&page=1", title: "Animation Movies" },
-                { path: "/tmdb/discover/tv?with_genres=16&sort_by=vote_average.desc&vote_count.gte=100&page=1", title: "Top Anime Series" },
                 { path: "/tmdb/discover/movie?with_genres=28&page=1", title: "Action Movies" },
-                { path: "/tmdb/discover/movie?with_genres=12&page=1", title: "Adventure Movies" },
                 { path: "/tmdb/discover/movie?with_genres=35&page=1", title: "Comedy Movies" },
                 { path: "/tmdb/discover/movie?with_genres=27&page=1", title: "Horror Movies" },
-                { path: "/tmdb/discover/movie?with_genres=53&page=1", title: "Thriller Movies" },
-                { path: "/tmdb/discover/movie?with_genres=18&page=1", title: "Drama Movies" },
-                { path: "/tmdb/discover/movie?with_genres=878&page=1", title: "Sci-Fi Movies" },
-                { path: "/tmdb/discover/movie?with_genres=10749&page=1", title: "Romance Movies" },
-                { path: "/tmdb/discover/movie?with_genres=10751&page=1", title: "Family Movies" },
-                { path: "/tmdb/discover/tv?with_genres=10759&page=1", title: "Action & Adventure Series" },
-                { path: "/tmdb/discover/tv?with_genres=18&page=1", title: "Drama Series" },
-                { path: "/tmdb/discover/tv?with_genres=35&page=1", title: "Comedy Series" },
-                { path: "/tmdb/discover/tv?with_genres=80&page=1", title: "Crime Series" },
-                { path: "/tmdb/discover/tv?with_genres=10765&page=1", title: "Sci-Fi & Fantasy Series" },
-                { path: "/tmdb/discover/tv?with_genres=9648&page=1", title: "Mystery Series" },
-                { path: "/tmdb/discover/tv?with_origin_country=KR&sort_by=popularity.desc&page=1", title: "K-Drama - Korean Series" },
-                { path: "/tmdb/discover/tv?with_origin_country=GB&sort_by=popularity.desc&page=1", title: "British Series" }
+                { path: "/tmdb/discover/tv?with_origin_country=KR&sort_by=popularity.desc&page=1", title: "K-Drama - Korean Series" }
             ];
 
             const results = await Promise.all(endpoints.map(async ep => {
@@ -331,20 +408,63 @@
             let tmdbId, title, year, season, episode;
 
             async function ensureMovieMeta(id, t, y) {
-                if (t && y) return { title: t, year: y };
-                try { const d = await apiFetch(`/tmdb/movie/${id}`); return { title: d.title || t || "", year: (d.release_date || "").slice(0, 4) || y || "" }; } catch { return { title: t || "", year: y || "" }; }
+                try {
+                    const d = await apiFetch(`/tmdb/movie/${id}`);
+                    return { title: d.title || t || "", year: (d.release_date || "").slice(0, 4) || y || "", imdb: d.imdb_id || null };
+                } catch {
+                    return { title: t || "", year: y || "", imdb: null };
+                }
             }
             async function ensureTvMeta(id, t, y) {
-                if (t && y) return { title: t, year: y };
-                try { const d = await apiFetch(`/tmdb/tv/${id}`); return { title: d.name || t || "", year: (d.first_air_date || "").slice(0, 4) || y || "" }; } catch { return { title: t || "", year: y || "" }; }
+                try {
+                    const d = await apiFetch(`/tmdb/tv/${id}`);
+                    let imdb = null;
+                    try {
+                        const ext = await apiFetch(`/tmdb/tv/${id}/external_ids`);
+                        imdb = ext.imdb_id || null;
+                    } catch {}
+                    // Fallback to direct TMDB API with known key if worker fails
+                    if (!imdb) {
+                        try {
+                            const directRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/external_ids?api_key=d64117f26031a428449f102ced3aba73`, {
+                                headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" }
+                            });
+                            if (directRes.ok) {
+                                const ext = await directRes.json();
+                                imdb = ext.imdb_id || null;
+                            }
+                        } catch {}
+                    }
+                    return { title: d.name || t || "", year: (d.first_air_date || "").slice(0, 4) || y || "", imdb: imdb };
+                } catch {
+                    // Even if main fetch fails, try direct TMDB for imdb
+                    try {
+                        const directRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/external_ids?api_key=d64117f26031a428449f102ced3aba73`, {
+                            headers: { "Accept": "application/json" }
+                        });
+                        if (directRes.ok) {
+                            const ext = await directRes.json();
+                            if (ext.imdb_id) return { title: t || "", year: y || "", imdb: ext.imdb_id };
+                        }
+                    } catch {}
+                    return { title: t || "", year: y || "", imdb: null };
+                }
             }
+
+            let imdbId = null;
 
             if (type === "movie") {
                 tmdbId = parts[1];
                 title = parts[2] ? decodeURIComponent(parts[2]) : "";
                 year = parts[3] || "";
                 const meta = await ensureMovieMeta(tmdbId, title, year);
-                title = meta.title; year = meta.year;
+                title = meta.title; year = meta.year; imdbId = meta.imdb;
+                if (!imdbId) {
+                    try {
+                        const d = await apiFetch(`/tmdb/movie/${tmdbId}`);
+                        imdbId = d.imdb_id || null;
+                    } catch {}
+                }
                 season = 0; episode = 0;
             } else if (type === "episode") {
                 tmdbId = parts[1];
@@ -353,13 +473,13 @@
                 season = parseInt(parts[4], 10) || 1;
                 episode = parseInt(parts[5], 10) || 1;
                 const meta = await ensureTvMeta(tmdbId, title, year);
-                title = meta.title; year = meta.year;
+                title = meta.title; year = meta.year; imdbId = meta.imdb;
             } else if (type === "tv") {
                 tmdbId = parts[1];
                 title = parts[2] ? decodeURIComponent(parts[2]) : "";
                 year = parts[3] || "";
                 const meta = await ensureTvMeta(tmdbId, title, year);
-                title = meta.title; year = meta.year;
+                title = meta.title; year = meta.year; imdbId = meta.imdb;
                 season = 1; episode = 1;
             } else {
                 throw new Error("Invalid URL type: " + type);
@@ -368,15 +488,53 @@
             const streams = [];
             const isMovie = type === "movie";
 
+            // First try extra reliable providers that use IMDB/TMDB
+            if (imdbId || tmdbId) {
+                for (const prov of EXTRA_RELIABLE) {
+                    try {
+                        let embedUrl = "";
+                        if (prov.label.includes("AutoEmbed")) {
+                            embedUrl = isMovie ? prov.movie(tmdbId) : prov.tv(tmdbId, season, episode);
+                        } else {
+                            const idToUse = imdbId || tmdbId;
+                            embedUrl = isMovie ? prov.movie(idToUse) : prov.tv(idToUse, season, episode);
+                        }
+                        if (!embedUrl) continue;
+                        try {
+                            if (typeof globalThis.loadExtractor === 'function') {
+                                const ext = await globalThis.loadExtractor(embedUrl);
+                                if (Array.isArray(ext) && ext.length > 0) {
+                                    for (const s of ext) {
+                                        if (s && s.url) {
+                                            const q = s.quality ? `${prov.label} - ${s.quality}` : prov.label;
+                                            streams.push(new StreamResult({ url: s.url, quality: q, headers: s.headers || { "Referer": "https://rivestream.ru/" }, subtitles: s.subtitles || [] }));
+                                        }
+                                    }
+                                    continue;
+                                }
+                            }
+                        } catch {}
+                        try {
+                            const res = await fetch(embedUrl, { headers: { "Referer": "https://rivestream.ru/", "Origin": "https://rivestream.ru", "User-Agent": "Mozilla/5.0" } });
+                            if (res.ok) {
+                                const html = await res.text();
+                                const found = extractStreamsFromHtml(html, prov.label);
+                                if (found.length > 0) { streams.push(...found); continue; }
+                            }
+                        } catch {}
+                        streams.push(new StreamResult({ url: embedUrl, quality: prov.label + " (embed)", headers: { "Referer": "https://rivestream.ru/", "Origin": "https://rivestream.ru" } }));
+                    } catch {}
+                }
+            }
+
+            // Then try RiveStream's own curated providers
             for (const prov of PROVIDERS) {
                 try {
                     let embedUrl = "";
                     if (isMovie) embedUrl = prov.movie(tmdbId);
                     else embedUrl = prov.tv(tmdbId, season, episode);
-
                     if (!embedUrl) continue;
 
-                    // Try extractor first
                     try {
                         if (typeof globalThis.loadExtractor === 'function') {
                             const ext = await globalThis.loadExtractor(embedUrl);
@@ -392,7 +550,6 @@
                         }
                     } catch {}
 
-                    // Try fetch and extract m3u8/mp4
                     try {
                         const res = await fetch(embedUrl, { headers: { "Referer": "https://rivestream.ru/", "Origin": "https://rivestream.ru", "User-Agent": "Mozilla/5.0" } });
                         if (res.ok) {
@@ -416,10 +573,9 @@
                         }
                     } catch {}
 
-                    // Fallback embed
                     streams.push(new StreamResult({
                         url: embedUrl,
-                        quality: prov.label + (prov.star ? " ⭐ (embed)" : " (embed)"),
+                        quality: prov.label + (prov.star ? " â­ (embed)" : " (embed)"),
                         headers: { "Referer": "https://rivestream.ru/", "Origin": "https://rivestream.ru" }
                     }));
                 } catch {}
@@ -434,7 +590,11 @@
                 deduped.push(s);
             }
 
-            cb({ success: true, data: deduped });
+            // Prioritize direct m3u8/mp4 over embed fallback
+            const direct = deduped.filter(s => s.url.includes(".m3u8") || s.url.includes(".mp4"));
+            const finalList = direct.length > 0 ? direct : deduped;
+
+            cb({ success: true, data: finalList });
         } catch (e) {
             cb({ success: false, errorCode: "STREAMS_ERROR", message: e.toString() });
         }
