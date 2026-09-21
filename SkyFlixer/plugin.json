@@ -1,0 +1,16 @@
+{
+  "packageName": "com.skyflixer.plugin",
+  "name": "SkyFlixer",
+  "version": 2,
+  "baseUrl": "https://skyflixer.skyflixer1.workers.dev/api",
+  "description": "Watch free movies, TV shows & anime from SkyFlixer.fun - Bollywood, Hollywood, Hindi dubbed, Dual Audio, South Indian Hindi, 1080p. Latest, Trending, Popular, Top Rated, Now Playing, Anime, Action, Horror etc. Powered by SkyFlixer API.",
+  "authors": ["SkyFlixer"],
+  "languages": ["en", "hi"],
+  "categories": ["Movies", "Series", "Anime", "Hindi Dubbed", "Dual Audio"],
+  "domains": [
+    { "name": "skyflixer1.workers.dev", "url": "https://skyflixer.skyflixer1.workers.dev/api" },
+    { "name": "batman18677.workers.dev", "url": "https://skyflixer.batman18677.workers.dev/api" },
+    { "name": "superman88911u.workers.dev", "url": "https://skyflixer.superman88911u.workers.dev/api" },
+    { "name": "univers-9009.workers.dev", "url": "https://skyflixer.univers-9009.workers.dev/api" }
+  ]
+}
