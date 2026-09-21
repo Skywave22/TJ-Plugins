@@ -1,0 +1,15 @@
+{
+  "packageName": "com.rivestream.plugin",
+  "name": "RiveStream",
+  "version": 1,
+  "baseUrl": "https://rivestream.ru",
+  "description": "Watch movies & TV shows from RiveStream.ru - 40+ servers (Videasy, VidSrc, VidLink, SmashyStream, PrimeSrc, Mapple, VidFast, SuperFlix, etc). Latest, Trending, Popular, Top Rated, Bollywood, Hindi Dubbed, Dual Audio, Anime, K-Drama.",
+  "authors": ["RiveStream"],
+  "languages": ["en", "hi","Others"],
+  "categories": ["Movies", "Series", "Anime", "K-Drama"],
+  "domains": [
+    { "name": "rivestream.ru", "url": "https://rivestream.ru" },
+    { "name": "rivestream.app", "url": "https://www.rivestream.app" },
+    { "name": "backend.rivestream.app", "url": "https://backend.rivestream.app" }
+  ]
+}
