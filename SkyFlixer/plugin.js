@@ -60,35 +60,61 @@
         }
     }
 
-    // -------------------- Helpers --------------------
+    // -------------------- Config & Failover --------------------
+    const FALLBACK_API_BASES = [
+        "https://skyflixer.skyflixer1.workers.dev/api",
+        "https://skyflixer.batman18677.workers.dev/api",
+        "https://skyflixer.superman88911u.workers.dev/api",
+        "https://skyflixer.univers-9009.workers.dev/api"
+    ];
+
     function getApiBase() {
-        let base = (typeof manifest !== 'undefined' && manifest.baseUrl) ? manifest.baseUrl : "https://skyflixer.skyflixer1.workers.dev/api";
+        let base = (typeof manifest !== 'undefined' && manifest.baseUrl) ? manifest.baseUrl : FALLBACK_API_BASES[0];
         base = base.replace(/\/+$/, "");
         if (!base.endsWith("/api")) base = base + "/api";
         return base;
     }
 
+    function getAllApiBases() {
+        const primary = getApiBase();
+        const list = [primary];
+        for (const b of FALLBACK_API_BASES) {
+            if (!list.includes(b)) list.push(b);
+        }
+        return list;
+    }
+
     async function apiFetch(path, options = {}) {
-        const apiBase = getApiBase();
-        const url = path.startsWith("http") ? path : apiBase + (path.startsWith("/") ? path : "/" + path);
-        const headers = {
-            "Origin": "https://skyflixer.fun",
-            "Referer": "https://skyflixer.fun/",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "application/json",
-            ...(options.headers || {})
-        };
-        const res = await fetch(url, { ...options, headers });
-        if (!res.ok) {
-            const txt = await res.text().catch(() => "");
-            throw new Error(`HTTP ${res.status} for ${path} - ${txt.slice(0,300)}`);
+        const bases = getAllApiBases();
+        let lastErr = null;
+        for (const apiBase of bases) {
+            const url = path.startsWith("http") ? path : apiBase + (path.startsWith("/") ? path : "/" + path);
+            const headers = {
+                "Origin": "https://skyflixer.fun",
+                "Referer": "https://skyflixer.fun/",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+                ...(options.headers || {})
+            };
+            try {
+                const res = await fetch(url, { ...options, headers });
+                if (!res.ok) {
+                    const txt = await res.text().catch(() => "");
+                    throw new Error(`HTTP ${res.status} for ${path} - ${txt.slice(0,300)}`);
+                }
+                const text = await res.text();
+                try {
+                    return JSON.parse(text);
+                } catch {
+                    return text;
+                }
+            } catch (e) {
+                lastErr = e;
+                // try next base
+                continue;
+            }
         }
-        const text = await res.text();
-        try {
-            return JSON.parse(text);
-        } catch {
-            return text;
-        }
+        throw lastErr || new Error("All API bases failed for " + path);
     }
 
     function tmdbToItem(item) {
@@ -114,20 +140,174 @@
         });
     }
 
+    // -------------------- Hanerix Unpacker & Stream Extractor --------------------
+    function unpackPacker(p, a, c, k) {
+        // p = packed code string, a = base, c = count, k = dict array
+        try {
+            for (let i = c - 1; i >= 0; i--) {
+                if (k[i]) {
+                    let key;
+                    if (a === 36 || a === 62 || a <= 36) {
+                        // convert i to base a
+                        key = i.toString(a);
+                    } else {
+                        key = i.toString(a);
+                    }
+                    const re = new RegExp("\\b" + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\b", "g");
+                    p = p.replace(re, k[i]);
+                }
+            }
+            return p;
+        } catch {
+            return p;
+        }
+    }
+
+    function extractHanerixLinks(html) {
+        const streams = [];
+        if (!html) return streams;
+        try {
+            // Look for eval(function(p,a,c,k,e,d){...}) pattern
+            const evalMatch = html.match(/eval\(function\(p,a,c,k,e,d\)\{[^}]+\}\('([^']*)',\s*(\d+),\s*(\d+),\s*'([^']*)'\.split\('\|'\)/);
+            // Alternative regex with double quotes and more generic
+            let packed = null, base = 0, count = 0, dict = [];
+            if (evalMatch) {
+                packed = evalMatch[1];
+                base = parseInt(evalMatch[2], 10);
+                count = parseInt(evalMatch[3], 10);
+                dict = evalMatch[4].split('|');
+            } else {
+                // try second pattern: search for .split('|')))
+                const m2 = html.match(/eval\(function\(p,a,c,k,e,d\)[\s\S]*?\('(.*?)',\s*(\d+),\s*(\d+),\s*'(.*?)'\.split/);
+                if (m2) {
+                    packed = m2[1];
+                    base = parseInt(m2[2], 10);
+                    count = parseInt(m2[3], 10);
+                    dict = m2[4].split('|');
+                }
+            }
+            let unpacked = null;
+            if (packed && base && count && dict.length) {
+                unpacked = unpackPacker(packed, base, count, dict);
+            } else {
+                unpacked = html; // fallback use html itself
+            }
+
+            // Now search for links object: "hls4":"...master.m3u8" or links = {...}
+            // Try to find all master.m3u8 urls
+            const masterRe = /https?:\/\/[^"'\\\s]+\/[^"'\\\s]*master\.m3u8[^"'\\\s]*/g;
+            const hlsRe = /"hls\d*"\s*:\s*"([^"]+)"|'hls\d*'\s*:\s*'([^']+)'/g;
+            const streamRe = /\/stream\/[^"'\\\s]+\.m3u8/g;
+
+            let m;
+            const seen = {};
+            // Extract from unpacked
+            let candidates = [];
+            // direct https m3u8
+            const httpsM3u8 = (unpacked.match(masterRe) || []).concat((html.match(masterRe) || []));
+            candidates = candidates.concat(httpsM3u8);
+
+            // hls links object
+            let match;
+            while ((match = hlsRe.exec(unpacked)) !== null) {
+                const url = match[1] || match[2];
+                if (url) candidates.push(url);
+            }
+            while ((match = hlsRe.exec(html)) !== null) {
+                const url = match[1] || match[2];
+                if (url) candidates.push(url);
+            }
+
+            // relative /stream/... urls
+            const relStreams = (unpacked.match(streamRe) || []).concat((html.match(streamRe) || []));
+            for (const rel of relStreams) {
+                // make absolute to hanerix.com
+                if (rel.startsWith("/")) {
+                    candidates.push("https://hanerix.com" + rel);
+                } else {
+                    candidates.push(rel);
+                }
+            }
+
+            // Also look for links.hls4, links.hls2 patterns after unpack
+            const linksObjMatch = unpacked.match(/links\s*=\s*(\{[^}]+\})/);
+            if (linksObjMatch) {
+                try {
+                    // Extract urls from that object string
+                    const inner = linksObjMatch[1];
+                    const urlMatches = inner.match(/https?:\/\/[^"']+m3u8[^"']*|\"\/stream\/[^"]+\"/g) || [];
+                    for (let u of urlMatches) {
+                        u = u.replace(/^"|"$/g, '');
+                        if (u.startsWith("/")) u = "https://hanerix.com" + u;
+                        candidates.push(u);
+                    }
+                } catch {}
+            }
+
+            // Deduplicate and clean
+            for (let u of candidates) {
+                if (!u) continue;
+                u = u.replace(/\\u002F/g, "/").replace(/\\\//g, "/").replace(/\\"/g, '"').trim();
+                // fix escaped
+                if (u.startsWith("/")) u = "https://hanerix.com" + u;
+                if (seen[u]) continue;
+                if (u.includes("image.tmdb.org")) continue;
+                if (u.length > 2000) continue;
+                seen[u] = true;
+                // Determine quality from url or label
+                let quality = "StreamHG";
+                if (u.includes("hls2") || u.includes("480") || u.includes("513")) quality = "StreamHG - 480p";
+                else if (u.includes("hls4") || u.includes("1080") || u.includes("2255")) quality = "StreamHG - 1080p";
+                else if (u.includes("720") || u.includes("1095")) quality = "StreamHG - 720p";
+                else if (u.includes("master")) quality = "StreamHG - Auto";
+
+                streams.push(new StreamResult({
+                    url: u,
+                    quality: quality,
+                    headers: {
+                        "Referer": "https://hanerix.com/",
+                        "Origin": "https://hanerix.com",
+                        "User-Agent": "Mozilla/5.0"
+                    }
+                }));
+            }
+
+        } catch (e) {
+            // ignore
+        }
+        return streams;
+    }
+
     function extractStreamsFromHtml(html, label) {
         const found = [];
         const seen = {};
         if (!html || typeof html !== 'string') return found;
-        const m3u8 = html.match(/https?:\/\/[^\s"'\\<>]+?\.m3u8[^\s"'\\<>]*/g) || [];
-        const mp4 = html.match(/https?:\/\/[^\s"'\\<>]+?\.mp4[^\s"'\\<>]*/g) || [];
+
+        // First try hanerix specific
+        if (html.includes("hanerix.com") || html.includes("jwplayer") || html.includes("hls4") || html.includes("eval(function(p,a,c,k,e,d)")) {
+            const hanerix = extractHanerixLinks(html);
+            if (hanerix.length > 0) return hanerix;
+        }
+
+        // Generic m3u8 / mp4
+        const m3u8 = html.match(/https?:\/\/[^\\s\"'<>]+?\.m3u8[^\\s\"'<>]*/g) || [];
+        const mp4 = html.match(/https?:\/\/[^\\s\"'<>]+?\.mp4[^\\s\"'<>]*/g) || [];
+        // Also look for file: "https://..." patterns
+        const fileMatches = html.match(/file\s*:\s*["'](https?:\/\/[^"']+\.(?:m3u8|mp4)[^"']*)["']/gi) || [];
         const all = m3u8.concat(mp4);
+        for (const fm of fileMatches) {
+            const uMatch = fm.match(/https?:\/\/[^"']+/);
+            if (uMatch) all.push(uMatch[0]);
+        }
+
         for (let i = 0; i < all.length; i++) {
             let u = all[i];
             u = u.replace(/\\u002F/g, "/").replace(/\\\//g, "/");
             if (seen[u]) continue;
             if (u.includes("image.tmdb.org")) continue;
-            if (u.length > 1500) continue;
-            if (u.includes(".jpg") || u.includes(".png") || u.includes(".webp")) continue;
+            if (u.length > 2000) continue;
+            if (u.includes(".jpg") || u.includes(".png") || u.includes(".webp") || u.includes(".svg")) continue;
+            if (u.includes("google") && u.includes("ads")) continue;
             seen[u] = true;
             found.push(new StreamResult({
                 url: u,
@@ -138,75 +318,38 @@
         return found;
     }
 
-    // -------------------- getHome with Many Sections --------------------
+    // -------------------- getHome - CLEANED (only useful sections) --------------------
     async function getHome(cb) {
         try {
-            // Define all sections - grouped logically
             const endpoints = [
-                // --- Trending / Top ---
+                // Trending / Latest / Popular / Top Rated - Core
                 { path: "/tmdb/trending/all/week", title: "Trending Now" },
-                { path: "/tmdb/trending/all/day", title: "Top 10 Today" },
-
-                // --- Latest ---
                 { path: "/tmdb/discover/movie?sort_by=primary_release_date.desc&page=1&vote_count.gte=10", title: "Latest Movies" },
                 { path: "/tmdb/discover/tv?sort_by=first_air_date.desc&page=1&vote_count.gte=10", title: "Latest TV Shows" },
-                { path: "/tmdb/movie/upcoming?page=1", title: "Upcoming Movies" },
-                { path: "/tmdb/tv/airing_today?page=1", title: "Airing Today" },
-
-                // --- Popular / Top Rated / Now Playing ---
                 { path: "/tmdb/movie/popular?page=1", title: "Popular Movies" },
                 { path: "/tmdb/tv/popular?page=1", title: "Popular TV Shows" },
                 { path: "/tmdb/movie/top_rated?page=1", title: "Top Rated Movies" },
                 { path: "/tmdb/tv/top_rated?page=1", title: "Top Rated TV Shows" },
-                { path: "/tmdb/movie/now_playing?page=1", title: "Now Playing in Theaters" },
-                { path: "/tmdb/tv/on_the_air?page=1", title: "On The Air" },
 
-                // --- Hindi / Bollywood / South Indian / Dubbed / Dual Audio ---
-                // Bollywood = Hindi original language, India origin, popular
+                // Hindi / Bollywood / Dubbed / Dual Audio - Essential for this audience
                 { path: "/tmdb/discover/movie?with_original_language=hi&sort_by=popularity.desc&page=1", title: "Bollywood - Hindi Movies" },
-                { path: "/tmdb/discover/tv?with_original_language=hi&sort_by=popularity.desc&page=1", title: "Hindi TV Shows & Web Series" },
-                // South Indian languages
-                { path: "/tmdb/discover/movie?with_original_language=ta&sort_by=popularity.desc&page=1", title: "Tamil Movies" },
-                { path: "/tmdb/discover/movie?with_original_language=te&sort_by=popularity.desc&page=1", title: "Telugu Movies" },
-                { path: "/tmdb/discover/movie?with_original_language=ml&sort_by=popularity.desc&page=1", title: "Malayalam Movies" },
-                { path: "/tmdb/discover/movie?with_original_language=kn&sort_by=popularity.desc&page=1", title: "Kannada Movies" },
-                // Hollywood Hindi Dubbed - popular English movies (SkyFlixer provides Hindi dub for these)
                 { path: "/tmdb/discover/movie?with_original_language=en&sort_by=popularity.desc&page=1&vote_count.gte=100", title: "Hollywood Hindi Dubbed" },
-                { path: "/tmdb/discover/movie?with_original_language=en&sort_by=popularity.desc&page=2&vote_count.gte=100", title: "Hollywood Hindi Dubbed - More" },
-                // Dual Audio - same concept, SkyFlixer offers dual audio for most Hollywood
                 { path: "/tmdb/discover/movie?with_original_language=en&sort_by=vote_average.desc&vote_count.gte=500&page=1", title: "Dual Audio Movies - Hindi + English" },
                 { path: "/tmdb/discover/tv?with_original_language=en&sort_by=popularity.desc&page=1", title: "Dual Audio Series - Hindi + English" },
-                // South Indian Hindi Dubbed (popular South Indian dubbed in Hindi - we use Hindi language + South Indian origin trick: actually fetch Hindi movies that are South Indian remakes)
                 { path: "/tmdb/discover/movie?with_origin_country=IN&with_original_language=hi&sort_by=popularity.desc&page=2", title: "South Indian Hindi Dubbed" },
+                { path: "/tmdb/discover/movie?with_original_language=ta&sort_by=popularity.desc&page=1", title: "Tamil Movies" },
+                { path: "/tmdb/discover/movie?with_original_language=te&sort_by=popularity.desc&page=1", title: "Telugu Movies" },
 
-                // --- Anime ---
+                // Anime - Important
                 { path: "/tmdb/discover/tv?with_genres=16&with_origin_country=JP&sort_by=popularity.desc&page=1", title: "Anime - Japanese Sub" },
                 { path: "/tmdb/discover/tv?with_genres=16&with_original_language=hi&sort_by=popularity.desc&page=1", title: "Anime - Hindi Dubbed" },
-                { path: "/tmdb/discover/movie?with_genres=16&sort_by=popularity.desc&page=1", title: "Animation Movies" },
-                { path: "/tmdb/discover/tv?with_genres=16&sort_by=vote_average.desc&vote_count.gte=100&page=1", title: "Top Anime Series" },
 
-                // --- Genres Movies ---
+                // Genres - Only most useful
                 { path: "/tmdb/discover/movie?with_genres=28&page=1", title: "Action Movies" },
-                { path: "/tmdb/discover/movie?with_genres=12&page=1", title: "Adventure Movies" },
                 { path: "/tmdb/discover/movie?with_genres=35&page=1", title: "Comedy Movies" },
                 { path: "/tmdb/discover/movie?with_genres=27&page=1", title: "Horror Movies" },
-                { path: "/tmdb/discover/movie?with_genres=53&page=1", title: "Thriller Movies" },
                 { path: "/tmdb/discover/movie?with_genres=18&page=1", title: "Drama Movies" },
-                { path: "/tmdb/discover/movie?with_genres=878&page=1", title: "Sci-Fi Movies" },
-                { path: "/tmdb/discover/movie?with_genres=10749&page=1", title: "Romance Movies" },
-                { path: "/tmdb/discover/movie?with_genres=10751&page=1", title: "Family Movies" },
-
-                // --- Genres TV ---
-                { path: "/tmdb/discover/tv?with_genres=10759&page=1", title: "Action & Adventure Series" },
-                { path: "/tmdb/discover/tv?with_genres=18&page=1", title: "Drama Series" },
-                { path: "/tmdb/discover/tv?with_genres=35&page=1", title: "Comedy Series" },
-                { path: "/tmdb/discover/tv?with_genres=80&page=1", title: "Crime Series" },
-                { path: "/tmdb/discover/tv?with_genres=10765&page=1", title: "Sci-Fi & Fantasy Series" },
-                { path: "/tmdb/discover/tv?with_genres=9648&page=1", title: "Mystery Series" },
-
-                // --- Korean, British etc ---
-                { path: "/tmdb/discover/tv?with_origin_country=KR&sort_by=popularity.desc&page=1", title: "K-Drama - Korean Series" },
-                { path: "/tmdb/discover/tv?with_origin_country=GB&sort_by=popularity.desc&page=1", title: "British Series" }
+                { path: "/tmdb/discover/tv?with_origin_country=KR&sort_by=popularity.desc&page=1", title: "K-Drama - Korean Series" }
             ];
 
             const results = await Promise.all(endpoints.map(async ep => {
@@ -221,10 +364,8 @@
             }));
 
             const data = {};
-            // Preserve order but also avoid empty categories
             results.forEach(r => {
                 if (r.items && r.items.length > 0) {
-                    // Avoid duplicates across categories? Keep as is, SkyStream will dedup UI
                     data[r.title] = r.items;
                 }
             });
@@ -362,7 +503,7 @@
         }
     }
 
-    // -------------------- loadStreams --------------------
+    // -------------------- loadStreams - FIXED with direct extraction --------------------
     async function loadStreams(url, cb) {
         try {
             const parts = url.split(":");
@@ -440,11 +581,35 @@
                 throw new Error("Invalid URL type for streams: " + type);
             }
 
-            const data = await apiFetch("/videohosting/fetch", {
-                method: "POST",
-                body: JSON.stringify(body),
-                headers: { "Content-Type": "application/json" }
-            });
+            // Fetch with failover - try all bases until success
+            let data = null;
+            let lastErr = null;
+            for (const base of getAllApiBases()) {
+                try {
+                    const fetchUrl = base + "/videohosting/fetch";
+                    const res = await fetch(fetchUrl, {
+                        method: "POST",
+                        body: JSON.stringify(body),
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Origin": "https://skyflixer.fun",
+                            "Referer": "https://skyflixer.fun/",
+                            "User-Agent": "Mozilla/5.0"
+                        }
+                    });
+                    if (!res.ok) {
+                        const txt = await res.text().catch(() => "");
+                        throw new Error(`HTTP ${res.status} ${txt.slice(0,200)}`);
+                    }
+                    const txt = await res.text();
+                    data = JSON.parse(txt);
+                    if (data) break;
+                } catch (e) {
+                    lastErr = e;
+                    continue;
+                }
+            }
+            if (!data) throw lastErr || new Error("videohosting fetch failed");
 
             const servers = data.servers || {};
             const streams = [];
@@ -452,10 +617,39 @@
             for (const [key, srv] of Object.entries(servers)) {
                 if (!srv || !srv.available || !srv.embedUrl) continue;
                 const hostLabel = (srv.hostName || key || "unknown").toString();
+                const embedUrl = srv.embedUrl;
 
+                // 1. Try direct hanerix extraction first (most reliable)
+                if (embedUrl.includes("hanerix.com") || key === "streamhg") {
+                    try {
+                        const res = await fetch(embedUrl, {
+                            headers: {
+                                "Referer": "https://skyflixer.fun/",
+                                "Origin": "https://skyflixer.fun",
+                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                            }
+                        });
+                        if (res.ok) {
+                            const html = await res.text();
+                            const direct = extractHanerixLinks(html);
+                            if (direct.length > 0) {
+                                streams.push(...direct);
+                                continue;
+                            }
+                            // also try generic
+                            const generic = extractStreamsFromHtml(html, hostLabel);
+                            if (generic.length > 0) {
+                                streams.push(...generic);
+                                continue;
+                            }
+                        }
+                    } catch {}
+                }
+
+                // 2. Try loadExtractor (built-in)
                 try {
                     if (typeof globalThis.loadExtractor === 'function') {
-                        const extResult = await globalThis.loadExtractor(srv.embedUrl);
+                        const extResult = await globalThis.loadExtractor(embedUrl);
                         if (Array.isArray(extResult) && extResult.length > 0) {
                             for (const s of extResult) {
                                 if (s && s.url) {
@@ -471,10 +665,13 @@
                             continue;
                         }
                     }
-                } catch {}
+                } catch (e) {
+                    // console.log("extractor failed for " + embedUrl + " " + e.message);
+                }
 
+                // 3. Try fetch + regex for m3u8/mp4
                 try {
-                    const res = await fetch(srv.embedUrl, {
+                    const res = await fetch(embedUrl, {
                         headers: {
                             "Referer": "https://skyflixer.fun/",
                             "Origin": "https://skyflixer.fun",
@@ -494,13 +691,13 @@
                             if (iframeUrl.startsWith("//")) iframeUrl = "https:" + iframeUrl;
                             if (iframeUrl.startsWith("/")) {
                                 try {
-                                    const base = new URL(srv.embedUrl);
+                                    const base = new URL(embedUrl);
                                     iframeUrl = base.origin + iframeUrl;
                                 } catch {}
                             }
                             try {
                                 const res2 = await fetch(iframeUrl, {
-                                    headers: { "Referer": srv.embedUrl, "Origin": "https://skyflixer.fun" }
+                                    headers: { "Referer": embedUrl, "Origin": "https://skyflixer.fun" }
                                 });
                                 if (res2.ok) {
                                     const html2 = await res2.text();
@@ -515,23 +712,38 @@
                     }
                 } catch {}
 
+                // 4. Fallback: return embed URL itself - SkyStream may still be able to handle via internal extractor at playback time
+                // But mark quality properly so user sees server name
                 streams.push(new StreamResult({
-                    url: srv.embedUrl,
+                    url: embedUrl,
                     quality: hostLabel + " (embed)",
                     headers: { "Referer": "https://skyflixer.fun/", "Origin": "https://skyflixer.fun" }
                 }));
             }
 
+            // Deduplicate
             const seen = new Set();
             const deduped = [];
             for (const s of streams) {
                 if (!s || !s.url) continue;
-                if (seen.has(s.url)) continue;
-                seen.add(s.url);
+                // Normalize url
+                let u = s.url;
+                if (seen.has(u)) continue;
+                seen.add(u);
                 deduped.push(s);
             }
 
-            cb({ success: true, data: deduped });
+            // If we have at least one direct m3u8/mp4, prioritize them over embed fallback
+            const direct = deduped.filter(s => s.url.includes(".m3u8") || s.url.includes(".mp4"));
+            const finalList = direct.length > 0 ? direct : deduped;
+
+            if (finalList.length === 0) {
+                // Return empty but success true to avoid greyed? Actually should return empty with success true so app shows no streams rather than error
+                // But we try to ensure at least embed urls are returned
+                cb({ success: true, data: deduped });
+            } else {
+                cb({ success: true, data: finalList });
+            }
         } catch (e) {
             cb({ success: false, errorCode: "STREAMS_ERROR", message: e.toString() + " " + (e.stack || "") });
         }
