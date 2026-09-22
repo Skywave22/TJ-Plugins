@@ -32,7 +32,7 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 | **MovieBlast** | app.cloud-mb.xyz | Movie, TvSeries | en, hi, ta, te | — |
 | **NetMirror** | netmirror.center | Movie, TvSeries | en, hi | — |
 | **RiveStream** | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
-| **SSR Movies** | ssrmovies.moda | Movies, Series | hi, en | ✅ |
+| **SSR Movies** | ssrmovies.blue | Movies, Series | hi, en | ✅ |
 | **SubDubAnime** | www.subdubanime.site | TvSeries, Movie | en, hi | — |
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working
@@ -55,13 +55,34 @@ Verified on 2026-09-22 with `skystream test`: the dashboard (`getHome`) had to l
 | **KatMovieHD** | ✅ | ✅ | |
 | **NetMirror** | ✅ | ✅ | |
 | **SubDubAnime** | ✅ | ✅ | |
-| **MovieBlast** | ✅ | ⚠️ | Streams on some titles only — 1 of 8 tested resolved |
-| **KDMaza** | ✅ | ❌ | Dashboard loads, no streams resolved on 8 titles tested |
-| **SSRMovies** | ✅ | ❌ | Dashboard loads, no streams resolved on 8 titles tested |
+| **SSRMovies** | ✅ | ✅ | **Fixed 2026-09-22** — moved to `ssrmovies.blue`; resolves HubCloud, GDFlix and Watch-Online mirrors. 6 of 6 posts tested returned streams |
+| **KDMaza** | ✅ | ✅ | **Fixed 2026-09-22** — hoster hosts updated. 3 of 4 dramas tested resolved |
+| **MovieBlast** | ✅ | ✅ | **Fixed 2026-09-22** — every quality variant now labelled instead of reading "Auto" |
 
-**10 fully working · 1 partial · 2 catalog-only**
+**13 fully working · 0 partial**
 
-All 13 dashboards load. The three at the bottom still browse and search fine — they just
-returned no playable file for the titles tested, which usually means the upstream host is
-down or the title has no copy yet.
+All 13 dashboards and all 13 stream loaders now resolve. The three bottom rows were broken
+before 2026-09-22 and have been repaired:
 
+- **KDMaza** — HubCloud and GDFlix both changed hosts and the plugin still had the old ones
+  hardcoded, so every lookup came back empty. Now points at `hubcloud.ist` and
+  `new4.gdflix.io`. Episodes typically resolve one 720p file.
+- **SSRMovies** — the site moved to `ssrmovies.blue` (and `ssrmovies.land` is dead), and the
+  code was waiting on a helper that doesn't exist in the plugin runtime, so no mirror was
+  ever tried. Now resolves HubCloud, GDFlix and Watch-Online inline; 3–6 streams per title.
+- **MovieBlast** — its streams always worked, but they all displayed as "Auto" because the
+  quality was dropped instead of being carried into the label. Titles absent from its
+  catalogue now report that plainly rather than showing an empty list.
+
+### Known upstream limitations
+
+- **MovieBlast's catalogue is smaller than TMDB's.** Newly released titles and some series
+  (e.g. Breaking Bad, Stranger Things) are simply not in it yet. The plugin says so instead
+  of showing a blank screen.
+- **Some titles have no working hoster.** An episode or post whose HubCloud and GDFlix links
+  are both expired will return nothing; picking another episode usually works.
+- **`new4.gdflix.io` sits behind a Cloudflare rule that rejects HTTP/1.1.** GDFlix links
+  therefore can't be exercised from the Node test harness, but they work in the SkyStream
+  app, which speaks HTTP/2. HubCloud (plain GET) works everywhere.
+- **`watch-online.mom` only serves a real player on some of its links.** The rest are ad
+  interstitials. The plugin tries each one and keeps whatever resolves.
