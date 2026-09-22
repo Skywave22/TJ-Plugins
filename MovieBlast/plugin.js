@@ -448,13 +448,21 @@
                 title: tjson.title || tjson.name,
                 year: parseInt(String(tjson.release_date || tjson.first_air_date || "").slice(0, 4)) || null
             };
-            if (!mediaInfo.title) return cb({ success: true, data: [] });
+            if (!mediaInfo.title) {
+                return cb({ success: false, errorCode: "NOT_FOUND", message: "TMDB has no title for this id." });
+            }
 
             // 1) search the MovieBlast API
             var searchUrl = BASE_URL + "/api/search/" + encodeURIComponent(mediaInfo.title) + "/" + TOKEN;
             var searchData = await fetchJson(searchUrl, SEARCH_HEADERS);
             var match = findBestMatch(mediaInfo, searchData.search || []);
-            if (!match) return cb({ success: true, data: [] });
+            if (!match) {
+                return cb({
+                    success: false,
+                    errorCode: "NO_STREAMS",
+                    message: "MovieBlast does not have \"" + mediaInfo.title + "\" in its catalog yet. Its library is smaller than TMDB's, so newly released titles are often missing - try another title."
+                });
+            }
 
             // 2) details -> videos
             var isSeries = /serie/i.test(match.type || "") || mediaType === "tv";
@@ -473,24 +481,48 @@
                 targetVideos = detail.videos || [];
             }
 
-            var streams = targetVideos.map(function (vid) {
-                var rawUrl = vid.link;
-                if (!rawUrl) return null;
+            // NOTE: StreamResult has no `quality` field — the runtime class only
+            // accepts url, source, headers, subtitles, drmKid, drmKey and
+            // licenseUrl, so a `quality` property is silently dropped. Every
+            // stream therefore used to show as "Auto" in the player, making
+            // 1080P / 720P / 360P indistinguishable, and the sort below keyed
+            // off a property that did not exist. Rank first, then fold the
+            // quality and language into `source` where they are actually kept.
+            var ranked = targetVideos.filter(function (vid) { return vid && vid.link; })
+                .map(function (vid) {
+                    return {
+                        vid: vid,
+                        q: matchQuality(vid.server),
+                        rank: parseInt(String(matchQuality(vid.server)).match(/\d+/) || [0])
+                    };
+                })
+                .sort(function (a, b) { return b.rank - a.rank; });
+
+            var streams = ranked.map(function (r) {
+                var rawUrl = r.vid.link;
                 var httpsUrl = rawUrl.indexOf("http") === 0 ? rawUrl : "https://" + rawUrl;
+                var server = String(r.vid.server || "").trim();
+                var lang = String(r.vid.lang || "").trim();
+                // Prefer the site's own server label ("720P - HEVC") over our
+                // normalised guess, since it carries the codec info.
+                var label = server || r.q;
+                if (lang && label.toLowerCase().indexOf(lang.toLowerCase()) < 0) {
+                    label = label + " - " + lang;
+                }
                 return new StreamResult({
                     url: generateSignedUrl(httpsUrl),
-                    quality: matchQuality(vid.server),
+                    source: "MovieBlast - " + label,
                     headers: STREAM_HEADERS
                 });
-            }).filter(function (s) { return s !== null; });
-
-            // sort: highest resolution first
-            streams.sort(function (a, b) {
-                var pa = parseInt(String(a.quality || "").match(/\d+/) || [0]);
-                var pb = parseInt(String(b.quality || "").match(/\d+/) || [0]);
-                return pb - pa;
             });
 
+            if (!streams.length) {
+                return cb({
+                    success: false,
+                    errorCode: "NO_STREAMS",
+                    message: "MovieBlast lists \"" + mediaInfo.title + "\" but has no video files attached to it yet - try another title."
+                });
+            }
             cb({ success: true, data: streams });
         } catch (e) {
             cb({ success: false, errorCode: "PARSE_ERROR", message: "loadStreams failed: " + (e.message || e) });

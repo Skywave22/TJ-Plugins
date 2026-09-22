@@ -1,13 +1,14 @@
 /*
  * SSR Movies — SkyStream plugin
- * Site:   https://ssrmovies.moda  (ssrmovies.com redirects here)
+ * Site:   https://ssrmovies.blue  (.moda and .com 302 here; .land is dead)
  * Source: Hindi-dubbed / dual-audio movies, Bollywood, Hollywood, web series, WWE
  *
  * Flow:
  *   catalog  : WordPress REST API (/wp-json/wp/v2/posts)
- *   streams  : linkszilla short-links unlock to mirrors:
- *                watch-online.mom  -> JS-packed JWPlayer -> direct HLS (m3u8)
- *                hubcloud.cx       -> HubCloud extractor (skystream-extractors)
+ *   streams  : secure.linkszilla.top/view/<ID> -> 302 -> mirror list page, then
+ *                hubcloud.ist/drive/ID  -> gamerxyt hubcloud.php -> signed R2 file
+ *                new4.gdflix.io/file/ID -> POST {action:direct|instant} -> direct file
+ *                watch-online.mom       -> DEAD (ad interstitial, no player)
  *
  * Exports: getHome / search / load / loadStreams
  */
@@ -22,6 +23,17 @@
 
     var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
     var PLACEHOLDER = 'https://placehold.co/400x600.png?text=SSR+Movies';
+
+    // ── hoster endpoints ────────────────────────────────────────────
+    // These rotate constantly. The old hosts still answer, but only with
+    // a 302, and a 302 on a POST returns an HTML redirect page instead of
+    // the JSON the resolver needs — so pin the CURRENT hosts.
+    //   hubcloud.cx    -> 302 -> hubcloud.ist
+    //   gdflix.dev     -> 302 -> new4.gdflix.io
+    //   new3.gdflix.io -> 302 -> new4.gdflix.io
+    var HUBCLOUD_HOST = 'hubcloud.ist';
+    var GDFLIX_HOST = 'new4.gdflix.io';
+    var GD_KEY = 'acbe2066696a1d44345698deb3d9ebf9ae9bbdfd';
 
     // WP category ids (verified against the live API)
     var ROWS = [
@@ -394,7 +406,98 @@
         return out;
     }
 
+    // ── HubCloud ────────────────────────────────────────────────────────
+    // hubcloud.ist/drive/<ID> exposes a #download anchor pointing at
+    // gamerxyt.com/hubcloud.php?host=hubcloud&id=<ID>&token=<...>, which
+    // serves a signed *.r2.cloudflarestorage.com URL plus pixeldrain
+    // fallbacks. Pure GET chain, so it resolves fine from the JS runtime.
+    async function resolveHubcloud(pageUrl) {
+        var out = [];
+        try {
+            var html = await withTimeout(getText(pageUrl, 'https://' + HUBCLOUD_HOST + '/'), 12000);
+            var dl = (html.match(/id=["']download["'][^>]*href=["']([^"']+)["']/) ||
+                      html.match(/href=["']([^"']*hubcloud\.php[^"']+)["']/) || [])[1];
+            if (!dl) return out;
+            dl = dl.replace(/&amp;/g, '&');
+            if (/hubcloud\.php|gamerxyt/.test(dl)) {
+                var d2 = await withTimeout(getText(dl, pageUrl), 12000);
+                var r2 = (d2.match(/https:\/\/[^"'\s<>]*r2\.cloudflarestorage\.com[^"'\s<>]+/) || [])[0];
+                if (r2) out.push(r2.replace(/&amp;/g, '&'));
+                if (!out.length) {
+                    var pd = (d2.match(/https:\/\/pixeldrain\.(?:com|dev)\/u\/[A-Za-z0-9]+/) || [])[0];
+                    if (pd) out.push(pd + '?download');
+                }
+            } else if (/r2\.cloudflarestorage\.com|pixeldrain/.test(dl)) {
+                out.push(dl);
+            }
+        } catch (_) {}
+        return out;
+    }
+
+    // ── GDFlix ──────────────────────────────────────────────────────────
+    // POST https://new4.gdflix.io/{file|mfile}/<ID> with x-token -> JSON.
+    // `mfile` + action=instant returns a direct googleusercontent URL;
+    // `file` + action=direct returns a drive.google.com id that then has to
+    // be unwrapped through the usercontent confirm form.
+    //
+    // NOTE: new4.gdflix.io sits behind a Cloudflare rule that only accepts
+    // HTTP/2. curl --http2 gets 200, curl --http1.1 gets 403 "Just a
+    // moment...". Node-based HTTP clients (axios/undici) speak HTTP/1.1
+    // only, so this resolves in the SkyStream app but not under
+    // `skystream test`. Kept because it is the highest-quality mirror.
+    async function resolveGdflix(pageUrl) {
+        var instant = [], direct = [];
+        try {
+            var fid = (String(pageUrl).match(/\/file\/([A-Za-z0-9]+)/) || [])[1];
+            if (!fid) return { instant: instant, urls: direct };
+            var pageUrlRef = 'https://' + GDFLIX_HOST + '/file/' + fid;
+            function post(action, pathBase) {
+                return withTimeout(http_post('https://' + GDFLIX_HOST + '/' + pathBase + '/' + fid, {
+                    'User-Agent': UA,
+                    'Referer': pageUrlRef,
+                    'x-token': GDFLIX_HOST,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }, 'action=' + action + '&key=' + GD_KEY + '&action_token='), 15000).then(function (r) {
+                    try { return JSON.parse((r && r.body) || '{}'); } catch (_) { return {}; }
+                });
+            }
+            var res = await Promise.all([
+                post('instant', 'mfile').catch(function () { return {}; }),
+                post('direct', 'file').catch(function () { return {}; })
+            ]);
+            var iu = String(res[0].url || '').replace(/&amp;/g, '&');
+            if (!res[0].error && iu.indexOf('http') === 0) instant.push(iu);
+
+            var u = String(res[1].url || '').replace(/&amp;/g, '&');
+            if (!res[1].error && u.indexOf('http') === 0) {
+                var gid = (u.match(/[?&]id=([A-Za-z0-9_-]{10,})/) || [])[1];
+                if (/drive\.google\.com/.test(u) && gid) {
+                    try {
+                        var chtml = await withTimeout(getText('https://drive.usercontent.google.com/download?id=' + gid + '&export=download', 'https://drive.google.com/'), 12000);
+                        var action = (chtml.match(/action="([^"]+)"/) || [])[1] || '';
+                        if (action) {
+                            var fields = [], fr = /name="([^"]+)"\s+value="([^"]*)"/g, fm;
+                            while ((fm = fr.exec(chtml))) fields.push(fm[1] + '=' + encodeURIComponent(fm[2]).replace(/%20/g, '+'));
+                            if (fields.length) direct.push(action + '?' + fields.join('&'));
+                        }
+                    } catch (_) {}
+                    if (!direct.length) direct.push('https://drive.google.com/uc?export=download&id=' + gid);
+                } else {
+                    direct.push(u);
+                }
+            }
+        } catch (_) {}
+        return { instant: instant, urls: direct };
+    }
+
     // watch-online.mom embed -> packed JWPlayer -> links.hls2 m3u8
+    //
+    // Works on only SOME embeds. Of the four watch-online links on a typical
+    // post, roughly one serves the real packed JWPlayer (~16KB, resolves to a
+    // premilkyway.com hls2 master.m3u8) while the rest serve a ~5.7KB ad
+    // interstitial (jquery + hg-function.js + a pickDirect click-catcher) with
+    // no player at all. Returning null on those is correct, and loadStreams
+    // keeps trying the other mirrors, so the good one still gets used.
     async function resolveWatchOnline(embedUrl, label) {
         var html = await withTimeout(getText(embedUrl, 'https://watch-online.mom/'), 12000);
         var pm = html.match(/eval\(function\(p,a,c,k,e,d\)[\s\S]*?<\/script>/);
@@ -465,18 +568,36 @@
                             if (/watch-online\.[a-z]+\/e\//i.test(mu)) {
                                 var ws = await resolveWatchOnline(mu, t.label);
                                 if (ws) streams.push(ws);
-                            } else if (/hubcloud\.[a-z]+\/drive\//i.test(mu) && typeof loadExtractor === 'function') {
-                                try {
-                                    var ex = await withTimeout(loadExtractor(mu), 12000);
-                                    if (ex && ex.length) {
-                                        for (var x = 0; x < ex.length; x++) {
-                                            if (ex[x] && ex[x].url) {
-                                                ex[x].quality = 'HubCloud • ' + ql;
-                                                streams.push(ex[x]);
-                                            }
-                                        }
-                                    }
-                                } catch (_) {}
+                            } else if (/hubcloud\.[a-z]+\/drive\//i.test(mu)) {
+                                // Was `loadExtractor(mu)` — that global does not
+                                // exist in the SkyStream runtime (it is not in the
+                                // CLI sandbox and not injected by the app), so the
+                                // whole branch silently never ran and SSR resolved
+                                // nothing. Inline resolver instead.
+                                var hc = await withTimeout(resolveHubcloud(mu), 14000);
+                                for (var x = 0; x < hc.length; x++) {
+                                    streams.push(mkStream({
+                                        url: hc[x],
+                                        quality: 'HubCloud' + (x > 0 ? ' #' + (x + 1) : '') + ' • ' + ql,
+                                        headers: { 'User-Agent': UA }
+                                    }));
+                                }
+                            } else if (/gdflix\.[a-z]+\/file\//i.test(mu)) {
+                                var gd = await withTimeout(resolveGdflix(mu), 16000);
+                                for (var gi = 0; gi < gd.instant.length; gi++) {
+                                    streams.push(mkStream({
+                                        url: gd.instant[gi],
+                                        quality: 'GDFlix Instant • ' + ql,
+                                        headers: { 'User-Agent': UA }
+                                    }));
+                                }
+                                for (var gu = 0; gu < gd.urls.length; gu++) {
+                                    streams.push(mkStream({
+                                        url: gd.urls[gu],
+                                        quality: 'GDFlix' + (gu > 0 ? ' #' + (gu + 1) : '') + ' • ' + ql,
+                                        headers: { 'User-Agent': UA }
+                                    }));
+                                }
                             }
                         }
                         if (streams.length >= ENOUGH_STREAMS) stop = true;

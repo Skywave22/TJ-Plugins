@@ -16,9 +16,9 @@
     //  one .episode-row per episode with HubCloud + GDFlix host
     //  links, both resolvable in-plugin to direct files:
     //
-    //    hubcloud.cx/drive/ID -> gamerxyt hubcloud.php -> signed
-    //      *.r2.cloudflarestorage.com direct file
-    //    gdflix.dev/file/ID -> POST {action:direct} -> drive.google id
+    //    hubcloud.ist/drive/ID -> gamerxyt hubcloud.php -> signed
+    //      *.r2.cloudflarestorage.com direct file (+ pixeldrain fallback)
+    //    new4.gdflix.io/file/ID -> POST {action:direct} -> drive.google id
     //      -> usercontent confirm form -> direct file (206 ranged)
     //
     //  Resolution happens at Play time, so links are always fresh.
@@ -28,6 +28,17 @@
 
     const SITE = "https://kdramasmaza.net";
     const API = SITE + "/wp-json/wp/v2";
+
+    // ── hoster endpoints ────────────────────────────────────────────
+    // These move often. Both old hosts still answer, but only with a 302
+    // to the new one, and a 302 on a POST yields an HTML redirect page
+    // instead of the JSON the resolver expects — which silently killed
+    // every GDFlix link. Pin the CURRENT hosts here.
+    //   hubcloud.cx  -> 302 -> hubcloud.ist
+    //   gdflix.dev   -> 302 -> new4.gdflix.io
+    //   new3.gdflix.io -> 302 -> new4.gdflix.io
+    const HUBCLOUD_HOST = "hubcloud.ist";
+    const GDFLIX_HOST   = "new4.gdflix.io";
     const HUB = "kdramasmaza.com.pk";
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
@@ -36,7 +47,18 @@
 
     function mkItem(obj)    { try { return new MultimediaItem(obj); } catch (_) { return obj; } }
     function mkEpisode(obj) { try { return new Episode(obj); } catch (_) { return obj; } }
-    function mkStream(obj)  { try { return new StreamResult(obj); } catch (_) { return obj; } }
+    // StreamResult's constructor only accepts url, source, headers, subtitles,
+    // drmKid, drmKey and licenseUrl — it silently drops anything else, so a
+    // `quality` passed in would vanish. Assign it after construction instead,
+    // and use it as the source label when no explicit source was given.
+    function mkStream(obj)  {
+        var s;
+        try {
+            s = new StreamResult({ url: obj.url, source: obj.source || obj.quality, headers: obj.headers });
+            s.quality = obj.quality;
+        } catch (_) { s = obj; }
+        return s;
+    }
 
     function withTimeout(promise, ms) {
         return Promise.race([
@@ -103,7 +125,7 @@
     async function resolveHubcloud(pageUrl) {
         const out = [];
         try {
-            const html = await getText(pageUrl, { "Referer": "https://hubcloud.cx/" });
+            const html = await getText(pageUrl, { "Referer": "https://" + HUBCLOUD_HOST + "/" });
             let dl = (html.match(/id=["']download["'][^>]*href=["']([^"']+)["']/) ||
                       html.match(/href=["']([^"']*hubcloud\.php[^"']+)["']/) || [])[1];
             if (!dl) return out;
@@ -124,8 +146,8 @@
     }
 
     // GDFlix: the file page exposes a JSON API on its own path.
-    //   POST https://new3.gdflix.io/file/<ID>   (urlencoded works)
-    //     x-token: new3.gdflix.io
+    //   POST https://new4.gdflix.io/file/<ID>   (urlencoded works)
+    //     x-token: new4.gdflix.io
     //     action=direct & key=<static> & action_token=
     //   -> { url: "https://drive.google.com/open?id=<GID>" }
     // The Drive id is unwrapped through the usercontent confirm form:
@@ -137,15 +159,15 @@
     async function resolveGdflix(pageUrl) {
         const fid = (String(pageUrl).match(/\/file\/([A-Za-z0-9]+)/) || [])[1];
         if (!fid) return { host: "GDFlix", urls: [], instant: [] };
-        const postUrl = "https://new3.gdflix.io/file/" + fid;
+        const postUrl = "https://" + GDFLIX_HOST + "/file/" + fid;
         // warm the host first: primes any Cloudflare cookies the engine
         // persists per-host (node-fetch gets challenged here, the app is not)
         await getText(postUrl, { "Referer": SITE + "/" });
         async function post(action, pathBase) {
-            const r = await withTimeout(http_post("https://new3.gdflix.io/" + pathBase + "/" + fid, {
+            const r = await withTimeout(http_post("https://" + GDFLIX_HOST + "/" + pathBase + "/" + fid, {
                 "User-Agent": UA,
                 "Referer": postUrl,
-                "x-token": "new3.gdflix.io",
+                "x-token": GDFLIX_HOST,
                 "Content-Type": "application/x-www-form-urlencoded"
             }, "action=" + action + "&key=" + GD_KEY + "&action_token="), 15000);
             try { return JSON.parse((r && r.body) || "{}"); } catch (e) { return {}; }
