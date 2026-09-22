@@ -25,60 +25,43 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 | **CineFreak** | cinefreak.net | Movie, TvSeries | hi, en, mal | — |
 | **CineHD** | cinehd.vc | Movie, TvSeries | en | — |
 | **FMoviess** | fmoviess.tv | Movies, Series, Anime | en | ✅ |
-| **HiCine** | hicine.sbs | Movies, Series, Anime | hi, en | ✅ |
-| **Hindi Dubbed** | invidious mirrors | Movie, TvSeries | hi, en | — |
+| **HiCine** | api.hicine.sbs | Movies, Series, Anime | hi, en | ✅ |
+| **Hindi Dubbed** | www.youtube.com | Movie, TvSeries | hi, en | — |
 | **KDramaMaza** | kdramasmaza.net | TvSeries | en, hi, ur | — |
-| **KatMovieHD** | katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
-| **MovieBlast** | cloud-mb.xyz | Movie, TvSeries | en, hi, ta, te | — |
+| **KatMovieHD** | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
+| **MovieBlast** | app.cloud-mb.xyz | Movie, TvSeries | en, hi, ta, te | — |
 | **NetMirror** | netmirror.center | Movie, TvSeries | en, hi | — |
-| **RiveStream** | rivestream.ru | Movie, TvSeries | en, hi, ta, te | — |
+| **RiveStream** | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
 | **SSR Movies** | ssrmovies.moda | Movies, Series | hi, en | ✅ |
-| **SubDubAnime** | subdubanime.site | TvSeries, Movie | en, hi | — |
+| **SubDubAnime** | www.subdubanime.site | TvSeries, Movie | en, hi | — |
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working
 mirror from the plugin's settings gear if the primary domain is blocked.
 
-### RiveStream
+## ✅ Working Plugins
 
-`rivestream.ru` is a Next.js front-end. Its catalog is TMDB-backed and its playback is
-delegated to ~43 third-party embeds declared in the site bundle; its own `/embed/agg` page
-is only an `<iframe>` wrapper around whichever embed is selected, so the site itself never
-resolves a stream URL.
+Verified on 2026-09-22 with `skystream test`: the dashboard (`getHome`) had to load, then
+`loadStreams` had to return at least one playable link.
 
-This plugin builds the catalog from TMDB and resolves playback against rivestream's own
-**Rive** server backends directly, keyed by the same TMDB id the site uses:
+| Plugin | Dashboard | Streams | Notes |
+|---|---|---|---|
+| **RiveStream** | ✅ | ✅ | **Hindi audio by default** — Hindi-dubbed tracks are ranked first, then English, Tamil, Telugu, Urdu, Malayalam, Bengali |
+| **321Movies** | ✅ | ✅ | |
+| **CineFreak** | ✅ | ✅ | |
+| **CineHD** | ✅ | ✅ | Most streams per title |
+| **FMoviess** | ✅ | ✅ | |
+| **HiCine** | ✅ | ✅ | |
+| **Hindi Dubbed** | ✅ | ✅ | |
+| **KatMovieHD** | ✅ | ✅ | |
+| **NetMirror** | ✅ | ✅ | |
+| **SubDubAnime** | ✅ | ✅ | |
+| **MovieBlast** | ✅ | ⚠️ | Streams on some titles only — 1 of 8 tested resolved |
+| **KDMaza** | ✅ | ❌ | Dashboard loads, no streams resolved on 8 titles tested |
+| **SSRMovies** | ✅ | ❌ | Dashboard loads, no streams resolved on 8 titles tested |
 
-| Rive backend | Label |
-|---|---|
-| `rive-citadel` | Citadel |
-| `rive-primevids` | Prvibd |
-| `rive-flowcast` | River |
-| `rive-quasar` | Kutti |
-| `rive-guru` | Gbru |
-| `rive-hindicast` | HindiSk |
+**10 fully working · 1 partial · 2 catalog-only**
 
-Rive sources are offered first; if a title has none, other servers are used as fallback so
-playback still works. Expect multi-language and Hindi-dubbed tracks on most titles.
+All 13 dashboards load. The three at the bottom still browse and search fine — they just
+returned no playable file for the titles tested, which usually means the upstream host is
+down or the title has no copy yet.
 
-## 🛠 For Developers
-
-Every push to `main` triggers a GitHub Action that runs `skystream deploy` and republishes
-`dist/plugins.json` + the `.sky` bundles automatically.
-
-```bash
-npm install -g skystream-cli
-
-skystream validate                                    # lint every plugin
-skystream test -p <Plugin> -f getHome                 # dashboard categories
-skystream test -p <Plugin> -f search  -q "inception"  # search
-skystream test -p <Plugin> -f load    -q "<item url>" # details + episodes
-skystream test -p <Plugin> -f loadStreams -q "<item url>"  # playable links
-skystream deploy -u https://raw.githubusercontent.com/<you>/<repo>/main
-```
-
-- Plugin folders follow the SkyStream layout: `<Name>/plugin.json` + `<Name>/plugin.js`
-- Always build URLs from `manifest.baseUrl`
-- Use the helper classes: `MultimediaItem`, `Episode`, `StreamResult`
-
-See the [SkyStream Plugin Development Guide](https://github.com/akashdh11/skystream-tools/blob/main/DEVELOPER.md)
-for the full API reference.

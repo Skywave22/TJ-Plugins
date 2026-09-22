@@ -71,6 +71,27 @@
 
     const MAX_STREAMS = 18;
 
+    // ─────────────────────────── languages ───────────────────────────
+    //
+    // Languages this plugin can serve, in priority order. The FIRST entry is
+    // the plugin's default language. This order is mirrored in plugin.json's
+    // "languages" array, and in the code by DEFAULT_LANGUAGE / LANG_CODES in
+    // the "language selection" block further down, which is what actually
+    // ranks the streams handed to the player.
+    //
+    //   1. hi   Hindi      <- default
+    //   2. en   English
+    //   3. ta   Tamil
+    //   4. te   Telugu
+    //   5. ur   Urdu
+    //   6. mal  Malayalam
+    //   7. bn   Bengali
+    //
+    // SkyStream Gen 2 offers no language dropdown for plugins, so "default"
+    // means "ranked first in the returned stream list", which is what the
+    // player starts on. See the "language selection" block for details.
+    const LANGUAGES = ["hi", "en", "ta", "te", "ur", "mal", "bn"];
+
     // ─────────────────────────── helpers ───────────────────────────
 
     function mkItem(obj)    { try { return new MultimediaItem(obj); } catch (_) { return obj; } }
@@ -496,20 +517,72 @@
         } catch (e) { return []; }
     }
 
-    /** Human label for a source: "Citadel - 720p English". */
-    function sourceLabel(item) {
-        const pretty = RIVE_PRETTY[item.scraper] || String(item.scraper || "Server");
-        let lb = String((item.src && (item.src.label || item.src.quality)) || "")
-            .replace(/\s+/g, " ")
-            .replace(/^\[[^\]]+\]\s*-?\s*/, "")
-            .replace(/\s*\|\s*(WEB-DL|BluRay|HDRip|WEBRip|HDTV)\b/gi, "")
-            .replace(/\s*:\s*[\d,p]+\s*$/, "")
-            .trim();
-        return lb ? (pretty + " - " + lb) : pretty;
-    }
-
     function pickUrl(src) {
         return (src && (src.url || src.file)) || null;
+    }
+
+    // ─────────────────────── language selection ───────────────────────
+    //
+    // The source API carries no discrete language field - the language is baked
+    // into the label string ("720p | Hindi"), so it has to be parsed out.
+    //
+    // DEFAULT_LANGUAGE is the audio this plugin selects by default. SkyStream
+    // Gen 2 has no language-dropdown setting for plugins (the plugin.json schema
+    // accepts only packageName, name, version, description, baseUrl, authors,
+    // languages and categories; only `domains` and `providers` render controls
+    // in the settings gear). The app plays the first stream returned, so the
+    // default is expressed by ranking DEFAULT_LANGUAGE sources ahead of the
+    // rest in the list handed back to the player.
+
+    const DEFAULT_LANGUAGE = LANGUAGES[0]; // "hi" - Hindi, the plugin default
+
+    const LANG_CODES = ["hi", "en", "ta", "te", "ur", "mal", "bn"];
+
+    // Language names and their common aliases, matched against the label text.
+    const LANG_PATTERNS = [
+        { code: "hi",  re: /\bhindi\b|\u0939\u093f\u0928\u094d\u0926\u0940|\bhin\b/i,                  name: "Hindi" },
+        { code: "ta",  re: /\btamil\b|\u0b85\u0ba4\u0bae\u0bbf\u0bb4\u0bcd|\btam\b/i,                  name: "Tamil" },
+        { code: "te",  re: /\btelugu\b|\u0c24\u0c46\u0c32\u0c41\u0c17\u0c41|\btel\b/i,                 name: "Telugu" },
+        { code: "ur",  re: /\burdu\b|\u0627\u0631\u062f\u0648/i,                                       name: "Urdu" },
+        { code: "mal", re: /\bmalayalam\b|\bmal\b/i,                                                    name: "Malayalam" },
+        { code: "bn",  re: /\bbengali\b|\bbangla\b|\bben\b/i,                                           name: "Bengali" },
+        { code: "en",  re: /\benglish\b|\beng\b/i,                                                      name: "English" }
+    ];
+
+    function langName(code) {
+        for (const l of LANG_PATTERNS) { if (l.code === code) return l.name; }
+        return String(code || "").toUpperCase();
+    }
+
+    /**
+     * Parse the audio language out of a source label.
+     * Returns a LANG_CODES entry, or "" when the label names no language
+     * (multi-audio masters that let the player switch tracks itself).
+     */
+    function sourceLang(item) {
+        const lb = String((item.src && (item.src.label || item.src.quality)) || "");
+        for (const l of LANG_PATTERNS) { if (l.re.test(lb)) return l.code; }
+        return "";
+    }
+
+    /** Quality portion of a label: "720p | Hindi" -> "720p". */
+    function sourceQuality(item) {
+        const lb = String((item.src && (item.src.quality || item.src.label)) || "")
+            .replace(/\s+/g, " ")
+            .trim();
+        const m = lb.match(/(\d{3,4}p|\b4k\b|\bhd\b)/i);
+        return m ? m[1].toLowerCase() : "";
+    }
+
+    /** Human label: "Citadel - Hindi 720p", language always first. */
+    function sourceLabel(item) {
+        const pretty = RIVE_PRETTY[item.scraper] || String(item.scraper || "Server");
+        const lang = sourceLang(item);
+        const q = sourceQuality(item);
+        const parts = [pretty];
+        if (lang) parts.push(langName(lang));
+        if (q) parts.push(q);
+        return parts.join(" - ");
     }
 
     async function loadStreams(url, cb) {
@@ -533,14 +606,17 @@
                 });
             }
 
-            // Resolve every wanted server concurrently.
+            // Phase 1: resolve every wanted server concurrently and collect all
+            // sources. Nothing is dropped here - language ranking happens next,
+            // so a Hindi track on a later server still beats an English one on
+            // an earlier one.
+            const all = [];
+            const seen = {};
             const batches = [];
             const CHUNK = 8;
             for (let i = 0; i < wanted.length; i += CHUNK) {
                 batches.push(wanted.slice(i, i + CHUNK));
             }
-            const streams = [];
-            const seen = {};
 
             for (const batch of batches) {
                 const results = await Promise.all(batch.map(function (scraper) {
@@ -548,24 +624,55 @@
                 }));
                 for (const group of results) {
                     for (const item of group) {
-                        if (streams.length >= MAX_STREAMS) break;
                         const u = pickUrl(item.src);
                         if (!u) continue;
-                        if (/embed/i.test(String((item.src && item.src.type) || ""))) continue;
+                        if (item.src.isEmbed === true) continue;
+                        if (/embed/i.test(String(item.src.type || ""))) continue;
                         // Skip subtitle-only variants.
-                        if (/\bsub\b/i.test(String((item.src && item.src.label) || ""))) continue;
+                        if (/\bsub\b/i.test(String(item.src.label || ""))) continue;
                         const key = String(u).split("?")[0];
                         if (seen[key]) continue;
                         seen[key] = 1;
-                        streams.push(mkStream({
-                            url: u,
-                            quality: String((item.src && (item.src.quality || item.src.label)) || "").trim() || null,
-                            source: sourceLabel(item),
-                            headers: nxHeaders()
-                        }));
+                        all.push({ item: item, url: u, lang: sourceLang(item) });
                     }
                 }
+            }
+
+            // Phase 2: rank by language. The default language comes first, then
+            // the remaining declared languages in the order of LANG_ORDER, then
+            // unnamed multi-audio masters, then anything unrecognised.
+            const LANG_ORDER = [DEFAULT_LANGUAGE].concat(LANG_CODES.filter(function (c) {
+                return c !== DEFAULT_LANGUAGE;
+            }));
+
+            function langRank(code) {
+                const i = LANG_ORDER.indexOf(code);
+                if (i >= 0) return i;
+                return code === "" ? LANG_ORDER.length : LANG_ORDER.length + 1;
+            }
+
+            // Stable sort: within one language tier the original server priority
+            // (Rive backends before fallbacks) is preserved.
+            const ranked = all.map(function (s, idx) {
+                return { s: s, idx: idx, rank: langRank(s.lang) };
+            }).sort(function (a, b) {
+                return (a.rank - b.rank) || (a.idx - b.idx);
+            }).map(function (x) { return x.s; });
+
+            // Phase 3: cap the list.
+            const streams = [];
+            for (const s of ranked) {
                 if (streams.length >= MAX_STREAMS) break;
+                // NOTE: StreamResult has no `quality` field - the runtime class
+                // only takes url, source, headers, subtitles, drmKid, drmKey
+                // and licenseUrl (the schema in DEVELOPER.md lists quality, but
+                // the injected class drops it). Quality therefore has to ride
+                // along inside `source`, which sourceLabel() already does.
+                streams.push(mkStream({
+                    url: s.url,
+                    source: sourceLabel(s.item),
+                    headers: nxHeaders()
+                }));
             }
 
             if (!streams.length) {
