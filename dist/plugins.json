@@ -256,31 +256,6 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.ssr.skystream.sky"
   },
   {
-    "packageName": "com.skyflixer.plugin",
-    "name": "SkyFlixer",
-    "version": 1,
-    "baseUrl": "https://skyflixer.fun",
-    "description": "SkyFlixer (skyflixer.fun) - free movies, TV shows, anime & cartoons. TMDB-powered catalog with rows for Hindi movies, anime and kids' cartoons, streamed from SkyFlixer's full multi-host server list - every online host is queried (CastVid, Citadel, AwsPly, Nitro, Multi-blue, Prvibd and more), not a fixed subset. Each manifest is fetched before it is offered, so dead links are filtered out rather than shown. Default audio: Hindi - Hindi-dubbed tracks are ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Verified live.",
-    "authors": [
-      "Skywave22"
-    ],
-    "languages": [
-      "hi",
-      "en",
-      "ta",
-      "te",
-      "ur",
-      "mal",
-      "bn"
-    ],
-    "categories": [
-      "Movie",
-      "TvSeries",
-      "Anime"
-    ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.skyflixer.plugin.sky"
-  },
-  {
     "packageName": "com.subdub.skystream",
     "name": "SubDubAnime",
     "version": 1,

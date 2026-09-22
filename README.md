@@ -17,7 +17,7 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 
 ## 📦 Plugins
 
-13 plugins. Categories and languages below are read from each plugin's own `plugin.json`.
+12 plugins. Categories and languages below are read from each plugin's own `plugin.json`.
 
 | Plugin | Source | Categories | Languages | Mirrors |
 |---|---|---|---|---|
@@ -31,7 +31,6 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 | **KatMovieHD** | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
 | **NetMirror** | netmirror.center | Movie, TvSeries | en, hi | — |
 | **RiveStream** | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
-| **SkyFlixer** | skyflixer.fun | Movie, TvSeries, Anime | hi, en, ta, te, ur, mal, bn | — |
 | **SSR Movies** | ssrmovies.blue | Movies, Series | hi, en | ✅ |
 | **SubDubAnime** | www.subdubanime.site | TvSeries, Movie | en, hi | — |
 
@@ -57,12 +56,11 @@ Verified on 2026-09-22 with `skystream test`: the dashboard (`getHome`) had to l
 | **SubDubAnime** | ✅ | ✅ | |
 | **SSR Movies** | ✅ | ✅ | **Fixed 2026-09-22** — moved to `ssrmovies.blue`; resolves HubCloud, GDFlix and Watch-Online mirrors. 6 of 6 posts tested returned streams |
 | **KDramaMaza** | ✅ | ✅ | **Fixed 2026-09-22** — hoster hosts updated. 3 of 4 dramas tested resolved |
-| **SkyFlixer** | ✅ | ✅ | **Added 2026-09-22** — most streams per title (up to 30 from ~11 hosts). Every manifest is fetched before being offered, so dead links are filtered out |
 
-**13 fully working · 0 partial**
+**12 fully working · 0 partial**
 
-All 13 dashboards and all 13 stream loaders now resolve. The three bottom rows were broken
-before 2026-09-22 and have been repaired:
+All 12 dashboards and all 12 stream loaders resolve. KDramaMaza and SSR Movies were both
+broken before 2026-09-22 and have been repaired:
 
 - **KDramaMaza** — HubCloud and GDFlix both changed hosts and the plugin still had the old ones
   hardcoded, so every lookup came back empty. Now points at `hubcloud.ist` and
@@ -70,23 +68,11 @@ before 2026-09-22 and have been repaired:
 - **SSR Movies** — the site moved to `ssrmovies.blue` (and `ssrmovies.land` is dead), and the
   code was waiting on a helper that doesn't exist in the plugin runtime, so no mirror was
   ever tried. Now resolves HubCloud, GDFlix and Watch-Online inline; 3–6 streams per title.
-**SkyFlixer** was added on the same date and **MovieBlast** was removed at the maintainer's
-request — its catalogue was a small subset of TMDB's, so most titles simply weren't in it.
-SkyFlixer covers the same ground with a far larger host list.
+**MovieBlast** and **SkyFlixer** have both been removed at the maintainer's request.
+MovieBlast's catalogue was a small subset of TMDB's, so most titles simply weren't in it.
 
 ### Known upstream limitations
 
-- **`skyflixer.fun`'s own API is down.** All four of its Cloudflare Worker backends
-  (`skyflixer1`, `batman18677`, `superman88911u`, `univers-9009`) answer only `/` and
-  `/health`; every other route — `/tmdb/*`, `/admin/*` and `/videohosting/fetch` — returns
-  Cloudflare error 1101. The plugin therefore builds its catalog from TMDB directly (the
-  same data those workers proxy, keyed by the same ids) and resolves playback against
-  SkyFlixer's source API. Nothing in the plugin depends on the dead workers.
-- **Not every SkyFlixer host serves working files.** Measured on 2026-09-22, the
-  `itsnitrox.tech` proxy that MbPly and MbBlast publish through returned 427 Forbidden on
-  all 22 of its links. Because links like that cannot be judged by looking at them, the
-  plugin fetches every playlist before offering it and ranks any unverifiable direct file
-  behind the ones that were seen to work.
 - **Some titles have no working hoster at all.** Long-running anime (One Piece, Naruto
   Shippuden) returned no playable file for the episode tested; the plugin says so rather
   than showing an empty list.
