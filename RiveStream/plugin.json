@@ -1,0 +1,20 @@
+{
+  "packageName": "com.rivestream.plugin",
+  "name": "RiveStream",
+  "version": 1,
+  "baseUrl": "https://rivestream.ru",
+  "description": "RiveStream (rivestream.ru) - \"Your Personal Streaming Oasis\". TMDB-powered catalog of movies & TV, streamed from rivestream's own Rive server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk) with multi-language and Hindi-dubbed tracks, plus fallback servers. Verified live.",
+  "authors": [
+    "Skywave22"
+  ],
+  "languages": [
+    "en",
+    "hi",
+    "ta",
+    "te"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries"
+  ]
+}
