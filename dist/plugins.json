@@ -131,7 +131,7 @@
   {
     "packageName": "com.kdramamaza.skystream",
     "name": "KDramaMaza",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://kdramasmaza.net",
     "description": "KDramaMaza (kdramasmaza.net) - Korean, Chinese, Turkish & Japanese dramas in Hindi/Urdu dubbed. Full episode lists, fast parallel resolution with HubCloud + GDFlix Instant direct-file servers (up to 1080p WEB-DL dual-audio). Verified live.",
     "authors": [
@@ -181,7 +181,7 @@
   {
     "packageName": "com.movieblast.provider",
     "name": "MovieBlast",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://app.cloud-mb.xyz",
     "description": "MovieBlast - Hindi, Tamil, Telugu & English Movies/Series with multi-quality streams. TMDB catalog + MovieBlast app API (HMAC-signed CDN links). Ported from Hindi-Nuvio.",
     "authors": [
@@ -245,23 +245,23 @@
   {
     "packageName": "com.ssr.skystream",
     "name": "SSR Movies",
-    "version": 3,
-    "baseUrl": "https://ssrmovies.moda",
+    "version": 4,
+    "baseUrl": "https://ssrmovies.blue",
     "domains": [
       {
-        "name": "ssrmovies.moda (primary)",
+        "name": "ssrmovies.blue (primary)",
+        "url": "https://ssrmovies.blue"
+      },
+      {
+        "name": "ssrmovies.moda",
         "url": "https://ssrmovies.moda"
       },
       {
         "name": "ssrmovies.com",
         "url": "https://ssrmovies.com"
-      },
-      {
-        "name": "ssrmovies.land",
-        "url": "https://ssrmovies.land"
       }
     ],
-    "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. Watch online + download mirrors",
+    "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. HubCloud + GDFlix download mirrors resolved to direct files",
     "authors": [
       "Arena Agent"
     ],
