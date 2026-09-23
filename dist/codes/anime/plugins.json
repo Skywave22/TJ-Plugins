@@ -1,0 +1,86 @@
+[
+ {
+  "packageName": "com.fmoviess.skystream",
+  "name": "FMoviess",
+  "version": 2,
+  "baseUrl": "https://fmoviess.tv",
+  "domains": [
+   {
+    "name": "fmoviess.tv (primary)",
+    "url": "https://fmoviess.tv"
+   }
+  ],
+  "description": "FMoviess - Watch HD Movies & TV Shows. Multi-server streams (MoviesAPI + VixSrc), multi-quality HLS with subtitles, Latest Updated section",
+  "authors": [
+   "Arena Agent"
+  ],
+  "languages": [
+   "en"
+  ],
+  "categories": [
+   "Movies",
+   "Series",
+   "Anime"
+  ],
+  "isAdult": false,
+  "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.fmoviess.skystream.sky"
+ },
+ {
+  "packageName": "com.hicine.skystream",
+  "name": "HiCine",
+  "version": 6,
+  "baseUrl": "https://api.hicine.sbs",
+  "domains": [
+   {
+    "name": "api.hicine.sbs (primary)",
+    "url": "https://api.hicine.sbs"
+   }
+  ],
+  "description": "HiCine - Bollywood & Hollywood movies, series and anime (Hindi dual-audio). Movies, WEB series, K-dramas and anime from hicine.sbs",
+  "authors": [
+   "Happy"
+  ],
+  "languages": [
+   "hi",
+   "en"
+  ],
+  "categories": [
+   "Movies",
+   "Series",
+   "Anime"
+  ],
+  "isAdult": false,
+  "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hicine.skystream.sky"
+ },
+ {
+  "packageName": "com.katmoviehd.skystream",
+  "name": "KatMovieHD",
+  "version": 4,
+  "baseUrl": "https://new.katmoviehd.top",
+  "domains": [
+   {
+    "name": "new.katmoviehd.top (primary)",
+    "url": "https://new.katmoviehd.top"
+   },
+   {
+    "name": "katworld.net mirror",
+    "url": "https://new.katmoviehd.top"
+   }
+  ],
+  "description": "KatMovieHD - Hindi dubbed & dual audio movies and web series. Watch online (StreamTape/StreamWish) + download mirrors (HubCloud)",
+  "authors": [
+   "Arena Agent"
+  ],
+  "languages": [
+   "hi",
+   "en"
+  ],
+  "categories": [
+   "Movies",
+   "Series",
+   "Anime"
+  ],
+  "isAdult": false,
+  "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.katmoviehd.skystream.sky"
+ }
+]

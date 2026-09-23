@@ -1,0 +1,9 @@
+{
+ "name": "TJ-Plugins (all)",
+ "packageName": "com.tjplugins.repo.all",
+ "description": "TJ-Plugins (all) — 13 plugin(s). Short code: tj",
+ "manifestVersion": 1,
+ "pluginLists": [
+  "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/codes/all/plugins.json"
+ ]
+}

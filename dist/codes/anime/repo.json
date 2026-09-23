@@ -1,0 +1,9 @@
+{
+ "name": "TJ-Plugins Anime",
+ "packageName": "com.tjplugins.repo.anime",
+ "description": "TJ-Plugins Anime — 3 plugin(s). Short code: tjanime",
+ "manifestVersion": 1,
+ "pluginLists": [
+  "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/codes/anime/plugins.json"
+ ]
+}

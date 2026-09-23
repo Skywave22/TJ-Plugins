@@ -1,0 +1,23 @@
+{
+  "packageName": "com.vidbox.plugin",
+  "name": "Vidbox",
+  "version": 1,
+  "baseUrl": "https://vidbox.vc",
+  "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Vidbox is a guide site that fans out to 47 embed servers; the one backend that hands back a directly playable manifest from a plugin runtime is its Nxsha multi-language server, so streams resolve through that. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every HLS/DASH manifest is verified before it is offered. Verified live.",
+  "authors": [
+    "Skywave22"
+  ],
+  "languages": [
+    "hi",
+    "en",
+    "ta",
+    "te",
+    "ur",
+    "mal",
+    "bn"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries"
+  ]
+}

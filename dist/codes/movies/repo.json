@@ -1,0 +1,9 @@
+{
+ "name": "TJ-Plugins Movies",
+ "packageName": "com.tjplugins.repo.movies",
+ "description": "TJ-Plugins Movies — 12 plugin(s). Short code: tjmovies",
+ "manifestVersion": 1,
+ "pluginLists": [
+  "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/codes/movies/plugins.json"
+ ]
+}

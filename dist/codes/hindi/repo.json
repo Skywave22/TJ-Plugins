@@ -1,0 +1,9 @@
+{
+ "name": "TJ-Plugins Hindi",
+ "packageName": "com.tjplugins.repo.hindi",
+ "description": "TJ-Plugins Hindi — 7 plugin(s). Short code: tjhindi",
+ "manifestVersion": 1,
+ "pluginLists": [
+  "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/codes/hindi/plugins.json"
+ ]
+}
