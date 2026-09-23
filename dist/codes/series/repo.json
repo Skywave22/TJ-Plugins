@@ -1,7 +1,7 @@
 {
  "name": "TJ-Plugins Series",
  "packageName": "com.tjplugins.repo.series",
- "description": "TJ-Plugins Series — 13 plugin(s). Short code: tjseries",
+ "description": "TJ-Plugins Series — 14 plugin(s). Short code: tjseries",
  "manifestVersion": 1,
  "pluginLists": [
   "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/codes/series/plugins.json"

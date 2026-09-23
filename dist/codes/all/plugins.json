@@ -198,6 +198,46 @@
   "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.netmirror.skystream.sky"
  },
  {
+  "packageName": "com.netflixmirror.plugin",
+  "name": "NetflixMirror",
+  "version": 1,
+  "baseUrl": "https://net52.cc",
+  "description": "NetflixMirror (net52.cc) - four OTT catalogs in one plugin: Netflix, Prime Video, Hotstar and Disney+. Pick the service in the plugin's settings gear. Port of the GPLv3 Sushan64/NetMirror-Extension CloudStream extension. Streams are real HLS (1080p/720p/480p), resolved through the NewTV player API. Verified live.",
+  "authors": [
+   "Skywave22",
+   "Sushan64 (original CloudStream extension)"
+  ],
+  "languages": [
+   "en",
+   "hi",
+   "ta",
+   "te"
+  ],
+  "categories": [
+   "Movie",
+   "TvSeries"
+  ],
+  "providers": [
+   {
+    "id": "nf",
+    "name": "Netflix"
+   },
+   {
+    "id": "pv",
+    "name": "Prime Video"
+   },
+   {
+    "id": "hs",
+    "name": "Hotstar"
+   },
+   {
+    "id": "dp",
+    "name": "Disney+"
+   }
+  ],
+  "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.netflixmirror.plugin.sky"
+ },
+ {
   "packageName": "com.rivestream.plugin",
   "name": "RiveStream",
   "version": 2,

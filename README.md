@@ -17,7 +17,7 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 
 ## 📦 Plugins
 
-13 plugins. Categories and languages below are read from each plugin's own `plugin.json`.
+14 plugins. Categories and languages below are read from each plugin's own `plugin.json`.
 
 | Plugin | Source | Categories | Languages | Mirrors |
 |---|---|---|---|---|
@@ -34,6 +34,7 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 | **SSR Movies** | ssrmovies.blue | Movies, Series | hi, en | ✅ |
 | **SubDubAnime** | www.subdubanime.site | TvSeries, Movie | en, hi | — |
 | **Vidbox** | vidbox.vc | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
+| **NetflixMirror** | net52.cc | Movie, TvSeries | en, hi, ta, te | — |
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working
 mirror from the plugin's settings gear if the primary domain is blocked.
@@ -47,6 +48,7 @@ Verified on 2026-09-22 with `skystream test`: the dashboard (`getHome`) had to l
 |---|---|---|---|
 | **RiveStream** | ✅ | ✅ | **Hindi audio by default** — Hindi-dubbed tracks are ranked first, then English, Tamil, Telugu, Urdu, Malayalam, Bengali |
 | **Vidbox** | ✅ | ✅ | **New 2026-09-23** — **Hindi audio by default**. Catalog is TMDB (the same ids vidbox.vc uses); streams resolve through the one server in vidbox's 47-server fleet that returns a directly playable manifest. 10 of 10 titles tested resolved, 10-20 streams each, every HLS/DASH manifest verified before it is offered |
+| **NetflixMirror** | ⚠️ | ✅ | **New 2026-09-23** — four OTT catalogs in one plugin (Netflix / Prime Video / Hotstar / Disney+), picked in the settings gear. Port of the GPLv3 `Sushan64/NetMirror-Extension` CloudStream extension. **Streams verified**: all three OTT channels resolve real HLS with 1080p/720p/480p variants, and segments are genuine MPEG-TS; 5 of 5 titles tested streamed. **Dashboard not yet verified** — the catalog, search and details endpoints need a `t_hash_t` session cookie, and Cloudflare challenges the Node test harness on `verify.php` (`cf-mitigated: challenge`). The app has a Cloudflare solver the harness lacks, so this is expected to work in-app; it is unconfirmed. |
 | **321Movies** | ✅ | ✅ | |
 | **CineFreak** | ✅ | ✅ | |
 | **CineHD** | ✅ | ✅ | Most streams per title |
@@ -59,9 +61,9 @@ Verified on 2026-09-22 with `skystream test`: the dashboard (`getHome`) had to l
 | **SSR Movies** | ✅ | ✅ | **Fixed 2026-09-22** — moved to `ssrmovies.blue`; resolves HubCloud, GDFlix and Watch-Online mirrors. 6 of 6 posts tested returned streams |
 | **KDramaMaza** | ✅ | ✅ | **Fixed 2026-09-22** — hoster hosts updated. 3 of 4 dramas tested resolved |
 
-**13 fully working · 0 partial**
+**13 fully working · 1 unverified dashboard**
 
-All 13 dashboards and all 13 stream loaders resolve. KDramaMaza and SSR Movies were both
+All 13 established plugins resolve their dashboards and streams; NetflixMirror's stream loader is verified but its dashboard is not yet confirmed (see the table). KDramaMaza and SSR Movies were both
 broken before 2026-09-22 and have been repaired:
 
 - **KDramaMaza** — HubCloud and GDFlix both changed hosts and the plugin still had the old ones
