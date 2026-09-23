@@ -30,6 +30,38 @@
     const PLAY_PHP = "https://net77.cc/play.php";
     const IMG = "https://imgcdn.kim/poster/v";
 
+    // Per-service differences, taken from the upstream extension and re-checked
+    // against the live site:
+    //   * verify.php is ONLY served by net52.cc. Upstream points Prime and
+    //     Hotstar at net22.cc, but that host no longer resolves, so every
+    //     service verifies on net52.cc.
+    //   * /mobile/home?app=1 is shared and has NO per-service prefix -- the
+    //     `ott` cookie is what switches the rows (/pv/home and /hs/home 404).
+    //   * search.php / post.php / episodes.php DO take a per-service prefix.
+    //   service   endpoints              Ott   Usertoken header
+    //   nf        /mobile/…              nf    no
+    //   pv        /mobile/pv/…           pv    yes (empty)
+    //   hs        /mobile/hs/…           hs    yes (empty)
+    // Disney+ is byte-identical to Hotstar upstream (same prefix, same Ott), so
+    // it is not offered as a separate provider here.
+    //   * Poster art lives on a different path per service, and Prime Video ids
+    //     are ALPHANUMERIC (0LEE086T9L711TRMJ0ODBQHZGS) where Netflix and
+    //     Hotstar ids are numeric -- so the id pattern cannot be \d+.
+    const SERVICES = {
+        nf: {
+            pretty: "Netflix", seg: "", token: false,
+            poster: "https://imgcdn.kim/poster/v/", epPoster: "https://imgcdn.kim/poster/v/150/"
+        },
+        pv: {
+            pretty: "Prime Video", seg: "pv/", token: true,
+            poster: "https://imgcdn.kim/pv/v/", epPoster: "https://img.nfmirrorcdn.top/pvepimg/"
+        },
+        hs: {
+            pretty: "Hotstar", seg: "hs/", token: true,
+            poster: "https://imgcdn.kim/hs/v/", epPoster: "https://imgcdn.kim/hsepimg/150/"
+        }
+    };
+
     // Site endpoints want the Android WebView UA the original app sends.
     const UA_WEB = "Mozilla/5.0 (Linux; Android 13; Pixel 5 Build/TQ3A.230901.001; wv) " +
         "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/144.0.7559.132 " +
@@ -51,23 +83,18 @@
         "https://mobiledetects.pro", "https://mobiledetects.top"
     ];
 
-    // plugin.json's `providers[].id` -> the `Ott` value the API expects.
-    // Disney+ shares Hotstar's "hs" channel upstream.
-    const OTT = { nf: "nf", pv: "pv", hs: "hs", dp: "hs" };
-    const PRETTY = { nf: "Netflix", pv: "Prime Video", hs: "Hotstar", dp: "Disney+" };
-
-    function ott() {
+    // plugin.json's `providers[].id` selects the service.
+    function svc() {
+        let id = "nf";
         try {
-            const id = (typeof manifest !== "undefined" && manifest && manifest.providerId) || "nf";
-            return OTT[id] || "nf";
-        } catch (e) { return "nf"; }
+            id = (typeof manifest !== "undefined" && manifest && manifest.providerId) || "nf";
+        } catch (e) { id = "nf"; }
+        return SERVICES[id] ? id : "nf";
     }
-    function service() {
-        try {
-            const id = (typeof manifest !== "undefined" && manifest && manifest.providerId) || "nf";
-            return PRETTY[id] || "Netflix";
-        } catch (e) { return "Netflix"; }
-    }
+    function ott() { return svc(); }
+    function service() { return SERVICES[svc()].pretty; }
+    /** Path segment for this service's endpoints: "" | "pv/" | "hs/". */
+    function seg() { return SERVICES[svc()].seg; }
 
     const MAX_EPISODE_PAGES = 40;
 
@@ -112,7 +139,7 @@
     }
 
     function tvHeaders() {
-        return {
+        const h = {
             "User-Agent": UA_TV,
             "X-Requested-With": "NetmirrorNewTV v1.0",
             "Accept": "application/json, text/plain, */*",
@@ -120,6 +147,10 @@
             "Pragma": "no-cache",
             "Ott": ott()
         };
+        // Prime and Hotstar send an empty Usertoken alongside Ott; Netflix does
+        // not send the header at all.
+        if (SERVICES[svc()].token) h["Usertoken"] = "";
+        return h;
     }
 
     function jsonOf(body) {
@@ -221,7 +252,8 @@
 
     // ─────────────────────────── catalog ───────────────────────────
 
-    function poster(id) { return IMG + "/" + id + ".jpg"; }
+    function poster(id) { return SERVICES[svc()].poster + id + ".jpg"; }
+    function epPoster(id) { return SERVICES[svc()].epPoster + id + ".jpg"; }
 
     function itemUrl(o) { return JSON.stringify(o); }
     function parseUrl(u) {
@@ -265,7 +297,9 @@
                 const title = stripTags(tm && tm[1]);
                 if (!title) continue;
                 const ids = [];
-                const ire = /data-post="(\d+)"/g;
+                // Netflix/Hotstar ids are numeric; Prime Video ids are
+                // alphanumeric (0LEE086T9L711TRMJ0ODBQHZGS).
+                const ire = /data-post="([^"]+)"/g;
                 let im;
                 while ((im = ire.exec(blk)) !== null) {
                     if (!used[im[1]]) { used[im[1]] = 1; ids.push(im[1]); }
@@ -297,7 +331,7 @@
             if (!q) return cb({ success: true, data: [] });
             await bypass();
             const r = await withTimeout(http_get(
-                MAIN + "/mobile/search.php?s=" + encodeURIComponent(q) + "&t=" + now(),
+                MAIN + "/mobile/" + seg() + "search.php?s=" + encodeURIComponent(q) + "&t=" + now(),
                 cookieHeader(COOKIE)), 15000);
             const d = jsonOf(r && r.body);
             const list = (d && d.searchResult) || [];
@@ -320,7 +354,7 @@
     /** One page of a series' episodes. */
     async function episodePage(eid, sid, page) {
         const r = await withTimeout(http_get(
-            MAIN + "/mobile/episodes.php?s=" + encodeURIComponent(sid) +
+            MAIN + "/mobile/" + seg() + "episodes.php?s=" + encodeURIComponent(sid) +
             "&series=" + encodeURIComponent(eid) + "&t=" + now() + "&page=" + page,
             cookieHeader(COOKIE)), 15000);
         return jsonOf(r && r.body);
@@ -333,7 +367,7 @@
             await bypass();
 
             const r = await withTimeout(http_get(
-                MAIN + "/mobile/post.php?id=" + encodeURIComponent(p.id) + "&t=" + now(),
+                MAIN + "/mobile/" + seg() + "post.php?id=" + encodeURIComponent(p.id) + "&t=" + now(),
                 cookieHeader(COOKIE)), 15000);
             const d = jsonOf(r && r.body);
             if (!d || !d.title) {
@@ -379,7 +413,7 @@
                                     s: parseInt(String(e.s || "").replace("S", ""), 10) || 0,
                                     e: parseInt(String(e.ep || "").replace("E", ""), 10) || 0
                                 }),
-                                posterUrl: IMG + "/150/" + e.id + ".jpg",
+                                posterUrl: epPoster(e.id),
                                 season: parseInt(String(e.s || "").replace("S", ""), 10) || 0,
                                 episode: parseInt(String(e.ep || "").replace("E", ""), 10) || 0,
                                 duration: parseInt(String(e.time || "").replace("m", ""), 10) || null
