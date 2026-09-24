@@ -21,7 +21,7 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 
 | Plugin | Source | Categories | Languages | Mirrors |
 |---|---|---|---|---|
-| **321Movies** | 321movies.xyz | Movie, TvSeries | en, hi | — |
+| **321Movies UK** | 321movies.co.uk | Movie, TvSeries | en, hi | — |
 | **CineFreak** | cinefreak.net | Movie, TvSeries | hi, en, mal | — |
 | **CineHD** | cinehd.vc | Movie, TvSeries | en | — |
 | **FMoviess** | fmoviess.tv | Movies, Series, Anime | en | ✅ |
@@ -48,7 +48,7 @@ Verified on 2026-09-22 with `skystream test`: the dashboard (`getHome`) had to l
 | **RiveStream** | ✅ | ✅ | **Hindi audio by default** — Hindi-dubbed tracks are ranked first, then English, Tamil, Telugu, Urdu, Malayalam, Bengali |
 | **Vidbox** | ✅ | ✅ | **New 2026-09-23** — **Hindi audio by default**. Catalog is TMDB (the same ids vidbox.vc uses); streams resolve through the one server in vidbox's 47-server fleet that returns a directly playable manifest. 10 of 10 titles tested resolved, 10-20 streams each, every HLS/DASH manifest verified before it is offered |
 **All three services verified end to end**: Netflix 15 rows / Prime 16 rows / Hotstar 5 rows, search and details resolve, series expand to episodes, and every service returns real HLS with 1080p/720p variants. One note: the catalog endpoints need a `t_hash_t` cookie from `verify.php`, which Cloudflare challenges in the Node test harness, so catalog verification was run through the shipped plugin with a curl-obtained cookie; the app has its own Cloudflare solver for this step. |
-| **321Movies** | ✅ | ✅ | |
+| **321Movies UK** | ✅ (CLI) | ✅ (CLI) | New plugin; on-device playback not yet verified |
 | **CineFreak** | ✅ | ✅ | |
 | **CineHD** | ✅ | ✅ | Most streams per title |
 | **FMoviess** | ✅ | ✅ | |
@@ -60,9 +60,9 @@ Verified on 2026-09-22 with `skystream test`: the dashboard (`getHome`) had to l
 | **SSR Movies** | ✅ | ✅ | **Fixed 2026-09-22** — moved to `ssrmovies.blue`; resolves HubCloud, GDFlix and Watch-Online mirrors. 6 of 6 posts tested returned streams |
 | **KDramaMaza** | ✅ | ✅ | **Fixed 2026-09-22** — hoster hosts updated. 3 of 4 dramas tested resolved |
 
-**14 fully working · 0 partial**
+**13 previously verified · 1 new plugin pending on-device verification**
 
-All 14 dashboards and all 14 stream loaders resolve. KDramaMaza and SSR Movies were both
+The new 321Movies UK dashboard and stream loader pass CLI tests, but app playback still needs verification. KDramaMaza and SSR Movies were both
 broken before 2026-09-22 and have been repaired:
 
 - **KDramaMaza** — HubCloud and GDFlix both changed hosts and the plugin still had the old ones

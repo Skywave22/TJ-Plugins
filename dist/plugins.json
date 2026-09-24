@@ -1,10 +1,10 @@
 [
   {
-    "packageName": "com.m321.skystream",
-    "name": "321Movies",
-    "version": 3,
-    "baseUrl": "https://321movies.xyz",
-    "description": "321Movies (321movies.xyz) — TMDB-powered catalog of movies and TV. Player sources are sampled across providers and verified with time-bounded probes before playback. Quality labels use HLS resolution where available.",
+    "packageName": "com.movies321uk.skystream",
+    "name": "321Movies UK",
+    "version": 1,
+    "baseUrl": "https://321movies.co.uk",
+    "description": "321Movies UK — movies and TV via the 321movies.co.uk catalog and player API. Finds playable sources where possible and labels unverified fallback links.",
     "authors": [
       "Skywave22"
     ],
@@ -16,7 +16,7 @@
       "Movie",
       "TvSeries"
     ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.m321.skystream.sky"
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movies321uk.skystream.sky"
   },
   {
     "packageName": "com.cinefreak.skystream",

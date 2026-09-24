@@ -2,7 +2,7 @@
     "use strict";
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  321Movies (321movies.xyz) — SkyStream plugin
+    //  321Movies UK (321movies.co.uk) — SkyStream plugin
     //
     //  CATALOG: Next.js TMDB front-end. Metadata/search come straight from
     //  TMDB using the site's public v4 read token.
@@ -46,7 +46,7 @@
 
     // ── config ─────────────────────────────────────────────────────────────
     // manifest.baseUrl lets the user switch mirrors from plugin settings.
-    const SITE = String((typeof manifest !== "undefined" && manifest && manifest.baseUrl) || "https://321movies.xyz")
+    const SITE = String((typeof manifest !== "undefined" && manifest && manifest.baseUrl) || "https://321movies.co.uk")
         .replace(/\/+$/, "");
     const PAPI = SITE + "/api/player/vixsrc-playlist";
 
@@ -60,7 +60,7 @@
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
     // `Accept-Encoding: identity` is required on every text/JSON request.
-    // Without it 321movies.xyz answers with gzip, and the bridge hands JS a
+    // Without it 321movies.co.uk answers with gzip, and the bridge hands JS a
     // lossily-decoded string, so JSON.parse fails and the plugin wrongly
     // reports "no sources" for titles that do have them.
     const TMDB_HEADERS = {
@@ -91,8 +91,7 @@
     const MIN_GOOD_STREAMS = 3;
     const REQ_MS = 20000;
 
-    // Providers that were never reachable in testing. Still probed, but
-    // tried last so the cap above keeps the families that actually work.
+    // Lower-priority source families; still considered if others fail.
     const WEAK_PROVIDERS = {
         "sourcepack-rivestream": 1, "sourcepack-frame": 1, "sourcepack-bcine": 1,
         "sourcepack-cinesrc": 1, "sourcepack-peestream": 1, "sourcepack-pstream": 1
@@ -558,6 +557,7 @@
     async function probeAll(cands) {
         const all = [];
         let working = 0;
+        let unknown = 0;
         for (let start = 0; start < cands.length; start += PROBE_BATCH) {
             const slice = cands.slice(start, start + PROBE_BATCH);
             // Unlike http_parallel, a slow/challenged host cannot hold up the
@@ -568,9 +568,13 @@
             for (let i = 0; i < got.length; i++) {
                 all.push(got[i]);
                 if (classify(got[i].body, got[i].status).live) working++;
+                if (!got[i].status) unknown++;
             }
-            // Two batches give each strong family multiple opportunities.
-            if (start >= PROBE_BATCH && working >= MIN_GOOD_STREAMS) break;
+            // Two batches give each strong family multiple opportunities. If
+            // every probe failed at the bridge, probing more hosts is unlikely
+            // to help; return limited, clearly unverified direct links below.
+            if (start >= PROBE_BATCH &&
+                (working >= MIN_GOOD_STREAMS || unknown === all.length)) break;
         }
         return all;
     }
@@ -593,6 +597,10 @@
                 "User-Agent": UA,
                 "Referer": SITE + "/"
             });
+            if (r.status !== 200) {
+                return cb({ success: false, errorCode: "SITE_OFFLINE",
+                    message: "321Movies UK player API returned HTTP " + r.status + ". Try again or check the site in a browser." });
+            }
             const j = parseJson(r.body);
             const playlists = (j && j.playlist) || [];
             let sources = [];
@@ -618,7 +626,7 @@
             for (let i = 0; i < sources.length; i++) {
                 const s = sources[i] || {};
                 const u = decodeStreamUrl(s.file);
-                if (!u || u.indexOf("http") !== 0) continue;
+                if (!/^https?:\/\//i.test(u)) continue;
                 if (seen[u]) continue;
                 seen[u] = 1;
                 const family = String(s.provider || "");
@@ -672,12 +680,25 @@
                 });
             }
 
-            if (!live.length) {
-                return cb({
-                    success: false,
-                    errorCode: "NO_STREAMS",
-                    message: "Every 321Movies source for this title is offline right now. They rotate often — try again shortly or pick another title."
-                });
+            // When the site's API worked but the device could not verify its
+            // links (status 0), surface only a few as unverified alternatives.
+            // Never fall back to links that explicitly returned 403/404 or an
+            // HTML/JSON error. A link appearing here is NOT proof it can play.
+            const unverified = [];
+            if (live.length < MIN_GOOD_STREAMS) {
+                for (let i = 0; i < responses.length && unverified.length < 4; i++) {
+                    if (responses[i].status !== 0) continue;
+                    const c = cands[i];
+                    unverified.push(mkStream({
+                        url: c.url,
+                        source: c.provider.replace(/^sourcepack-/, "") + " · unverified",
+                        headers: { "User-Agent": UA, "Referer": SITE + "/" }
+                    }));
+                }
+            }
+            if (!live.length && !unverified.length) {
+                return cb({ success: false, errorCode: "NO_STREAMS",
+                    message: "The 321Movies UK API returned sources, but none were playable from this network. Try another title or connection." });
             }
 
             // Best quality first. HLS master playlists beat progressive files
@@ -710,12 +731,12 @@
                     url: l.url,
                     source: name,
                     quality: q,
-                    headers: { "User-Agent": UA }
+                    headers: { "User-Agent": UA, "Referer": SITE + "/" }
                 };
                 streams.push(mkStream(so));
             }
 
-            return cb({ success: true, data: streams });
+            return cb({ success: true, data: streams.concat(unverified).slice(0, MAX_STREAMS) });
         } catch (e) {
             return cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
         }
