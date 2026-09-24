@@ -12,7 +12,6 @@
     const PLAYER_KEY = "j7wYkYhVgQn5x2L6k2M8hVQfD4zN3bP1aR7uT0cXyE6dZX4sWAd87JKMN8HHGG654GVCFRLMNBOPUY7LK";
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
     const BASE_HEADERS = { "User-Agent": UA, "Accept-Encoding": "identity" };
-    const PLAY_HEADERS = { "User-Agent": UA, "Referer": SITE + "/" };
     const PROBE_HEADERS = { "User-Agent": UA, "Accept-Encoding": "identity", "Range": "bytes=0-4095" };
 
     async function request(url, headers, timeoutMs) {
@@ -234,9 +233,13 @@
             if (!options.length) return fail(cb, "NO_STREAMS", "This title currently has no direct sources on 321Movies UK.");
             const verified = [];
             const uncertain = [];
+            const playerPage = SITE + "/" + ref.type + "/" + ref.id +
+                (ref.type === "tv" ? "/" + ref.season + "/" + ref.episode : "") + "/player";
+            const probeHeaders = Object.assign({}, PROBE_HEADERS, { "Referer": playerPage });
+            const playHeaders = { "User-Agent": UA, "Referer": playerPage };
             for (let start = 0; start < options.length; start += 6) {
                 const batch = options.slice(start, start + 6);
-                const checks = await Promise.all(batch.map(function (candidate) { return request(candidate.url, PROBE_HEADERS, 6500); }));
+                const checks = await Promise.all(batch.map(function (candidate) { return request(candidate.url, probeHeaders, 6500); }));
                 for (let i = 0; i < batch.length; i++) {
                     const result = classify(checks[i]);
                     if (result) {
@@ -244,21 +247,37 @@
                         const q = result.kind === "hls" ? quality(result.body) : "Auto";
                         verified.push(new StreamResult({
                             url: batch[i].url, source: name + " · " + q,
-                            quality: q, headers: PLAY_HEADERS
+                            quality: q, headers: playHeaders
                         }));
-                    } else if (!checks[i].status && uncertain.length < 3) {
-                        uncertain.push(new StreamResult({
-                            url: batch[i].url,
-                            source: batch[i].family.replace(/^sourcepack-/, "") + " · unverified",
-                            headers: PLAY_HEADERS
-                        }));
+                    } else if ((checks[i].status === 0 || checks[i].status === 403 || checks[i].status === 429) && uncertain.length < 8) {
+                        // A CDN can reject the plugin's Range probe or block this
+                        // network while the same signed link works in the player.
+                        // These are NOT verified: leave the choice to the user.
+                        uncertain.push(batch[i]);
                     }
                 }
                 if (verified.length >= 3 || (start >= 6 && verified.length === 0 && uncertain.length >= 3)) break;
             }
             const streams = verified.slice(0, 10);
-            if (streams.length < 3) streams.push.apply(streams, uncertain.slice(0, 3 - streams.length));
-            if (!streams.length) return fail(cb, "NO_STREAMS", "321Movies UK supplied sources, but none were reachable on this connection.");
+            if (streams.length < 3) {
+                const used = new Set();
+                // Offer at most one uncertain link per provider family first.
+                for (let pass = 0; pass < 2 && streams.length < 3; pass++) {
+                    for (const option of uncertain) {
+                        if (streams.length >= 3) break;
+                        if (pass === 0 && used.has(option.family)) continue;
+                        if (option.offered) continue;
+                        used.add(option.family);
+                        option.offered = true;
+                        streams.push(new StreamResult({
+                            url: option.url,
+                            source: option.family.replace(/^sourcepack-/, "") + " · unverified (may be blocked)",
+                            headers: playHeaders
+                        }));
+                    }
+                }
+            }
+            if (!streams.length) return fail(cb, "NO_STREAMS", "321Movies UK supplied sources, but all failed or were removed by the host.");
             cb({ success: true, data: streams });
         } catch (error) { fail(cb, "STREAM_ERROR", String(error)); }
     }

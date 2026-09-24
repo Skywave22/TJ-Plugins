@@ -48,7 +48,7 @@ Verified on 2026-09-22 with `skystream test`: the dashboard (`getHome`) had to l
 | **RiveStream** | ✅ | ✅ | **Hindi audio by default** — Hindi-dubbed tracks are ranked first, then English, Tamil, Telugu, Urdu, Malayalam, Bengali |
 | **Vidbox** | ✅ | ✅ | **New 2026-09-23** — **Hindi audio by default**. Catalog is TMDB (the same ids vidbox.vc uses); streams resolve through the one server in vidbox's 47-server fleet that returns a directly playable manifest. 10 of 10 titles tested resolved, 10-20 streams each, every HLS/DASH manifest verified before it is offered |
 **All three services verified end to end**: Netflix 15 rows / Prime 16 rows / Hotstar 5 rows, search and details resolve, series expand to episodes, and every service returns real HLS with 1080p/720p variants. One note: the catalog endpoints need a `t_hash_t` cookie from `verify.php`, which Cloudflare challenges in the Node test harness, so catalog verification was run through the shipped plugin with a curl-obtained cookie; the app has its own Cloudflare solver for this step. |
-| **321Movies UK** | ✅ (CLI) | ✅ (CLI) | Rebuilt from scratch; CLI tested, on-device playback not yet verified |
+| **321Movies UK** | ✅ (CLI) | ✅ (CLI) | CLI tested; blocked sources may appear as unverified, on-device playback not yet verified |
 | **CineFreak** | ✅ | ✅ | |
 | **CineHD** | ✅ | ✅ | Most streams per title |
 | **FMoviess** | ✅ | ✅ | |
