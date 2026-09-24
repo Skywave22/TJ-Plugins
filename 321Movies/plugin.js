@@ -1,95 +1,144 @@
-(function() {
+(function () {
     "use strict";
 
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  321Movies (321movies.xyz) — SkyStream plugin
     //
-    //  Next.js TMDB front-end. Catalog/search/metadata come straight
-    //  from TMDB using the site's public v4 read token; playback uses
-    //  the site's own player API:
+    //  CATALOG: Next.js TMDB front-end. Metadata/search come straight from
+    //  TMDB using the site's public v4 read token.
     //
-    //    GET https://321movies.xyz/api/player/vixsrc-playlist
+    //  PLAYBACK: the site's own player API
+    //    GET {baseUrl}/api/player/vixsrc-playlist
     //        ?type=movie&id=<tmdbId>
     //        ?type=tv&id=<tmdbId>&season=<S>&episode=<E>
-    //      -> { playlist: [ { sources: [ { type: "hls"|"mp4",
-    //             file: "enc:<base64url>", label: "Cascade 720p | Hindi",
-    //             provider, default } ] } ] }
+    //      -> { playlist: [ { sources: [ { type, file, label, provider,
+    //                                        default } ] } ] }
     //
-    //  enc: decode (recovered from their bundle, module 33474):
+    //  `file` is either a plain URL or "enc:<base64url>" XOR-obfuscated.
+    //  Decoder (recovered from their bundle):
     //    raw  = base64url_decode(file.slice(4))
     //    salt = raw[0..8]; body = raw[8..]
-    //    key  = utf8("j7wYkYhVgQn5x2L6k2M8hVQfD4zN3bP1aR7uT0cXyE6dZX4sWAd87JKMN8HHGG654GVCFRLMNBOPUY7LK")
-    //    out[i] = body[i] ^ key[(i + salt[i % 8]) % key.length]
-    //  The decoded URL is a ready-to-play proxy URL (piracya.workers.dev
-    //  m3u8/mp4 proxies carrying upstream + headers) that the site's
-    //  player uses as-is.
+    //    out[i] = body[i] ^ KEY[(i + salt[i % 8]) % KEY.length]
     //
-    //  STREAM HEADERS: the proxy workers require
-    //      Origin: https://321movies.xyz
-    //  (verified: without it -> 403, with it -> 200 HLS manifest).
+    //  ─────────────────────────────────────────────────────────────────────
+    //  WHY THIS PLUGIN PROBES SOURCES BEFORE RETURNING THEM
+    //  ─────────────────────────────────────────────────────────────────────
+    //  The API returns 37–69 "sources" per title, but measurement across
+    //  Fight Club / Breaking Bad / Jawan / RRR / Interstellar / Stranger
+    //  Things showed only 3–8 are actually reachable, and which ones work
+    //  changes per title and per session:
     //
-    //  Labels carry quality + audio language (720p | Hindi etc.), so
-    //  Hindi tracks are surfaced directly in the source list.
-    // ═══════════════════════════════════════════════════════════
+    //    streamaggregator  14/18 live      movy   13/88      vuflix  9/29
+    //    vidgod             3/17           rivestream 0/92   frame  0/18
+    //    bcine/cinesrc/peestream/pstream   0/24  (all dead)
+    //
+    //  The dead families are all `*.piracya.workers.dev` proxies or CDNs
+    //  behind Cloudflare / IP allow-lists / expiring signed links. Passing
+    //  their embedded upstream headers does NOT rescue them (verified).
+    //
+    //  So: fire a cheap parallel Range probe at every candidate, keep only
+    //  the ones that answer 200/206 with a real manifest or video body, and
+    //  rank those by the resolution actually advertised in the manifest.
+    //  Labels carry no quality info for the reliable providers, so reading
+    //  RESOLUTION= from the master playlist is the only accurate source
+    //  (e.g. "Vuflix 7" is 2160p while "Cascade 4K HDR" is dead).
+    // ═══════════════════════════════════════════════════════════════════════
 
-    const TMDB  = "https://api.themoviedb.org/3";
-    const IMG   = "https://image.tmdb.org/t/p/w500";
-    const SITE  = "https://321movies.xyz";
-    const PAPI  = SITE + "/api/player/vixsrc-playlist";
+    // ── config ─────────────────────────────────────────────────────────────
+    // manifest.baseUrl lets the user switch mirrors from plugin settings.
+    const SITE = String((typeof manifest !== "undefined" && manifest && manifest.baseUrl) || "https://321movies.xyz")
+        .replace(/\/+$/, "");
+    const PAPI = SITE + "/api/player/vixsrc-playlist";
+
+    const TMDB = "https://api.themoviedb.org/3";
+    const IMG_W500 = "https://image.tmdb.org/t/p/w500";
+    const IMG_W300 = "https://image.tmdb.org/t/p/w300";
+    const IMG_ORIG = "https://image.tmdb.org/t/p/original";
 
     const TMDB_TOKEN = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJiYmYxODFkOTRiMzk2MTg1ZDBhYmQ5NzA5M2ZkNDhlMCIsIm5iZiI6MTY5MjUzNzk2MS45MTgwMDAyLCJzdWIiOiI2NGUyMTQ2OTM3MTA5NzAxMWM1NDk3YjgiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.t4GsujVl9LceOrnPmx-WDdncTSAx60QBLAoaiuTCvXI";
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
+    // `Accept-Encoding: identity` is required on every text/JSON request.
+    // Without it 321movies.xyz answers with gzip, and the bridge hands JS a
+    // lossily-decoded string, so JSON.parse fails and the plugin wrongly
+    // reports "no sources" for titles that do have them.
     const TMDB_HEADERS = {
         "Accept": "application/json",
+        "Accept-Encoding": "identity",
         "Authorization": TMDB_TOKEN,
         "User-Agent": UA
     };
 
-    const STREAM_HEADERS = {
+    // Probe headers. `Range` matters: some live sources are 130 MB–800 MB
+    // progressive files, and an unbounded GET would pull the whole thing.
+    // Servers that support ranges answer 206, servers that don't answer 200
+    // with the small manifest anyway — both are treated as live.
+    // 8 KB is enough to contain every RESOLUTION=/NAME="720p" variant line.
+    const PROBE_HEADERS = {
         "User-Agent": UA,
-        "Origin": SITE
+        "Range": "bytes=0-8191",
+        "Accept": "*/*",
+        "Accept-Encoding": "identity"
     };
 
-    // ─────────────────────────── helpers ───────────────────────────
+    // The API returns 37–69 sources per title and the good ones are not at
+    // the front, so probe them all. http_parallel runs them concurrently.
+    const MAX_PROBE = 72;
+    const MAX_STREAMS = 12; // cap what we hand the player
+    const PROBE_MS = 6000;      // per-request timeout on the sequential fallback
+    const PROBE_BATCH_MS = 20000; // per-batch timeout on http_parallel
+    const REQ_MS = 20000;
 
-    function mkItem(obj)    { try { return new MultimediaItem(obj); } catch (_) { return obj; } }
-    function mkEpisode(obj) { try { return new Episode(obj); } catch (_) { return obj; } }
-    function mkStream(obj)  { try { return new StreamResult(obj); } catch (_) { return obj; } }
+    // Providers that were never reachable in testing. Still probed, but
+    // tried last so the cap above keeps the families that actually work.
+    const WEAK_PROVIDERS = {
+        "sourcepack-rivestream": 1, "sourcepack-frame": 1, "sourcepack-bcine": 1,
+        "sourcepack-cinesrc": 1, "sourcepack-peestream": 1, "sourcepack-pstream": 1
+    };
+
+    // ── generic helpers ────────────────────────────────────────────────────
+
+    function mkItem(o) { try { return new MultimediaItem(o); } catch (e) { return o; } }
+    function mkEpisode(o) { try { return new Episode(o); } catch (e) { return o; } }
+    function mkStream(o) { try { return new StreamResult(o); } catch (e) { return o; } }
 
     function withTimeout(promise, ms) {
         return Promise.race([
             Promise.resolve(promise),
-            new Promise(function (_, rej) { setTimeout(function () { rej(new Error("timeout")); }, ms); })
+            new Promise(function (_, rej) {
+                setTimeout(function () { rej(new Error("timeout")); }, ms);
+            })
         ]);
     }
 
+    // http_get resolves rather than rejects on 4xx/5xx in some runtimes and
+    // rejects in others; normalise to a {status, body} object either way.
+    async function safeGet(url, headers, ms) {
+        try {
+            const r = await withTimeout(http_get(url, headers), ms || REQ_MS);
+            return { status: (r && (r.status || r.statusCode)) || 0, body: (r && r.body) || "" };
+        } catch (e) {
+            return { status: 0, body: "" };
+        }
+    }
+
+    function parseJson(text) {
+        try { return JSON.parse(text || "") || {}; } catch (e) { return {}; }
+    }
+
     async function tmdb(path) {
-        const r = await withTimeout(http_get(TMDB + path, TMDB_HEADERS), 25000);
-        let j = {};
-        try { j = JSON.parse((r && r.body) || "{}"); } catch (e) { j = {}; }
-        return j;
+        const r = await safeGet(TMDB + path, TMDB_HEADERS);
+        return parseJson(r.body);
     }
 
-    async function playerApi(qs) {
-        const r = await withTimeout(http_get(PAPI + "?" + qs, {
-            "Accept": "application/json",
-            "User-Agent": UA,
-            "Referer": SITE + "/"
-        }), 25000);
-        let j = {};
-        try { j = JSON.parse((r && r.body) || "{}"); } catch (e) { j = {}; }
-        return j;
-    }
-
-    // ─────────────────────── enc: url decoder ──────────────────────
+    // ── enc: url decoder ───────────────────────────────────────────────────
 
     const CODEC_KEY = "j7wYkYhVgQn5x2L6k2M8hVQfD4zN3bP1aR7uT0cXyE6dZX4sWAd87JKMN8HHGG654GVCFRLMNBOPUY7LK";
 
     function b64urlToBytes(s) {
-        let t = s.replace(/-/g, "+").replace(/_/g, "/");
-        t = t + "=".repeat((4 - (t.length % 4)) % 4);
+        let t = String(s).replace(/-/g, "+").replace(/_/g, "/");
+        while (t.length % 4) t += "=";
         try {
             const bin = atob(t);
             const out = new Uint8Array(bin.length);
@@ -100,27 +149,90 @@
         }
     }
 
+    // Rebuild UTF-8 from raw bytes by hand. The old implementation used
+    // `decodeURIComponent(escape(s))`, but `escape` is a legacy Annex-B
+    // function that is not guaranteed to exist in the QuickJS runtime.
+    function bytesToUtf8(bytes) {
+        let s = "";
+        let i = 0;
+        while (i < bytes.length) {
+            const b = bytes[i++];
+            let cp;
+            if (b < 0x80) { cp = b; }
+            else if (b >= 0xc0 && b < 0xe0 && i < bytes.length) { cp = ((b & 0x1f) << 6) | (bytes[i++] & 0x3f); }
+            else if (b >= 0xe0 && b < 0xf0 && i + 1 < bytes.length) { cp = ((b & 0x0f) << 12) | ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f); }
+            else if (b >= 0xf0 && i + 2 < bytes.length) { cp = ((b & 0x07) << 18) | ((bytes[i++] & 0x3f) << 12) | ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f); }
+            else { cp = 0xfffd; }
+            if (cp < 0x10000) { s += String.fromCharCode(cp); }
+            else {
+                cp -= 0x10000;
+                s += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
+            }
+        }
+        return s;
+    }
+
     function decodeStreamUrl(v) {
-        if (!v || v.indexOf("enc:") !== 0) return v || "";
-        const raw = b64urlToBytes(v.slice(4));
+        const raw0 = String(v || "");
+        if (raw0.indexOf("enc:") !== 0) return raw0;
+        const raw = b64urlToBytes(raw0.slice(4));
         if (!raw || raw.length <= 8) return "";
         const salt = raw.slice(0, 8);
         const body = raw.slice(8);
-        const key = [];
-        for (let i = 0; i < CODEC_KEY.length; i++) key.push(CODEC_KEY.charCodeAt(i) & 255);
-        let s = "";
+        const key = new Uint8Array(CODEC_KEY.length);
+        for (let i = 0; i < CODEC_KEY.length; i++) key[i] = CODEC_KEY.charCodeAt(i) & 255;
+        const out = new Uint8Array(body.length);
         for (let i = 0; i < body.length; i++) {
-            const c = body[i] ^ key[(i + salt[i % salt.length]) % key.length];
-            s += String.fromCharCode(c);
+            out[i] = body[i] ^ key[(i + salt[i % salt.length]) % key.length];
         }
-        try { return decodeURIComponent(escape(s)); } catch (e) { return s; }
+        return bytesToUtf8(out);
     }
 
-    // ─────────────────────────── items ─────────────────────────────
+    // ── url payload ────────────────────────────────────────────────────────
+    //
+    // SkyStream passes one opaque string between search -> load -> loadStreams.
+    //   {"mt":"movie","id":"550"}
+    //   {"mt":"tv","id":"1396","s":1,"e":1}
+    //
+    function encodeUrl(o) {
+        try { return JSON.stringify(o); } catch (e) { return ""; }
+    }
+
+    function decodeUrl(url) {
+        if (!url) return null;
+        // Tolerate a real site URL too, in case one leaks in from elsewhere.
+        let p = null;
+        try { p = JSON.parse(url); } catch (e) { p = null; }
+        if (p && p.id && p.mt) {
+            return { isTv: p.mt === "tv", id: String(p.id), s: parseInt(p.s, 10) || 1, e: parseInt(p.e, 10) || 1 };
+        }
+        const m = String(url).match(/(?:type|mt)=(tv|movie)[^0-9]*(\d+)/);
+        if (m) {
+            const sm = String(url).match(/season=(\d+)/);
+            const em = String(url).match(/episode=(\d+)/);
+            return {
+                isTv: m[1] === "tv", id: m[2],
+                s: sm ? parseInt(sm[1], 10) : 1,
+                e: em ? parseInt(em[1], 10) : 1
+            };
+        }
+        return null;
+    }
+
+    // ── TMDB -> MultimediaItem ─────────────────────────────────────────────
+    //
+    // `type` must be one of movie|series|anime|livestream|other.
+    // The previous build emitted "tv", which is not a valid MultimediaType.
 
     function yearOf(r) {
-        const d = r.release_date || r.first_air_date || "";
-        return parseInt(String(d).slice(0, 4), 10) || null;
+        const d = (r && (r.release_date || r.first_air_date)) || "";
+        const y = parseInt(String(d).slice(0, 4), 10);
+        return y > 1800 ? y : undefined;
+    }
+
+    function num(v) {
+        const n = parseFloat(v);
+        return isFinite(n) && n > 0 ? Math.round(n * 1000) / 1000 : undefined;
     }
 
     function toItem(r) {
@@ -128,119 +240,150 @@
         const isTv = (r.media_type || (r.first_air_date ? "tv" : "movie")) === "tv";
         const name = r.title || r.name || "";
         if (!name) return null;
-        const poster = r.poster_path ? IMG + r.poster_path : "";
-        return mkItem({
+        const poster = r.poster_path ? IMG_W500 + r.poster_path : "";
+        const o = {
             title: String(name).trim(),
-            url: JSON.stringify({ mt: isTv ? "tv" : "movie", id: String(r.id) }),
+            url: encodeUrl({ mt: isTv ? "tv" : "movie", id: String(r.id) }),
             posterUrl: poster,
-            bannerUrl: r.backdrop_path ? IMG + r.backdrop_path : poster,
-            type: isTv ? "tv" : "movie",
-            year: yearOf(r),
-            score: r.vote_average ? parseFloat(r.vote_average) : null
-        });
+            bannerUrl: r.backdrop_path ? IMG_ORIG + r.backdrop_path : poster,
+            type: isTv ? "series" : "movie"
+        };
+        const y = yearOf(r); if (y) o.year = y;
+        const s = num(r.vote_average); if (s) o.score = s;
+        return mkItem(o);
     }
 
     function mapResults(list) {
-        return (list || []).map(toItem).filter(function (x) { return !!x; });
+        const out = [];
+        const src = list || [];
+        for (let i = 0; i < src.length; i++) {
+            const it = toItem(src[i]);
+            if (it) out.push(it);
+        }
+        return out;
     }
 
-    // ─────────────────────────── home ──────────────────────────────
+    // ── getHome ────────────────────────────────────────────────────────────
 
     async function getHome(cb) {
         try {
             const rows = [
-                { name: "Trending Now",   p: "/trending/all/day" },
+                { name: "Trending", p: "/trending/all/day" },
                 { name: "Popular Movies", p: "/movie/popular" },
-                { name: "Popular TV",     p: "/tv/popular" },
+                { name: "Popular TV", p: "/tv/popular" },
                 { name: "Top Rated Movies", p: "/movie/top_rated" },
-                { name: "Top Rated TV",   p: "/tv/top_rated" },
-                { name: "Trending TV",    p: "/trending/tv/day" }
+                { name: "Top Rated TV", p: "/tv/top_rated" },
+                { name: "Now Playing", p: "/movie/now_playing" },
+                { name: "On The Air", p: "/tv/on_the_air" }
             ];
-            const settled = await Promise.all(rows.map(function (row) {
-                return tmdb(row.p + "?page=1").catch(function () { return {}; });
+            const settled = [];
+            for (let i = 0; i < rows.length; i++) settled.push(null);
+            await Promise.all(rows.map(function (row, i) {
+                return tmdb(row.p + "?page=1").then(function (j) { settled[i] = j; }).catch(function () { settled[i] = {}; });
             }));
+
             const home = {};
+            let total = 0;
             for (let i = 0; i < rows.length; i++) {
                 const items = mapResults(settled[i] && settled[i].results);
-                if (items.length) home[rows[i].name] = items;
+                if (items.length) { home[rows[i].name] = items; total += items.length; }
             }
-            if (!Object.keys(home).length) {
-                return cb({ success: false, errorCode: "API_ERROR", message: "321Movies catalog unavailable" });
+            if (!total) {
+                return cb({
+                    success: false,
+                    errorCode: "API_ERROR",
+                    message: "Could not reach the 321Movies catalog (TMDB). Check your connection and try again."
+                });
             }
-            cb({ success: true, data: home });
+            return cb({ success: true, data: home });
         } catch (e) {
-            cb({ success: false, errorCode: "HOME_ERROR", message: String((e && e.message) || e) });
+            return cb({ success: false, errorCode: "HOME_ERROR", message: String((e && e.message) || e) });
         }
     }
 
-    // ─────────────────────────── search ────────────────────────────
+    // ── search ─────────────────────────────────────────────────────────────
 
     async function search(query, cb) {
         try {
             const q = String(query || "").trim();
             if (!q) return cb({ success: true, data: [] });
-            const j = await tmdb("/search/multi?query=" + encodeURIComponent(q) + "&include_adult=false&page=1")
-                .catch(function () { return {}; });
-            cb({ success: true, data: mapResults(j && j.results) });
+            const j = await tmdb("/search/multi?query=" + encodeURIComponent(q) + "&include_adult=false&page=1");
+            const items = mapResults(j && j.results);
+            if (!items.length) {
+                return cb({ success: false, errorCode: "NO_RESULTS", message: "No results for \"" + q + "\"" });
+            }
+            return cb({ success: true, data: items });
         } catch (e) {
-            cb({ success: false, errorCode: "SEARCH_ERROR", message: String((e && e.message) || e) });
+            return cb({ success: false, errorCode: "SEARCH_ERROR", message: String((e && e.message) || e) });
         }
     }
 
-    // ─────────────────────── detail + episodes ─────────────────────
+    // ── load ───────────────────────────────────────────────────────────────
 
     async function load(url, cb) {
         try {
-            let p;
-            try { p = JSON.parse(url); } catch (e) { p = null; }
-            if (!p || !p.id || !p.mt) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized 321Movies url" });
-
-            const isTv = p.mt === "tv";
-            const d = await tmdb("/" + (isTv ? "tv" : "movie") + "/" + p.id).catch(function () { return {}; });
-            if (!d || !d.id) return cb({ success: false, errorCode: "DETAIL_ERROR", message: "Title not found" });
+            const p = decodeUrl(url);
+            if (!p) {
+                return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized 321Movies url" });
+            }
+            const d = await tmdb("/" + (p.isTv ? "tv" : "movie") + "/" + encodeURIComponent(p.id));
+            if (!d || !d.id) {
+                return cb({ success: false, errorCode: "DETAIL_ERROR", message: "Title not found on 321Movies" });
+            }
 
             const title = String(d.title || d.name || "Title").trim();
-            const poster = d.poster_path ? IMG + d.poster_path : "";
-            const banner = d.backdrop_path ? IMG + d.backdrop_path : poster;
+            const poster = d.poster_path ? IMG_W500 + d.poster_path : "";
+            const banner = d.backdrop_path ? IMG_ORIG + d.backdrop_path : poster;
             const episodes = [];
 
-            if (!isTv) {
+            if (!p.isTv) {
                 episodes.push(mkEpisode({
                     name: "Full Movie",
-                    url: JSON.stringify({ mt: "movie", id: String(p.id) }),
+                    url: encodeUrl({ mt: "movie", id: String(p.id) }),
                     season: 1,
                     episode: 1,
-                    posterUrl: poster,
-                    description: title
+                    posterUrl: banner || poster,
+                    description: String(d.overview || title).slice(0, 300)
                 }));
             } else {
-                const seasons = (d.seasons || []).filter(function (s) {
-                    return s && parseInt(s.season_number, 10) > 0 && parseInt(s.episode_count, 10) > 0;
-                });
-                const perSeason = await Promise.all(seasons.map(function (s) {
-                    return tmdb("/tv/" + p.id + "/season/" + s.season_number).catch(function () { return {}; });
+                const seasons = [];
+                const raw = d.seasons || [];
+                for (let i = 0; i < raw.length; i++) {
+                    const s = raw[i] || {};
+                    if (parseInt(s.season_number, 10) > 0 && parseInt(s.episode_count, 10) > 0) seasons.push(s);
+                }
+                const perSeason = [];
+                await Promise.all(seasons.map(function (s, i) {
+                    return tmdb("/tv/" + encodeURIComponent(p.id) + "/season/" + s.season_number)
+                        .then(function (j) { perSeason[i] = j; })
+                        .catch(function () { perSeason[i] = {}; });
                 }));
-                for (let si = 0; si < perSeason.length; si++) {
+                for (let si = 0; si < seasons.length; si++) {
                     const sn = parseInt(seasons[si].season_number, 10) || (si + 1);
                     const eps = (perSeason[si] && perSeason[si].episodes) || [];
                     for (let ei = 0; ei < eps.length; ei++) {
                         const e = eps[ei] || {};
                         const en = parseInt(e.episode_number, 10) || (ei + 1);
                         const eName = String(e.name || ("Episode " + en)).trim();
-                        episodes.push(mkEpisode({
-                            name: "S" + sn + " E" + (en < 10 ? "0" + en : en) + " · " + eName,
-                            url: JSON.stringify({ mt: "tv", id: String(p.id), s: sn, e: en }),
+                        const eo = {
+                            name: "S" + sn + "E" + (en < 10 ? "0" + en : en) + " · " + eName,
+                            url: encodeUrl({ mt: "tv", id: String(p.id), s: sn, e: en }),
                             season: sn,
                             episode: en,
-                            posterUrl: e.still_path ? "https://image.tmdb.org/t/p/w300" + e.still_path : poster,
-                            description: String(e.overview || "").slice(0, 300)
-                        }));
+                            posterUrl: e.still_path ? IMG_W300 + e.still_path : poster
+                        };
+                        const ov = String(e.overview || "").slice(0, 300);
+                        if (ov) eo.description = ov;
+                        const rt = parseInt(e.runtime, 10);
+                        if (rt > 0) eo.runtime = rt;
+                        if (e.air_date) eo.airDate = String(e.air_date).slice(0, 10);
+                        episodes.push(mkEpisode(eo));
                     }
                 }
                 if (!episodes.length) {
                     episodes.push(mkEpisode({
-                        name: "S1 E01",
-                        url: JSON.stringify({ mt: "tv", id: String(p.id), s: 1, e: 1 }),
+                        name: "S01E01",
+                        url: encodeUrl({ mt: "tv", id: String(p.id), s: 1, e: 1 }),
                         season: 1,
                         episode: 1,
                         posterUrl: poster,
@@ -249,84 +392,316 @@
                 }
             }
 
-            cb({
-                success: true,
-                data: mkItem({
-                    title: title,
-                    url: url,
-                    posterUrl: poster,
-                    bannerUrl: banner,
-                    type: isTv ? "tv" : "movie",
-                    year: yearOf(d),
-                    description: String(d.overview || "").slice(0, 700),
-                    score: d.vote_average ? parseFloat(d.vote_average) : null,
-                    duration: parseInt(d.runtime, 10) || null,
-                    tags: (d.genres || []).map(function (g) { return g.name; }).slice(0, 4),
-                    episodes: episodes
-                })
-            });
+            const o = {
+                title: title,
+                url: encodeUrl({ mt: p.isTv ? "tv" : "movie", id: String(p.id) }),
+                posterUrl: poster,
+                bannerUrl: banner,
+                type: p.isTv ? "series" : "movie",
+                episodes: episodes
+            };
+            const y = yearOf(d); if (y) o.year = y;
+            const desc = String(d.overview || "").slice(0, 700); if (desc) o.description = desc;
+            const sc = num(d.vote_average); if (sc) o.score = sc;
+            if (!p.isTv) {
+                const rt = parseInt(d.runtime, 10);
+                if (rt > 0) o.duration = rt;
+            } else if (d.status) {
+                const st = String(d.status).toLowerCase();
+                o.status = (st === "ended" || st === "canceled") ? "completed"
+                    : (st === "returning series" ? "ongoing" : "upcoming");
+            }
+            const tags = [];
+            const genres = d.genres || [];
+            for (let i = 0; i < genres.length && tags.length < 5; i++) {
+                if (genres[i] && genres[i].name) tags.push(genres[i].name);
+            }
+            if (tags.length) o.tags = tags;
+            if (d.id) o.syncData = { tmdb: String(d.id) };
+
+            return cb({ success: true, data: mkItem(o) });
         } catch (e) {
-            cb({ success: false, errorCode: "DETAIL_ERROR", message: String((e && e.message) || e) });
+            return cb({ success: false, errorCode: "DETAIL_ERROR", message: String((e && e.message) || e) });
         }
     }
 
-    // ─────────────────────────── streams ───────────────────────────
+    // ── loadStreams ────────────────────────────────────────────────────────
 
-    function qRank(label) {
-        const m = String(label || "").match(/(\d{3,4})\s*p/i);
+    function isLive(status) { return status === 200 || status === 206; }
+
+    // Classify a probe response.
+    //
+    // Accept only things that are positively identifiable as media. Text bodies
+    // are trustworthy, but binary bodies are not: the bridge hands JS a
+    // *string*, so raw bytes arrive lossily decoded. That matters for the two
+    // signatures below, which is why a 206 is accepted on its own — a server
+    // only answers 206 when it honoured our Range request against a real file.
+    //
+    // Everything else on a 200 must match a known manifest/magic signature.
+    // A permissive "not markup => media" fallback was tried and it let through
+    // gzip-compressed JSON error bodies (e.g. {"error":"Missing playback
+    // token."} from vuflix.co / chillflix.lol), which decode to mojibake that
+    // starts with neither < nor { and so looked like media.
+    function classify(body, status) {
+        if (!isLive(status)) return { live: false };
+        const b = String(body || "");
+        if (!b) return { live: false };
+
+        // gzip/deflate payload we failed to suppress -> unreadable, and in
+        // practice always an error body (e.g. {"error":"Missing playback
+        // token."} from the vuflix.co / chillflix.lol token APIs).
+        const c0 = b.charCodeAt(0), c1 = b.charCodeAt(1);
+        if (c0 === 0x1f && (c1 === 0x8b || c1 === 0x9e)) return { live: false };
+
+        // JSON error object that arrived uncompressed.
+        const lead = b.slice(0, 120);
+        if (/^\s*[\[{]/.test(lead) && /"(error|code|status|message)"\s*:/.test(lead)) return { live: false };
+
+        // HLS playlist.
+        if (b.indexOf("#EXTM3U") === 0) return { live: true, kind: "hls" };
+
+        // ISO-BMFF (mp4/m4s): 4-byte size then "ftyp".
+        if (b.length > 8 && b.substr(4, 4) === "ftyp") return { live: true, kind: "mp4" };
+        // EBML / Matroska / WebM magic 0x1A45DFA3.
+        if (c0 === 0x1a && b.charCodeAt(1) === 0x45 &&
+            b.charCodeAt(2) === 0xdf && b.charCodeAt(3) === 0xa3) return { live: true, kind: "video" };
+        // Raw MPEG-TS segment: 0x47 sync byte every 188 bytes.
+        if (c0 === 0x47 && b.length > 188 && b.charCodeAt(188) === 0x47) return { live: true, kind: "video" };
+
+        // Partial content => a real byte-serving file, whatever the codec.
+        if (status === 206) return { live: true, kind: "video" };
+
+        return { live: false };
+    }
+
+    function maxResolution(body) {
+        const b = String(body || "");
+        let best = 0;
+        let m;
+        // Standard variant attribute: RESOLUTION=1920x800
+        const re1 = /RESOLUTION=\d+x(\d+)/g;
+        while ((m = re1.exec(b)) !== null) {
+            const h = parseInt(m[1], 10);
+            if (h > best) best = h;
+        }
+        // Some hosts declare it as a variant NAME instead, e.g.
+        //   #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3500000,NAME="720p"
+        const re2 = /NAME="(\d{3,4})p"/g;
+        while ((m = re2.exec(b)) !== null) {
+            const h = parseInt(m[1], 10);
+            if (h > best) best = h;
+        }
+        // Deliberately no URL-based fallback: paths like /08/00013/ carry
+        // plain ids that masquerade as resolutions and mislabel the source.
+        // Never trust an absurd value.
+        return (best > 0 && best <= 4320) ? best : 0;
+    }
+
+    function labelQuality(label) {
+        const m = /(\d{3,4})\s*p/i.exec(String(label || ""));
         return m ? parseInt(m[1], 10) : 0;
+    }
+
+    function audioLanguages(body) {
+        const b = String(body || "");
+        const out = [];
+        const re = /TYPE=AUDIO[^>]*?NAME="([^"]+)"/g;
+        let m;
+        while ((m = re.exec(b)) !== null && out.length < 6) {
+            const n = String(m[1]).trim();
+            if (n && !/^track\s*\d+$/i.test(n)) out.push(n);
+        }
+        return out;
+    }
+
+    function qualityLabel(h, kind) {
+        if (h >= 2000) return "4K";
+        if (h >= 1400) return "1440p";
+        if (h >= 1000) return "1080p";
+        if (h >= 700) return "720p";
+        if (h >= 450) return "480p";
+        if (h >= 330) return "360p";
+        if (h >= 220) return "240p";
+        if (h > 0) return h + "p";
+        return kind === "mp4" ? "MP4" : "Auto";
+    }
+
+    // Rank candidates so the ones most likely to be alive are probed first
+    // if the cap kicks in, and so a mixed list still probes fairly.
+    function providerWeight(prov) {
+        return WEAK_PROVIDERS[String(prov || "")] ? 1 : 0;
+    }
+
+    // Probe in batches rather than one giant http_parallel call.
+    //
+    // Two reasons: a 72-request burst is a lot to put through one bridge call,
+    // and if a single call timed out the old design fell back to re-probing
+    // every source sequentially. Batching means a slow batch only costs its own
+    // small fallback, and early batches carry the providers that actually work.
+    const PROBE_BATCH = 18;
+
+    async function probeBatch(reqs) {
+        if (typeof http_parallel === "function") {
+            try {
+                const got = await withTimeout(http_parallel(reqs), PROBE_BATCH_MS);
+                if (got && got.length === reqs.length) return got;
+            } catch (e) { /* fall through to sequential */ }
+        }
+        const out = [];
+        for (let i = 0; i < reqs.length; i++) out.push(null);
+        await Promise.all(reqs.map(function (r, i) {
+            return safeGet(r.url, r.headers, PROBE_MS).then(function (x) { out[i] = x; });
+        }));
+        return out;
+    }
+
+    async function probeAll(cands) {
+        const all = [];
+        for (let start = 0; start < cands.length; start += PROBE_BATCH) {
+            const slice = cands.slice(start, start + PROBE_BATCH);
+            const reqs = slice.map(function (c) {
+                return { url: c.url, headers: PROBE_HEADERS, method: "GET" };
+            });
+            const got = await probeBatch(reqs);
+            for (let i = 0; i < slice.length; i++) all.push((got && got[i]) || { status: 0, body: "" });
+        }
+        return all;
     }
 
     async function loadStreams(url, cb) {
         try {
-            let p;
-            try { p = JSON.parse(url); } catch (e) { p = null; }
-            if (!p || !p.id || !p.mt) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized episode url" });
+            const p = decodeUrl(url);
+            if (!p) {
+                return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized episode url" });
+            }
 
-            const qs = p.mt === "tv"
-                ? "type=tv&id=" + encodeURIComponent(p.id) + "&season=" + encodeURIComponent(parseInt(p.s, 10) || 1) + "&episode=" + encodeURIComponent(parseInt(p.e, 10) || 1)
+            const qs = p.isTv
+                ? "type=tv&id=" + encodeURIComponent(p.id) +
+                  "&season=" + encodeURIComponent(p.s) + "&episode=" + encodeURIComponent(p.e)
                 : "type=movie&id=" + encodeURIComponent(p.id);
-            const j = await playerApi(qs).catch(function () { return {}; });
-            const sources = (((j && j.playlist) || [])[0] || {}).sources || [];
 
-            const out = [];
+            const r = await safeGet(PAPI + "?" + qs, {
+                "Accept": "application/json",
+                "Accept-Encoding": "identity",
+                "User-Agent": UA,
+                "Referer": SITE + "/"
+            });
+            const j = parseJson(r.body);
+            const playlists = (j && j.playlist) || [];
+            let sources = [];
+            for (let i = 0; i < playlists.length; i++) {
+                const s = (playlists[i] && playlists[i].sources) || [];
+                for (let k = 0; k < s.length; k++) sources.push(s[k]);
+            }
+            if (!sources.length) {
+                return cb({
+                    success: false,
+                    errorCode: "NO_STREAMS",
+                    message: p.isTv
+                        ? "321Movies has no player sources for this episode yet."
+                        : "321Movies has no player sources for this title yet."
+                });
+            }
+
+            // Decode + de-duplicate, keeping the site's own ordering.
             const seen = {};
+            const all = [];
             for (let i = 0; i < sources.length; i++) {
                 const s = sources[i] || {};
                 const u = decodeStreamUrl(s.file);
                 if (!u || u.indexOf("http") !== 0) continue;
                 if (seen[u]) continue;
                 seen[u] = 1;
-                out.push({
+                all.push({
                     url: u,
-                    label: String(s.label || "Stream"),
-                    def: !!s.default,
-                    q: qRank(s.label)
+                    label: String(s.label || "Source"),
+                    provider: String(s.provider || ""),
+                    type: String(s.type || ""),
+                    isDefault: !!s["default"],
+                    order: i,
+                    weak: providerWeight(s.provider)
                 });
             }
-            // best quality first, site-default pinned to top
-            out.sort(function (a, b) { return (b.def - a.def) || (b.q - a.q); });
-
-            const streams = [];
-            for (let i = 0; i < out.length && streams.length < 10; i++) {
-                streams.push(mkStream({
-                    url: out[i].url,
-                    source: "321Movies - " + out[i].label,
-                    headers: STREAM_HEADERS,
-                    isDirect: true
-                }));
+            if (!all.length) {
+                return cb({ success: false, errorCode: "NO_STREAMS", message: "All 321Movies sources were unreadable." });
             }
 
-            if (!streams.length) {
+            // Interleave strong providers first, then weak ones, so the probe
+            // budget is spent where it has historically paid off.
+            all.sort(function (a, b) { return (a.weak - b.weak) || (a.order - b.order); });
+            const cands = all.slice(0, MAX_PROBE);
+
+            const responses = await probeAll(cands);
+
+            const live = [];
+            for (let i = 0; i < cands.length; i++) {
+                const res = responses[i] || {};
+                const status = res.status || res.statusCode || 0;
+                const body = res.body || "";
+                const verdict = classify(body, status);
+                if (!verdict.live) continue;
+                const c = cands[i];
+                const isHls = verdict.kind === "hls";
+                const h = isHls ? maxResolution(body) : 0;
+                const langs = isHls ? audioLanguages(body) : [];
+                live.push({
+                    url: c.url,
+                    label: c.label,
+                    provider: c.provider,
+                    isDefault: c.isDefault,
+                    order: c.order,
+                    kind: isHls ? "hls" : (verdict.kind === "mp4" ? "mp4" : "video"),
+                    height: h || labelQuality(c.label),
+                    langs: langs
+                });
+            }
+
+            if (!live.length) {
                 return cb({
                     success: false,
                     errorCode: "NO_STREAMS",
-                    message: "No playable source right now — try again in a moment."
+                    message: "Every 321Movies source for this title is offline right now. They rotate often — try again shortly or pick another title."
                 });
             }
-            cb({ success: true, data: streams });
+
+            // Best quality first. HLS master playlists beat progressive files
+            // at the same height because they can adapt downward. Ties broken
+            // by the site's own default flag, then original order.
+            live.sort(function (a, b) {
+                if (b.height !== a.height) return b.height - a.height;
+                if (a.kind === "hls" && b.kind !== "hls") return -1;
+                if (b.kind === "hls" && a.kind !== "hls") return 1;
+                if (!!b.isDefault !== !!a.isDefault) return b.isDefault ? 1 : -1;
+                return a.order - b.order;
+            });
+
+            const streams = [];
+            const usedNames = {};
+            for (let i = 0; i < live.length && streams.length < MAX_STREAMS; i++) {
+                const l = live[i];
+                const fam = (l.provider || "source").replace(/^sourcepack-/, "");
+                const nice = fam.charAt(0).toUpperCase() + fam.slice(1);
+                const q = qualityLabel(l.height, l.kind);
+
+                // Labels repeat a lot ("Horizon Auto" x18). Disambiguate so the
+                // picker is not a wall of identical rows.
+                let name = nice + " · " + q;
+                if (l.langs.length) name += " · " + l.langs.slice(0, 2).join("/");
+                if (usedNames[name]) { usedNames[name]++; name += " #" + usedNames[name]; }
+                else usedNames[name] = 1;
+
+                const so = {
+                    url: l.url,
+                    source: name,
+                    quality: q,
+                    headers: { "User-Agent": UA }
+                };
+                streams.push(mkStream(so));
+            }
+
+            return cb({ success: true, data: streams });
         } catch (e) {
-            cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
+            return cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
         }
     }
 
@@ -336,4 +711,3 @@
     globalThis.loadStreams = loadStreams;
 
 })();
-                                             
