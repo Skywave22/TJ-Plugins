@@ -1,9 +1,9 @@
 {
   "packageName": "com.movies321uk.skystream",
   "name": "321Movies UK",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://321movies.co.uk",
-  "description": "321Movies UK — movies and TV via the 321movies.co.uk catalog and player API. Finds playable sources where possible and labels unverified fallback links.",
+  "description": "321Movies UK — rebuilt SkyStream provider for the 321movies.co.uk TMDB catalogue and native player API. Supports movies, series and direct video links.",
   "authors": [
     "Skywave22"
   ],
