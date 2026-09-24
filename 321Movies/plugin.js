@@ -82,12 +82,13 @@
         "Accept-Encoding": "identity"
     };
 
-    // The API returns 37–69 sources per title and the good ones are not at
-    // the front, so probe them all. http_parallel runs them concurrently.
-    const MAX_PROBE = 72;
+    // The app's HTTP bridge caps response bodies and its http_parallel waits
+    // for every request. One slow/Cloudflare source can stall a whole batch;
+    // probe a bounded, interleaved sample with independent deadlines instead.
+    const MAX_PROBE = 48;
     const MAX_STREAMS = 12; // cap what we hand the player
-    const PROBE_MS = 6000;      // per-request timeout on the sequential fallback
-    const PROBE_BATCH_MS = 20000; // per-batch timeout on http_parallel
+    const PROBE_MS = 7000; // independent deadline per candidate
+    const MIN_GOOD_STREAMS = 3;
     const REQ_MS = 20000;
 
     // Providers that were never reachable in testing. Still probed, but
@@ -104,12 +105,19 @@
     function mkStream(o) { try { return new StreamResult(o); } catch (e) { return o; } }
 
     function withTimeout(promise, ms) {
+        let timer;
         return Promise.race([
             Promise.resolve(promise),
             new Promise(function (_, rej) {
-                setTimeout(function () { rej(new Error("timeout")); }, ms);
+                timer = setTimeout(function () { rej(new Error("timeout")); }, ms);
             })
-        ]);
+        ]).then(function (value) {
+            clearTimeout(timer);
+            return value;
+        }, function (error) {
+            clearTimeout(timer);
+            throw error;
+        });
     }
 
     // http_get resolves rather than rejects on 4xx/5xx in some runtimes and
@@ -240,7 +248,8 @@
         const isTv = (r.media_type || (r.first_air_date ? "tv" : "movie")) === "tv";
         const name = r.title || r.name || "";
         if (!name) return null;
-        const poster = r.poster_path ? IMG_W500 + r.poster_path : "";
+        const poster = r.poster_path ? IMG_W500 + r.poster_path
+            : (r.backdrop_path ? IMG_W500 + r.backdrop_path : "");
         const o = {
             title: String(name).trim(),
             url: encodeUrl({ mt: isTv ? "tv" : "movie", id: String(r.id) }),
@@ -332,7 +341,8 @@
             }
 
             const title = String(d.title || d.name || "Title").trim();
-            const poster = d.poster_path ? IMG_W500 + d.poster_path : "";
+            const poster = d.poster_path ? IMG_W500 + d.poster_path
+                : (d.backdrop_path ? IMG_W500 + d.backdrop_path : "");
             const banner = d.backdrop_path ? IMG_ORIG + d.backdrop_path : poster;
             const episodes = [];
 
@@ -434,9 +444,8 @@
     // Accept only things that are positively identifiable as media. Text bodies
     // are trustworthy, but binary bodies are not: the bridge hands JS a
     // *string*, so raw bytes arrive lossily decoded. That matters for the two
-    // signatures below, which is why a 206 is accepted on its own — a server
-    // only answers 206 when it honoured our Range request against a real file.
-    //
+    // signatures below. A 206 can be a partial JSON/HTML error, so reject
+    // text responses before accepting an unidentified partial video body.
     // Everything else on a 200 must match a known manifest/magic signature.
     // A permissive "not markup => media" fallback was tried and it let through
     // gzip-compressed JSON error bodies (e.g. {"error":"Missing playback
@@ -453,12 +462,14 @@
         const c0 = b.charCodeAt(0), c1 = b.charCodeAt(1);
         if (c0 === 0x1f && (c1 === 0x8b || c1 === 0x9e)) return { live: false };
 
-        // JSON error object that arrived uncompressed.
-        const lead = b.slice(0, 120);
-        if (/^\s*[\[{]/.test(lead) && /"(error|code|status|message)"\s*:/.test(lead)) return { live: false };
+        // Reject any JSON or markup, including errors served with status 206.
+        // Some hosts use keys other than "error" (e.g. "detail") and even
+        // honour Range requests against their error pages.
+        const lead = b.replace(/^\uFEFF/, "").trimStart();
+        if (/^[\[{<]/.test(lead)) return { live: false };
 
-        // HLS playlist.
-        if (b.indexOf("#EXTM3U") === 0) return { live: true, kind: "hls" };
+        // HLS playlist (even if preceded by whitespace or a UTF-8 BOM).
+        if (lead.indexOf("#EXTM3U") === 0) return { live: true, kind: "hls" };
 
         // ISO-BMFF (mp4/m4s): 4-byte size then "ftyp".
         if (b.length > 8 && b.substr(4, 4) === "ftyp") return { live: true, kind: "mp4" };
@@ -468,7 +479,11 @@
         // Raw MPEG-TS segment: 0x47 sync byte every 188 bytes.
         if (c0 === 0x47 && b.length > 188 && b.charCodeAt(188) === 0x47) return { live: true, kind: "video" };
 
-        // Partial content => a real byte-serving file, whatever the codec.
+        // Some hosts return a partial plain-text error ("expired", "forbidden")
+        // instead of JSON. Text without a recognized playlist signature is not video.
+        if (/^[\x20-\x7e\r\n\t]+$/.test(b.slice(0, 96))) return { live: false };
+
+        // Accept remaining non-text partial content as a byte-serving file.
         if (status === 206) return { live: true, kind: "video" };
 
         return { live: false };
@@ -526,44 +541,36 @@
         return kind === "mp4" ? "MP4" : "Auto";
     }
 
-    // Rank candidates so the ones most likely to be alive are probed first
-    // if the cap kicks in, and so a mixed list still probes fairly.
-    function providerWeight(prov) {
-        return WEAK_PROVIDERS[String(prov || "")] ? 1 : 0;
+    // Round-robin across provider families: if the first 16 Movy links are
+    // dead, we still try Vuflix/Streamaggregator in the very first batch.
+    function providerRank(prov) {
+        const ranks = {
+            "sourcepack-vuflix": 0,
+            "sourcepack-streamaggregator": 1,
+            "sourcepack-movy": 2,
+            "sourcepack-vidgod": 3
+        };
+        return Object.prototype.hasOwnProperty.call(ranks, prov) ? ranks[prov] : 4;
     }
 
-    // Probe in batches rather than one giant http_parallel call.
-    //
-    // Two reasons: a 72-request burst is a lot to put through one bridge call,
-    // and if a single call timed out the old design fell back to re-probing
-    // every source sequentially. Batching means a slow batch only costs its own
-    // small fallback, and early batches carry the providers that actually work.
-    const PROBE_BATCH = 18;
-
-    async function probeBatch(reqs) {
-        if (typeof http_parallel === "function") {
-            try {
-                const got = await withTimeout(http_parallel(reqs), PROBE_BATCH_MS);
-                if (got && got.length === reqs.length) return got;
-            } catch (e) { /* fall through to sequential */ }
-        }
-        const out = [];
-        for (let i = 0; i < reqs.length; i++) out.push(null);
-        await Promise.all(reqs.map(function (r, i) {
-            return safeGet(r.url, r.headers, PROBE_MS).then(function (x) { out[i] = x; });
-        }));
-        return out;
-    }
+    const PROBE_BATCH = 8;
 
     async function probeAll(cands) {
         const all = [];
+        let working = 0;
         for (let start = 0; start < cands.length; start += PROBE_BATCH) {
             const slice = cands.slice(start, start + PROBE_BATCH);
-            const reqs = slice.map(function (c) {
-                return { url: c.url, headers: PROBE_HEADERS, method: "GET" };
-            });
-            const got = await probeBatch(reqs);
-            for (let i = 0; i < slice.length; i++) all.push((got && got[i]) || { status: 0, body: "" });
+            // Unlike http_parallel, a slow/challenged host cannot hold up the
+            // other responses or force a re-probe of the entire batch.
+            const got = await Promise.all(slice.map(function (c) {
+                return safeGet(c.url, PROBE_HEADERS, PROBE_MS);
+            }));
+            for (let i = 0; i < got.length; i++) {
+                all.push(got[i]);
+                if (classify(got[i].body, got[i].status).live) working++;
+            }
+            // Two batches give each strong family multiple opportunities.
+            if (start >= PROBE_BATCH && working >= MIN_GOOD_STREAMS) break;
         }
         return all;
     }
@@ -603,8 +610,10 @@
                 });
             }
 
-            // Decode + de-duplicate, keeping the site's own ordering.
+            // Decode + de-duplicate; track each family's position so a single
+            // provider cannot crowd out all the alternatives.
             const seen = {};
+            const familyCounts = {};
             const all = [];
             for (let i = 0; i < sources.length; i++) {
                 const s = sources[i] || {};
@@ -612,29 +621,36 @@
                 if (!u || u.indexOf("http") !== 0) continue;
                 if (seen[u]) continue;
                 seen[u] = 1;
+                const family = String(s.provider || "");
+                const familyIndex = familyCounts[family] || 0;
+                familyCounts[family] = familyIndex + 1;
                 all.push({
                     url: u,
                     label: String(s.label || "Source"),
-                    provider: String(s.provider || ""),
+                    provider: family,
                     type: String(s.type || ""),
                     isDefault: !!s["default"],
                     order: i,
-                    weak: providerWeight(s.provider)
+                    familyIndex: familyIndex,
+                    rank: providerRank(family),
+                    weak: WEAK_PROVIDERS[family] ? 1 : 0
                 });
             }
             if (!all.length) {
                 return cb({ success: false, errorCode: "NO_STREAMS", message: "All 321Movies sources were unreadable." });
             }
 
-            // Interleave strong providers first, then weak ones, so the probe
-            // budget is spent where it has historically paid off.
-            all.sort(function (a, b) { return (a.weak - b.weak) || (a.order - b.order); });
+            // Interleave strong families before less reliable ones.
+            all.sort(function (a, b) {
+                return (a.weak - b.weak) || (a.familyIndex - b.familyIndex) ||
+                    (a.rank - b.rank) || (a.order - b.order);
+            });
             const cands = all.slice(0, MAX_PROBE);
 
             const responses = await probeAll(cands);
 
             const live = [];
-            for (let i = 0; i < cands.length; i++) {
+            for (let i = 0; i < responses.length; i++) {
                 const res = responses[i] || {};
                 const status = res.status || res.statusCode || 0;
                 const body = res.body || "";
