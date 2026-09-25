@@ -345,12 +345,13 @@
             });
 
             var headers = { Referer: playerPage, "User-Agent": UA, Origin: S };
-            // One entry per (family, quality) so the list stays useful instead of 58 near-duplicates.
+            // Drop exact duplicates only (same family + same label). Keying on quality alone
+            // collapsed genuine mirrors - "Vuflix 1/2/3" are separate hosts, not the same link.
             var perFamily = {};
             var toProbe = [];
             for (var ci = 0; ci < cands.length && toProbe.length < MAX_PROBE; ci++) {
                 var c = cands[ci];
-                var key = c.family + "|" + qualityOf(c.label);
+                var key = c.family + "|" + c.label;
                 if (perFamily[key]) continue;
                 perFamily[key] = true;
                 toProbe.push(c);
@@ -373,12 +374,17 @@
                     .replace(new RegExp("^" + cap + "\\b", "i"), "")
                     .replace(/\bauto\b/ig, "")
                     .replace(/[\s·]+$/g, "").replace(/^\s*·?\s*/g, "")
-                    .replace(/^\s*\d+\s*$/, "")
                     .trim();
-                var parts = [cap];
-                if (strip && strip.toLowerCase() !== cap.toLowerCase()) parts.push(strip);
-                if (qual && qual !== "Auto") parts.push(qual);
-                var name = parts.join(" · ");
+                var name;
+                if (/^\d+$/.test(strip)) {
+                    name = cap + " " + strip;   // mirror index stays visible: "Vuflix 1" vs "Vuflix 2"
+                } else {
+                    var parts = [cap];
+                    if (strip && strip.toLowerCase() !== cap.toLowerCase()) parts.push(strip);
+                    // Don't repeat a quality the label already carries ("Cascade 720p" + "720p").
+                    if (qual && !/auto/i.test(qual) && strip.toLowerCase().indexOf(qual.toLowerCase()) < 0) parts.push(qual);
+                    name = parts.join(" · ");
+                }
                 if (pc.p.ok) {
                     verified.push(new StreamResult({
                         url: pc.c.url,
@@ -395,6 +401,12 @@
             }
 
             var streams = verified.slice(0, MAX_STREAMS);
+            // Verified links first, but keep blocked ones as labelled fallbacks: a host that 403s
+            // this test network may still play on the user's IP, and the player can hop to it if
+            // the first pick stalls. Only discard them when there is already enough choice.
+            if (streams.length && streams.length < MAX_STREAMS && uncertain.length) {
+                streams = streams.concat(uncertain.slice(0, MAX_STREAMS - streams.length));
+            }
             // Nothing verified from this network: still hand the user real options, clearly labelled.
             if (!streams.length) {
                 var fallback = uncertain.length ? uncertain : cands.slice(0, 4).map(function (c) {
