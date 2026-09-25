@@ -2,7 +2,7 @@
   {
     "packageName": "com.movies321uk.skystream",
     "name": "321Movies UK",
-    "version": 3,
+    "version": 1,
     "baseUrl": "https://321movies.co.uk",
     "description": "321Movies UK — movies and TV from 321movies.co.uk. Shows verified streams first; offers clearly labelled unverified player links when a CDN blocks probing.",
     "authors": [
