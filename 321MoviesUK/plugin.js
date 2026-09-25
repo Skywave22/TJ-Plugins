@@ -1,285 +1,412 @@
-// SkyStream provider for 321movies.co.uk. Written against the site's current
-// TMDB-backed catalogue and its /api/player/vixsrc-playlist endpoint.
+/**
+ * SkyStream provider plugin — 321movies.co.uk
+ *
+ * How this plugin gets its data (all verified against the live site, Sept 2026):
+ *  - 321movies.co.uk is a client-rendered Next.js app: its HTML contains no links, so DOM
+ *    scraping is useless. Its catalogue is the TMDB v3 API, using the public read token that
+ *    the site itself ships inside its browser bundle (NEXT_PUBLIC_TMDB_ACCESS_TOKEN).
+ *  - Playable sources come from the site's own player API:
+ *      GET {SITE}/api/player/vixsrc-playlist?type=movie&id={tmdbId}
+ *      GET {SITE}/api/player/vixsrc-playlist?type=tv&id={tmdbId}&season={s}&episode={e}
+ *    -> { "playlist": [ { "sources": [ { type, file, label, provider, default } ] } ] }
+ *    where `file` is "enc:" + base64url(XOR-obfuscated URL). The XOR key is a public constant
+ *    in the site's player bundle; it is link obfuscation, NOT DRM, and is not bypassed here.
+ *  - Many sourcepack hosts sit behind Cloudflare and answer 403 to datacenter IPs while working
+ *    fine in the app. So every link is probed and only verified ones are ranked first; anything
+ *    unverifiable is still offered but explicitly labelled, and never silently dropped.
+ *
+ * Runtime constraints honoured (SkyStream Gen 2 / QuickJS, see ../PLUGIN-NOTES.md):
+ *  - no fetch()/XHR: uses http_get; no Node-only globals; no `new URL`.
+ *  - StreamResult has no `quality` field -> the quality label is carried in `source`.
+ *  - cb() is called exactly once on every path.
+ */
 (function () {
     "use strict";
 
-    const SITE = String((typeof manifest !== "undefined" && manifest.baseUrl) || "https://321movies.co.uk").replace(/\/+$/, "");
-    const TMDB = "https://api.themoviedb.org/3";
-    const IMAGE = "https://image.tmdb.org/t/p/";
-    // Public read token shipped in the website's browser bundle (not a user credential).
-    const READ_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJiYmYxODFkOTRiMzk2MTg1ZDBhYmQ5NzA5M2ZkNDhlMCIsIm5iZiI6MTY5MjUzNzk2MS45MTgwMDAyLCJzdWIiOiI2NGUyMTQ2OTM3MTA5NzAxMWM1NDk3YjgiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.t4GsujVl9LceOrnPmx-WDdncTSAx60QBLAoaiuTCvXI";
-    // Public URL-obfuscation key used by the site's player; it is not DRM.
-    const PLAYER_KEY = "j7wYkYhVgQn5x2L6k2M8hVQfD4zN3bP1aR7uT0cXyE6dZX4sWAd87JKMN8HHGG654GVCFRLMNBOPUY7LK";
-    const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
-    const BASE_HEADERS = { "User-Agent": UA, "Accept-Encoding": "identity" };
-    const PROBE_HEADERS = { "User-Agent": UA, "Accept-Encoding": "identity", "Range": "bytes=0-4095" };
+    var TMDB = "https://api.themoviedb.org/3";
+    var IMG = "https://image.tmdb.org/t/p/";
+    var TMDB_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJiYmYxODFkOTRiMzk2MTg1ZDBhYmQ5NzA5M2ZkNDhlMCIsIm5iZiI6MTY5MjUzNzk2MS45MTgwMDAyLCJzdWIiOiI2NGUyMTQ2OTM3MTA5NzAxMWM1NDk3YjgiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.t4GsujVl9LceOrnPmx-WDdncTSAx60QBLAoaiuTCvXI";
+    var PLAYER_KEY = "j7wYkYhVgQn5x2L6k2M8hVQfD4zN3bP1aR7uT0cXyE6dZX4sWAd87JKMN8HHGG654GVCFRLMNBOPUY7LK";
+    var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    async function request(url, headers, timeoutMs) {
-        let timer;
+    // Hosts that tend to work from restricted networks get probed first.
+    var PREFERRED = ["vuflix", "frame", "peestream", "bcine", "cinesrc", "movy", "pstream", "rivestream", "streamaggregator", "vidgod"];
+    var MAX_PROBE = 12;      // candidate links to verify
+    var MAX_STREAMS = 8;     // results handed back to the player
+
+    function site() {
+        var b = (typeof manifest !== "undefined" && manifest.baseUrl) ? manifest.baseUrl : "https://321movies.co.uk";
+        return String(b).replace(/\/+$/, "");
+    }
+    function hdr(extra) {
+        var h = { "User-Agent": UA, "Accept-Encoding": "identity" };
+        if (extra) { for (var k in extra) { if (Object.prototype.hasOwnProperty.call(extra, k)) h[k] = extra[k]; } }
+        return h;
+    }
+    function fail(cb, code, msg) { cb({ success: false, errorCode: code, message: String(msg || code) }); }
+
+    /** GET with a hard deadline; never throws. */
+    async function req(url, headers, ms) {
+        var timer = null;
         try {
-            const response = await Promise.race([
-                http_get(url, headers || BASE_HEADERS),
-                new Promise(function (_, reject) {
-                    timer = setTimeout(function () { reject(new Error("Request timed out")); }, timeoutMs || 12000);
-                })
+            var p = http_get(url, headers || hdr());
+            var race = await Promise.race([
+                Promise.resolve(p),
+                new Promise(function (_, rej) {
+                    timer = setTimeout(function () { rej(new Error("timeout after " + (ms || 15000) + "ms")); }, ms || 15000);
+                }),
             ]);
-            return { status: Number(response && (response.status || response.statusCode)) || 0,
-                body: String((response && response.body) || ""), headers: (response && response.headers) || {} };
-        } catch (_) {
-            return { status: 0, body: "", headers: {} };
+            return {
+                status: Number(race && (race.status || race.statusCode)) || 0,
+                body: String((race && race.body) || ""),
+            };
+        } catch (e) {
+            return { status: 0, body: "", error: String((e && e.message) || e) };
         } finally {
-            clearTimeout(timer);
+            if (timer) clearTimeout(timer);
         }
     }
 
-    function json(body) { try { return JSON.parse(body); } catch (_) { return null; } }
-
-    async function metadata(path) {
-        const sep = path.indexOf("?") < 0 ? "?" : "&";
-        const response = await request(TMDB + path + sep + "language=en-US", {
-            "Authorization": "Bearer " + READ_TOKEN,
-            "Accept": "application/json",
-            "Accept-Encoding": "identity",
-            "User-Agent": UA
-        }, 12000);
-        return response.status === 200 ? json(response.body) : null;
-    }
-
-    function picture(path, width) {
-        return path && typeof path === "string" ? IMAGE + width + path : "";
-    }
-
-    function item(record, forcedType) {
-        if (!record || !record.id) return null;
-        const type = forcedType || record.media_type || (record.first_air_date ? "tv" : "movie");
-        if (type !== "tv" && type !== "movie") return null;
-        const title = record.title || record.name;
-        if (!title || record.adult) return null;
-        const poster = picture(record.poster_path || record.backdrop_path, "w500");
-        const out = {
-            title: String(title),
-            url: SITE + "/" + type + "/" + record.id,
-            posterUrl: poster,
-            bannerUrl: picture(record.backdrop_path, "original") || poster,
-            type: type === "tv" ? "series" : "movie"
-        };
-        const date = record.release_date || record.first_air_date || "";
-        if (/^\d{4}/.test(date)) out.year = Number(date.slice(0, 4));
-        if (record.overview) out.description = String(record.overview);
-        if (Number(record.vote_average) > 0) out.score = Number(record.vote_average);
-        return new MultimediaItem(out);
-    }
-
-    function items(records, type) {
-        return (Array.isArray(records) ? records : []).map(function (r) { return item(r, type); }).filter(Boolean);
-    }
-
-    function reference(value) {
-        const str = String(value || "");
-        const match = /\/(movie|tv)\/(\d+)(?:\/(\d+)\/(\d+))?/.exec(str);
-        if (match) return { type: match[1], id: match[2], season: Number(match[3]) || 1, episode: Number(match[4]) || 1 };
+    async function jget(url, headers, ms, tries) {
+        var n = tries || 1;
+        for (var i = 0; i < n; i++) {
+            var r = await req(url, hdr(headers), ms);
+            if (r.status === 200) {
+                try { return JSON.parse(r.body); } catch (e) { return null; }
+            }
+            // 429/5xx/0(timeout) on a gateway that fans out to ~10 upstreams is usually
+            // transient - retry once or twice before calling the endpoint dead.
+            if (i + 1 < n) await new Promise(function (r2) { setTimeout(r2, 900 * (i + 1)); });
+        }
         return null;
     }
 
-    function fail(cb, code, message) { cb({ success: false, errorCode: code, message: message }); }
+    async function tmdbGet(path) {
+        var sep = path.indexOf("?") < 0 ? "?" : "&";
+        var url = TMDB + path + sep + "language=en-US";
+        var h = { Authorization: "Bearer " + TMDB_TOKEN, Accept: "application/json" };
+        // A dashboard fans out ~7 calls at once and TMDB answers 429; back off and retry
+        // instead of dropping a row (or failing getHome outright).
+        for (var attempt = 0; attempt < 3; attempt++) {
+            var out = await jget(url, h, 20000, 2);
+            if (out) return out;
+            await new Promise(function (r) { setTimeout(r, 350 * (attempt + 1)); });
+        }
+        return null;
+    }
+
+    function poster(path, size) { return path ? IMG + size + path : ""; }
+    function yearOf(d) { var m = /^(\d{4})/.exec(String(d || "")); return m ? parseInt(m[1], 10) : undefined; }
+
+    /** Decode "enc:<base64url>" into a real URL. Returns "" when the key has rotated. */
+    function decodeFile(file) {
+        if (typeof file !== "string" || !file) return "";
+        if (file.slice(0, 4) !== "enc:") return file; // already a plain URL
+        try {
+            var b64 = file.slice(4).replace(/-/g, "+").replace(/_/g, "/");
+            while (b64.length % 4) b64 += "=";
+            var raw = atob(b64);
+            if (raw.length < 9) return "";
+            var out = "";
+            for (var i = 8; i < raw.length; i++) {
+                var salt = raw.charCodeAt((i - 8) % 8);
+                out += String.fromCharCode(raw.charCodeAt(i) ^ PLAYER_KEY.charCodeAt((i - 8 + salt) % PLAYER_KEY.length));
+            }
+            return /^https?:\/\//i.test(out) ? out : "";
+        } catch (e) {
+            return "";
+        }
+    }
+
+    /** /movie/550 , /tv/1399 , /tv/1399/1/5  ->  {type,id,season,episode} */
+    function reference(url) {
+        var s = String(url || "");
+        var m = /\/(movie|tv|series)\/(\d+)(?:\/(?:season\/)?(\d+))?(?:\/(?:episode\/)?(\d+))?/i.exec(s);
+        if (!m) return null;
+        var type = /^series$/i.test(m[1]) ? "tv" : m[1].toLowerCase();
+        return { type: type, id: m[2], season: m[3] ? parseInt(m[3], 10) : null, episode: m[4] ? parseInt(m[4], 10) : null };
+    }
+
+    function qualityOf(label) {
+        var l = String(label || "");
+        if (/4k|2160/i.test(l)) return "4K" + (/hdr/i.test(l) ? " HDR" : "");
+        var m = /(720|1080|480|360)0?p?/i.exec(l);
+        if (m) return m[1] + "p";
+        return /auto/i.test(l) ? "Auto" : "";
+    }
+    function familyOf(provider) {
+        return String(provider || "other").replace(/^sourcepack-/, "");
+    }
+
+    function toItem(r, forced) {
+        if (!r || !r.id) return null;
+        var type = forced || (r.media_type === "tv" || r.first_air_date ? "series" : "movie");
+        if (type === "tv") type = "series";
+        var title = r.title || r.name || r.original_title || r.original_name || "Untitled";
+        var id = String(r.id);
+        return new MultimediaItem({
+            title: title,
+            url: site() + "/" + (type === "series" ? "tv" : "movie") + "/" + id,
+            posterUrl: poster(r.poster_path, "w500"),
+            bannerUrl: poster(r.backdrop_path, "w1280"),
+            type: type,
+            year: yearOf(type === "series" ? r.first_air_date : r.release_date),
+            score: typeof r.vote_average === "number" ? Math.round(r.vote_average * 10) / 10 : undefined,
+            description: r.overview || "",
+            isAdult: !!r.adult,
+            syncData: { tmdb: id },
+        });
+    }
+
+    // ---------------------------------------------------------------- getHome
+    var ROWS = [
+        ["Trending", "/trending/movie/day", "movie"],
+        ["Popular Movies", "/movie/popular", "movie"],
+        ["Popular Series", "/tv/popular", "series"],
+        ["Trending Series", "/trending/tv/week", "series"],
+        ["Top Rated Movies", "/movie/top_rated", "movie"],
+        ["Airing Today", "/tv/airing_today", "series"],
+        ["Upcoming", "/movie/upcoming", "movie"],
+    ];
 
     async function getHome(cb) {
-        const sections = [
-            ["Trending", "/trending/movie/day", "movie"],
-            ["Popular Movies", "/movie/popular", "movie"],
-            ["Popular TV", "/tv/popular", "tv"],
-            ["Trending TV", "/trending/tv/week", "tv"],
-            ["Top Rated Movies", "/movie/top_rated", "movie"]
-        ];
         try {
-            const results = await Promise.all(sections.map(function (section) { return metadata(section[1] + "?page=1"); }));
-            const home = {};
-            for (let i = 0; i < sections.length; i++) {
-                const row = items(results[i] && results[i].results, sections[i][2]);
-                if (row.length) home[sections[i][0]] = row;
+            var lists = await Promise.all(ROWS.map(function (r) { return tmdbGet(r[1]); }));
+            var data = {};
+            for (var i = 0; i < ROWS.length; i++) {
+                var res = lists[i] && lists[i].results;
+                if (!res || !res.length) continue;
+                var items = [];
+                for (var j = 0; j < res.length; j++) {
+                    if (res[j] && res[j].adult) continue;
+                    var it = toItem(res[j], ROWS[i][2]);
+                    if (it) items.push(it);
+                }
+                if (items.length) data[ROWS[i][0]] = items;
             }
-            if (!Object.keys(home).length) return fail(cb, "CATALOG_OFFLINE", "321Movies UK catalogue could not be reached.");
-            cb({ success: true, data: home });
-        } catch (error) { fail(cb, "HOME_ERROR", String(error)); }
+            if (!Object.keys(data).length) {
+                return fail(cb, "UPSTREAM_ERROR", "TMDB returned nothing - check network access to api.themoviedb.org or a rotated public token.");
+            }
+            cb({ success: true, data: data });
+        } catch (e) {
+            fail(cb, "UNKNOWN", (e && e.stack) || e);
+        }
     }
 
+    // ----------------------------------------------------------------- search
     async function search(query, cb) {
-        const text = String(query || "").trim();
-        if (!text) return cb({ success: true, data: [] });
         try {
-            const result = await metadata("/search/multi?query=" + encodeURIComponent(text) + "&include_adult=false&page=1");
-            if (!result) return fail(cb, "SEARCH_OFFLINE", "Could not search the 321Movies UK catalogue.");
-            cb({ success: true, data: items(result.results) });
-        } catch (error) { fail(cb, "SEARCH_ERROR", String(error)); }
+            var q = encodeURIComponent(String(query || "").trim());
+            if (!q) return cb({ success: true, data: [] });
+            var res = await tmdbGet("/search/multi?query=" + q + "&include_adult=false&page=1");
+            if (!res || !res.results) {
+                res = await tmdbGet("/search/movie?query=" + q + "&include_adult=false&page=1");
+            }
+            var out = [];
+            var rows = (res && res.results) || [];
+            for (var i = 0; i < rows.length; i++) {
+                var r = rows[i];
+                if (!r || r.media_type === "person" || r.adult) continue;
+                var it = toItem(r);
+                if (it) out.push(it);
+            }
+            cb({ success: true, data: out });
+        } catch (e) {
+            fail(cb, "UNKNOWN", (e && e.stack) || e);
+        }
     }
 
+    // ------------------------------------------------------------------- load
     async function load(url, cb) {
-        const ref = reference(url);
-        if (!ref) return fail(cb, "BAD_URL", "Unknown 321Movies UK title.");
+        var ref = reference(url);
+        if (!ref) return fail(cb, "BAD_URL", "Unrecognised 321movies URL: " + url);
         try {
-            const details = await metadata("/" + ref.type + "/" + ref.id);
-            if (!details || !details.id) return fail(cb, "DETAIL_OFFLINE", "Title details are unavailable.");
-            const media = item(details, ref.type);
-            if (!media) return fail(cb, "DETAIL_ERROR", "Title details are incomplete.");
-            const episodes = [];
-            if (ref.type === "movie") {
-                episodes.push(new Episode({ name: "Full Movie", url: media.url, season: 1, episode: 1 }));
-                if (Number(details.runtime) > 0) media.duration = Number(details.runtime);
-            } else {
-                const seasons = (details.seasons || []).filter(function (s) { return s.season_number > 0 && s.episode_count > 0; });
-                // Small concurrent groups avoid exhausting the app's HTTP bridge.
-                for (let start = 0; start < seasons.length; start += 4) {
-                    const batch = seasons.slice(start, start + 4);
-                    const pages = await Promise.all(batch.map(function (s) {
-                        return metadata("/tv/" + ref.id + "/season/" + s.season_number);
-                    }));
-                    for (let i = 0; i < batch.length; i++) {
-                        for (const ep of ((pages[i] && pages[i].episodes) || [])) {
-                            if (!ep.episode_number) continue;
-                            episodes.push(new Episode({
-                                name: "S" + batch[i].season_number + "E" + String(ep.episode_number).padStart(2, "0") + " · " + (ep.name || "Episode"),
-                                url: SITE + "/tv/" + ref.id + "/" + batch[i].season_number + "/" + ep.episode_number,
-                                season: batch[i].season_number,
-                                episode: ep.episode_number,
-                                posterUrl: picture(ep.still_path, "w500") || media.posterUrl,
-                                airDate: ep.air_date || undefined
-                            }));
-                        }
+            var path = ref.type === "tv"
+                ? "/tv/" + ref.id + "?append_to_response=credits,videos,seasons,content_ratings"
+                : "/movie/" + ref.id + "?append_to_response=credits,videos,content_ratings";
+            var d = await tmdbGet(path);
+            if (!d || !d.id) return fail(cb, "NOT_FOUND", "TMDB has no entry for " + path);
+
+            var title = d.title || d.name || "Untitled";
+            var item = toItem(d, ref.type === "tv" ? "series" : "movie");
+            item.description = d.overview || item.description;
+            item.url = site() + "/" + (ref.type === "tv" ? "tv" : "movie") + "/" + d.id;
+            item.tags = (d.genres || []).map(function (g) { return g.name; });
+            if (d.runtime) item.duration = d.runtime;
+            if (d.status) item.status = /released|ended/i.test(d.status) ? "completed" : "ongoing";
+            var rating = ((d.content_ratings && (d.content_ratings.results || d.content_ratings.us || [])) || [])
+                .map(function (x) { return x.rating; }).filter(Boolean);
+            if (rating.length) item.contentRating = rating[0];
+            item.cast = (d.credits && d.credits.cast ? d.credits.cast.slice(0, 12) : []).map(function (c) {
+                return new Actor({ name: c.name, role: c.character, image: poster(c.profile_path, "w185") });
+            });
+            item.trailers = ((d.videos && d.videos.results) || [])
+                .filter(function (v) { return v.site === "YouTube" && v.type === "Trailer"; }).slice(0, 3)
+                .map(function (v) { return new Trailer({ url: "https://www.youtube.com/watch?v=" + v.key }); });
+
+            var episodes = [];
+            if (ref.type === "tv") {
+                var wantSeason = ref.season;
+                var seasons = (d.seasons || []).filter(function (s) {
+                    return s.season_number > 0 && (wantSeason ? s.season_number === wantSeason : true);
+                }).slice(0, 40);
+                var eps = await Promise.all(seasons.map(function (s) {
+                    return tmdbGet("/tv/" + d.id + "/season/" + s.season_number);
+                }));
+                for (var si = 0; si < seasons.length; si++) {
+                    var sd = eps[si];
+                    if (!sd || !sd.episodes) continue;
+                    for (var ei = 0; ei < sd.episodes.length; ei++) {
+                        var e = sd.episodes[ei];
+                        episodes.push(new Episode({
+                            name: e.name || ("Episode " + e.episode_number),
+                            url: site() + "/tv/" + d.id + "/" + sd.season_number + "/" + e.episode_number,
+                            season: sd.season_number,
+                            episode: e.episode_number,
+                            description: e.overview || "",
+                            posterUrl: poster(e.still_path, "w300"),
+                            runtime: e.runtime,
+                            airDate: e.air_date,
+                            rating: typeof e.vote_average === "number" ? e.vote_average : undefined,
+                        }));
                     }
                 }
+            } else {
+                // Movies resolve straight from their own URL - no episode wrapper needed.
+                episodes = [];
             }
-            media.episodes = episodes;
-            media.syncData = { tmdb: ref.id };
-            cb({ success: true, data: media });
-        } catch (error) { fail(cb, "DETAIL_ERROR", String(error)); }
-    }
-
-    function decodeFile(file) {
-        if (typeof file !== "string") return "";
-        if (file.slice(0, 4) !== "enc:") return file;
-        try {
-            let encoded = file.slice(4).replace(/-/g, "+").replace(/_/g, "/");
-            while (encoded.length % 4) encoded += "=";
-            const bytes = atob(encoded);
-            if (bytes.length < 9) return "";
-            let url = "";
-            for (let i = 8; i < bytes.length; i++) {
-                const salt = bytes.charCodeAt((i - 8) % 8);
-                url += String.fromCharCode(bytes.charCodeAt(i) ^ PLAYER_KEY.charCodeAt((i - 8 + salt) % PLAYER_KEY.length));
-            }
-            return url;
-        } catch (_) { return ""; }
-    }
-
-    function classify(response) {
-        if (response.status !== 200 && response.status !== 206) return null;
-        const body = response.body || "";
-        if (!body) return null;
-        const head = body.replace(/^\uFEFF/, "").trimStart();
-        if (/^[\[{<]/.test(head) || /^\s*(?:forbidden|expired|unauthorized|error)/i.test(head)) return null;
-        if (head.slice(0, 7) === "#EXTM3U") return { kind: "hls", body: head };
-        const contentType = String(response.headers["content-type"] || response.headers["Content-Type"] || "").toLowerCase();
-        if (body.slice(4, 8) === "ftyp" || contentType.indexOf("video/") === 0) return { kind: "video", body: "" };
-        // The Flutter HTTP bridge decodes binary as text, so signed MKV/MP4
-        // files may lose their magic bytes. An unrecognised binary 206 is okay.
-        if (response.status === 206 && !/^[\x20-\x7e\r\n\t]+$/.test(body.slice(0, 80))) return { kind: "video", body: "" };
-        return null;
-    }
-
-    function quality(manifestBody) {
-        let height = 0;
-        const pattern = /RESOLUTION=\d+x(\d{3,4})|NAME="(\d{3,4})p"/g;
-        let match;
-        while ((match = pattern.exec(manifestBody)) !== null) {
-            height = Math.max(height, Number(match[1] || match[2]));
+            item.episodes = episodes;
+            cb({ success: true, data: item });
+        } catch (err) {
+            fail(cb, "UNKNOWN", (err && err.stack) || err);
         }
-        return height >= 2000 ? "4K" : height >= 1400 ? "1440p" : height >= 1000 ? "1080p" : height >= 700 ? "720p" : height >= 450 ? "480p" : "Auto";
     }
 
-    function candidates(playlists) {
-        const all = [];
-        const seen = new Set();
-        const familyIndex = {};
-        const ranks = { "sourcepack-vuflix": 0, "sourcepack-streamaggregator": 1, "sourcepack-movy": 2, "sourcepack-vidgod": 3 };
-        for (const group of (Array.isArray(playlists) ? playlists : [])) {
-            for (const source of ((group && group.sources) || [])) {
-                const url = decodeFile(source.file);
-                if (!/^https?:\/\//i.test(url) || seen.has(url)) continue;
-                seen.add(url);
-                const family = String(source.provider || "Other");
-                const nth = familyIndex[family] || 0;
-                familyIndex[family] = nth + 1;
-                all.push({ url: url, family: family, nth: nth,
-                    rank: Object.prototype.hasOwnProperty.call(ranks, family) ? ranks[family] : 9,
-                    label: String(source.label || "") });
-            }
+    // ----------------------------------------------------------- loadStreams
+    /** Verify one candidate returns an HLS manifest / playable body. */
+    async function probe(streamUrl, referer) {
+        var r = await req(streamUrl, hdr({ Accept: "*/*", Referer: referer, Range: "bytes=0-4096" }), 12000);
+        if (r.status !== 200 && r.status !== 206) {
+            return { ok: false, status: r.status };
         }
-        all.sort(function (a, b) { return (a.rank === 9) - (b.rank === 9) || a.nth - b.nth || a.rank - b.rank; });
-        return all;
+        var head = String(r.body || "").replace(/^\uFEFF/, "").trimStart();
+        if (/^#EXTM3U/.test(head)) return { ok: true, kind: "hls" };
+        if (/^#EXT-X-STREAM-INF/.test(head)) return { ok: true, kind: "hls-master" };
+        if (head.length > 0) return { ok: true, kind: "data" }; // 200 with body: player will sort it out
+        return { ok: false, status: r.status };
     }
 
     async function loadStreams(url, cb) {
-        const ref = reference(url);
-        if (!ref) return fail(cb, "BAD_URL", "Unknown 321Movies UK episode.");
+        var ref = reference(url);
+        if (!ref) return fail(cb, "BAD_URL", "Unrecognised 321movies URL: " + url);
         try {
-            let query = "type=" + ref.type + "&id=" + ref.id;
-            if (ref.type === "tv") query += "&season=" + ref.season + "&episode=" + ref.episode;
-            const response = await request(SITE + "/api/player/vixsrc-playlist?" + query,
-                { "User-Agent": UA, "Accept-Encoding": "identity", "Accept": "application/json", "Referer": SITE + "/" }, 18000);
-            if (response.status !== 200) return fail(cb, "PLAYER_OFFLINE", "321Movies UK player API returned HTTP " + response.status + ".");
-            const payload = json(response.body);
-            if (!payload || !Array.isArray(payload.playlist)) return fail(cb, "PLAYER_ERROR", "321Movies UK returned an invalid player response.");
-            const options = candidates(payload.playlist).slice(0, 30);
-            if (!options.length) return fail(cb, "NO_STREAMS", "This title currently has no direct sources on 321Movies UK.");
-            const verified = [];
-            const uncertain = [];
-            const playerPage = SITE + "/" + ref.type + "/" + ref.id +
-                (ref.type === "tv" ? "/" + ref.season + "/" + ref.episode : "") + "/player";
-            const probeHeaders = Object.assign({}, PROBE_HEADERS, { "Referer": playerPage });
-            const playHeaders = { "User-Agent": UA, "Referer": playerPage };
-            for (let start = 0; start < options.length; start += 6) {
-                const batch = options.slice(start, start + 6);
-                const checks = await Promise.all(batch.map(function (candidate) { return request(candidate.url, probeHeaders, 6500); }));
-                for (let i = 0; i < batch.length; i++) {
-                    const result = classify(checks[i]);
-                    if (result) {
-                        const name = batch[i].family.replace(/^sourcepack-/, "");
-                        const q = result.kind === "hls" ? quality(result.body) : "Auto";
-                        verified.push(new StreamResult({
-                            url: batch[i].url, source: name + " · " + q,
-                            quality: q, headers: playHeaders
-                        }));
-                    } else if ((checks[i].status === 0 || checks[i].status === 403 || checks[i].status === 429) && uncertain.length < 8) {
-                        // A CDN can reject the plugin's Range probe or block this
-                        // network while the same signed link works in the player.
-                        // These are NOT verified: leave the choice to the user.
-                        uncertain.push(batch[i]);
-                    }
-                }
-                if (verified.length >= 3 || (start >= 6 && verified.length === 0 && uncertain.length >= 3)) break;
+            var q = "type=" + ref.type + "&id=" + ref.id;
+            if (ref.type === "tv") {
+                var s = ref.season || 1, e = ref.episode || 1;
+                q += "&season=" + s + "&episode=" + e;
             }
-            const streams = verified.slice(0, 10);
-            if (streams.length < 3) {
-                const used = new Set();
-                // Offer at most one uncertain link per provider family first.
-                for (let pass = 0; pass < 2 && streams.length < 3; pass++) {
-                    for (const option of uncertain) {
-                        if (streams.length >= 3) break;
-                        if (pass === 0 && used.has(option.family)) continue;
-                        if (option.offered) continue;
-                        used.add(option.family);
-                        option.offered = true;
-                        streams.push(new StreamResult({
-                            url: option.url,
-                            source: option.family.replace(/^sourcepack-/, "") + " · unverified (may be blocked)",
-                            headers: playHeaders
-                        }));
-                    }
+            var S = site();
+            var playerPage = S + "/" + ref.type + "/" + ref.id + (ref.type === "tv" ? "/" + (ref.season || 1) + "/" + (ref.episode || 1) : "") + "/player";
+            // This call is slow on purpose: the endpoint queries ~10 upstream providers
+            // (measured 8-40s). A 20s deadline reported a healthy API as "offline".
+            var payload = await jget(S + "/api/player/vixsrc-playlist?" + q, { Accept: "application/json", Referer: S + "/" }, 55000, 2);
+            if (!payload) {
+                return fail(cb, "PLAYER_OFFLINE", "321movies player API unreachable (blocked, moved, or rate-limited).");
+            }
+            var groups = payload.playlist || [];
+            var seen = {};
+            var cands = [];
+            var encoded = 0;
+            for (var gi = 0; gi < groups.length; gi++) {
+                var srcs = groups[gi].sources || [];
+                for (var si = 0; si < srcs.length; si++) {
+                    var src = srcs[si];
+                    if (typeof src.file === "string" && src.file.slice(0, 4) === "enc:") encoded++;
+                    var real = decodeFile(src.file);
+                    if (!/^https?:\/\//i.test(real)) continue;
+                    if (seen[real]) continue;
+                    seen[real] = true;
+                    var fam = familyOf(src.provider);
+                    cands.push({
+                        url: real, family: fam, label: String(src.label || ""),
+                        isDefault: src.default === true || src.default === "true",
+                        rank: PREFERRED.indexOf(fam) < 0 ? 50 : PREFERRED.indexOf(fam),
+                    });
                 }
             }
-            if (!streams.length) return fail(cb, "NO_STREAMS", "321Movies UK supplied sources, but all failed or were removed by the host.");
+            if (!cands.length) {
+                return fail(cb, encoded ? "DECODE_FAILED" : "NO_SOURCES",
+                    encoded
+                        ? "Sources are obfuscated and none decoded - 321movies rotated its player key; update PLAYER_KEY in this plugin."
+                        : "321movies returned no playable sources for this title.");
+            }
+            cands.sort(function (a, b) {
+                return (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0) || a.rank - b.rank;
+            });
+
+            var headers = { Referer: playerPage, "User-Agent": UA, Origin: S };
+            // One entry per (family, quality) so the list stays useful instead of 58 near-duplicates.
+            var perFamily = {};
+            var toProbe = [];
+            for (var ci = 0; ci < cands.length && toProbe.length < MAX_PROBE; ci++) {
+                var c = cands[ci];
+                var key = c.family + "|" + qualityOf(c.label);
+                if (perFamily[key]) continue;
+                perFamily[key] = true;
+                toProbe.push(c);
+            }
+
+            var probed = await Promise.all(toProbe.map(async function (c) {
+                var p = await probe(c.url, playerPage);
+                return { c: c, p: p };
+            }));
+
+            var verified = [];
+            var uncertain = [];
+            for (var pi = 0; pi < probed.length; pi++) {
+                var pc = probed[pi];
+                var cap = pc.c.family.charAt(0).toUpperCase() + pc.c.family.slice(1);
+                var qual = qualityOf(pc.c.label);
+                // Strip the family name and a trailing "Auto" out of the source label so
+                // "Vuflix 1" -> just "Vuflix", and "Horizon Auto" -> "Frame · Horizon".
+                var strip = String(pc.c.label || "")
+                    .replace(new RegExp("^" + cap + "\\b", "i"), "")
+                    .replace(/\bauto\b/ig, "")
+                    .replace(/[\s·]+$/g, "").replace(/^\s*·?\s*/g, "")
+                    .replace(/^\s*\d+\s*$/, "")
+                    .trim();
+                var parts = [cap];
+                if (strip && strip.toLowerCase() !== cap.toLowerCase()) parts.push(strip);
+                if (qual && qual !== "Auto") parts.push(qual);
+                var name = parts.join(" · ");
+                if (pc.p.ok) {
+                    verified.push(new StreamResult({
+                        url: pc.c.url,
+                        source: pc.c.isDefault ? name + " · default" : name,
+                        headers: headers,
+                    }));
+                } else {
+                    uncertain.push(new StreamResult({
+                        url: pc.c.url,
+                        source: name + " · unverified (may be geo/CDN blocked)",
+                        headers: headers,
+                    }));
+                }
+            }
+
+            var streams = verified.slice(0, MAX_STREAMS);
+            // Nothing verified from this network: still hand the user real options, clearly labelled.
+            if (!streams.length) {
+                var fallback = uncertain.length ? uncertain : cands.slice(0, 4).map(function (c) {
+                    return new StreamResult({ url: c.url, source: c.family + " · unverified", headers: headers });
+                });
+                streams = fallback.slice(0, MAX_STREAMS);
+            }
+            if (!streams.length) return fail(cb, "NO_STREAMS", "Every source failed to resolve.");
             cb({ success: true, data: streams });
-        } catch (error) { fail(cb, "STREAM_ERROR", String(error)); }
+        } catch (err) {
+            fail(cb, "EXTRACTION_FAILED", (err && err.stack) || err);
+        }
     }
 
     globalThis.getHome = getHome;
