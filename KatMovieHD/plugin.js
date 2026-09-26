@@ -24,8 +24,17 @@
     var GDFLIX_HOST = 'new4.gdflix.io';
     var GD_KEY = 'acbe2066696a1d44345698deb3d9ebf9ae9bbdfd';
 
-    // Mirror codes that KMHD touchme API supports (discovered via /api/touchme/{id}?c={code})
-    var TOUCHME_CODES = ['gdflix_res', 'hubdrive_res', 'katdrive_res', 'sendcm_res', 'ffast_res', 'fichier_res', 'streamtape_res', 'streamwish_res'];
+    // Only 3 working hosts per user request: StreamTape, StreamWish, HubCloud
+    var TOUCHME_CODES = ['streamtape_res', 'streamwish_res', 'hubdrive_res'];
+    // Geo bypass headers
+    var GEO_HEADERS = {
+        'X-Forwarded-For': '8.8.8.8',
+        'X-Real-IP': '8.8.8.8',
+        'CF-IPCountry': 'US',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+    };
 
     var ROWS = [
         { name: 'Latest Uploads',   slug: null },
@@ -53,7 +62,11 @@
         var h = {
             'User-Agent': UA,
             'Accept': 'text/html,application/json,*/*;q=0.8',
-            'Referer': SITE + '/'
+            'Referer': SITE + '/',
+            'Accept-Language': GEO_HEADERS['Accept-Language'],
+            'Cache-Control': GEO_HEADERS['Cache-Control'],
+            'X-Forwarded-For': GEO_HEADERS['X-Forwarded-For'],
+            'CF-IPCountry': GEO_HEADERS['CF-IPCountry']
         };
         if (extraHeaders) Object.keys(extraHeaders).forEach(function (k) { h[k] = extraHeaders[k]; });
         var res = await http_get(url, h);
@@ -427,7 +440,11 @@
                 'User-Agent': UA,
                 'Referer': KMHD + '/play?id=xxx',
                 'Origin': KMHD,
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'Accept-Language': GEO_HEADERS['Accept-Language'],
+                'X-Forwarded-For': GEO_HEADERS['X-Forwarded-For'],
+                'CF-IPCountry': GEO_HEADERS['CF-IPCountry'],
+                'Cache-Control': 'no-cache'
             }, ''), 10000);
             var body = (res && res.body) || '';
             var j = null;
@@ -538,11 +555,9 @@
             if (!content) content = await withTimeout(getText(SITE + '/' + p.slug), 12000);
 
             var links = parseKmhdLinks(content);
-            var play = null, downloads = [], gdflixDirects = [];
+            var play = null;
             links.forEach(function (l) {
                 if (l.kind === 'play' && !play) play = l;
-                else if (l.kind === 'file' || l.kind === 'pack') downloads.push(l);
-                else if (l.kind === 'gdflix_direct') gdflixDirects.push(l);
             });
 
             var pt = parseTitle(content.match(/<title>([^<]+)<\/title>/) ? RegExp.$1 : p.slug);
@@ -557,12 +572,14 @@
                     var playData = await fetchPlayData(play.id);
                     if (playData && playData.info) {
                         var eps = parsePlayInfoFromData(playData);
-                        eps.forEach(function (e) {
+                        // Sort by episode number to ensure 1,2,3 order
+                        eps.sort(function (a, b) { return (a.season - b.season) || (a.episode - b.episode); });
+                        eps.forEach(function (e, idx) {
                             episodes.push(mkEpisode({
                                 name: e.name,
                                 url: baseItemUrl + '?play=' + play.id + '&ep=' + e.key,
                                 season: e.season,
-                                episode: e.episode,
+                                episode: idx + 1,
                                 posterUrl: poster,
                                 dubStatus: 'none',
                                 playbackPolicy: 'none'
@@ -583,31 +600,6 @@
                     dubStatus: 'none', playbackPolicy: 'none'
                 }));
             }
-
-            downloads.forEach(function (d, i) {
-                var q = qualityFromText(d.label) || 'Pack';
-                var sz = sizeFromText(d.label);
-                episodes.push(mkEpisode({
-                    name: '📦 Download • ' + q + (sz ? ' • ' + sz : '') + (d.kind === 'pack' ? ' • per-episode' : ' • zip'),
-                    url: baseItemUrl + '?dl=' + d.id,
-                    season: 1,
-                    episode: 900 + i,
-                    posterUrl: poster,
-                    dubStatus: 'none', playbackPolicy: 'none'
-                }));
-            });
-
-            gdflixDirects.forEach(function (d, i) {
-                var q = qualityFromText(d.label) || 'GDFlix';
-                episodes.push(mkEpisode({
-                    name: '☁️ GDFlix • ' + q + (d.label ? ' • ' + d.label.slice(0, 30) : ''),
-                    url: d.url,
-                    season: 1,
-                    episode: 800 + i,
-                    posterUrl: poster,
-                    dubStatus: 'none', playbackPolicy: 'none'
-                }));
-            });
 
             var item = mkItem({
                 title: pt.name || p.slug,
@@ -649,25 +641,26 @@
 
             var streams = [];
 
-            // Direct GDFlix URL (episodes 800,801 in screenshot) — try to resolve to R2 + instant
+            // Direct GDFlix URL fallback — try to get HubCloud via fileId if possible, otherwise return GDFlix as last resort
             if (p.mode === 'gdflix' && p.arg) {
+                // Try to resolve GDFlix to R2 (may be blocked by CF in Node, but works in app)
                 try {
                     var gdRes = await resolveGdflix(p.arg);
                     var all = gdRes.instant.concat(gdRes.urls);
                     for (var i = 0; i < all.length; i++) {
                         streams.push(mkStream({
                             url: all[i],
-                            quality: 'GDFlix • ' + (qualityFromText(all[i]) || '1080p'),
-                            headers: { 'User-Agent': UA, 'Referer': p.arg }
+                            quality: 'HubCloud • GDFlix R2 • ' + (qualityFromText(all[i]) || '1080p'),
+                            headers: { 'User-Agent': UA, 'Referer': p.arg, 'Accept-Language': GEO_HEADERS['Accept-Language'] }
                         }));
                     }
                 } catch (e) {}
-                // Even if resolve fails (CF), return the original GDFlix page as fallback — app has CF bypass
+                // If still nothing, return original link as fallback so app's own extractor can try
                 if (!streams.length) {
                     streams.push(mkStream({
                         url: p.arg,
                         quality: 'GDFlix • Original • ' + (qualityFromText(p.arg) || '1080p'),
-                        headers: { 'User-Agent': UA, 'Referer': 'https://' + GDFLIX_HOST + '/' }
+                        headers: { 'User-Agent': UA, 'Referer': 'https://' + GDFLIX_HOST + '/', 'Accept-Language': GEO_HEADERS['Accept-Language'] }
                     }));
                 }
                 if (streams.length) return cb({ success: true, data: streams });
@@ -682,11 +675,10 @@
             if (playIdMatch && epKeyMatch) fileId = epKeyMatch[1];
             else if (dlMatch) fileId = dlMatch[1];
 
-            // ────── If we have a KMHD fileId (MobL_...), use touchme API to get ALL mirrors ──────
+            // ────── FileId via touchme — ONLY 3 hosts per user request ──────
             if (fileId) {
                 var epName = '';
                 var q = '';
-                // Try to get quality from play data if available
                 if (playIdMatch) {
                     try {
                         var playDataTmp = await fetchPlayData(playIdMatch[1]);
@@ -697,7 +689,7 @@
                     } catch (e) {}
                 }
 
-                // 1) Try legacy codes from playData (streamtape/wish) first for speed
+                // 1) StreamTape + StreamWish from playData (fast)
                 if (playIdMatch && epKeyMatch) {
                     try {
                         var playData = await fetchPlayData(playIdMatch[1]);
@@ -708,27 +700,25 @@
                                 if (direct) {
                                     streams.push(mkStream({
                                         url: direct,
-                                        quality: 'Watch • StreamTape • ' + q,
-                                        headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/' }
+                                        quality: 'StreamTape • ' + (q || '1080p'),
+                                        headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/', 'Accept-Language': GEO_HEADERS['Accept-Language'] }
                                     }));
                                 } else {
-                                    var s1 = await loadExtractorSafe('https://streamtape.com/e/' + ep.streamtape_res, 'Watch • StreamTape • ' + q);
+                                    var s1 = await loadExtractorSafe('https://streamtape.com/e/' + ep.streamtape_res, 'StreamTape • ' + (q || '1080p'));
                                     if (s1) streams.push(s1);
                                 }
                             }
                             if (ep.streamwish_res) {
-                                var s2 = await loadExtractorSafe('https://hglink.to/e/' + ep.streamwish_res, 'Watch • StreamWish • ' + q);
+                                var s2 = await loadExtractorSafe('https://hglink.to/e/' + ep.streamwish_res, 'StreamWish • ' + (q || '1080p'));
                                 if (s2) streams.push(s2);
                             }
                         }
                     } catch (e) {}
                 }
 
-                // 2) Use touchme API to get ALL mirrors (gdflix, hubcloud, katdrive, etc) — this fixes "no streams" for 900-series
+                // 2) HubCloud via touchme — with geo bypass + R2 direct
                 try {
                     var mirrors = await fetchAllMirrors(fileId);
-                    // console.log('mirrors for', fileId, mirrors);
-                    // HubCloud — watch online + download
                     if (mirrors.hubdrive_res) {
                         var hubLinks = await resolveHubcloud(mirrors.hubdrive_res);
                         if (hubLinks.length) {
@@ -736,85 +726,53 @@
                                 streams.push(mkStream({
                                     url: hubLinks[hi],
                                     quality: 'HubCloud • ' + (q || '1080p') + ' • Direct',
-                                    headers: { 'User-Agent': UA, 'Referer': mirrors.hubdrive_res }
+                                    headers: { 'User-Agent': UA, 'Referer': mirrors.hubdrive_res, 'Accept-Language': GEO_HEADERS['Accept-Language'], 'X-Forwarded-For': GEO_HEADERS['X-Forwarded-For'] }
                                 }));
                             }
                         } else {
-                            // Fallback: offer hubcloud page itself — app extractor can handle it
                             streams.push(mkStream({
                                 url: mirrors.hubdrive_res,
                                 quality: 'HubCloud • ' + (q || '1080p') + ' • Watch Online',
-                                headers: { 'User-Agent': UA, 'Referer': 'https://' + HUBCLOUD_HOST + '/' }
+                                headers: { 'User-Agent': UA, 'Referer': 'https://' + HUBCLOUD_HOST + '/', 'Accept-Language': GEO_HEADERS['Accept-Language'], 'X-Forwarded-For': GEO_HEADERS['X-Forwarded-For'], 'CF-IPCountry': 'US' }
                             }));
                         }
                     }
-                    // GDFlix — the main download mirror, also has instant download
-                    if (mirrors.gdflix_res) {
-                        try {
-                            var gd = await resolveGdflix(mirrors.gdflix_res);
-                            var allG = gd.instant.concat(gd.urls);
-                            if (allG.length) {
-                                for (var gi = 0; gi < allG.length; gi++) {
-                                    streams.push(mkStream({
-                                        url: allG[gi],
-                                        quality: 'GDFlix • ' + (q || '1080p') + ' • ' + (gi === 0 ? 'Instant' : 'Direct'),
-                                        headers: { 'User-Agent': UA, 'Referer': mirrors.gdflix_res }
-                                    }));
-                                }
+                    // If touchme returned StreamTape/StreamWish as direct http links (not codes), also add
+                    if (mirrors.streamtape_res && mirrors.streamtape_res.indexOf('http') === 0) {
+                        // Could be direct e/ link or get_video
+                        if (mirrors.streamtape_res.indexOf('streamtape.com/e/') >= 0) {
+                            var stDirect = await extractStreamTape(mirrors.streamtape_res);
+                            if (stDirect) {
+                                streams.push(mkStream({ url: stDirect, quality: 'StreamTape • ' + (q || '1080p'), headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/' } }));
                             } else {
-                                streams.push(mkStream({
-                                    url: mirrors.gdflix_res,
-                                    quality: 'GDFlix • ' + (q || '1080p'),
-                                    headers: { 'User-Agent': UA, 'Referer': 'https://' + GDFLIX_HOST + '/' }
-                                }));
+                                streams.push(mkStream({ url: mirrors.streamtape_res, quality: 'StreamTape • ' + (q || '1080p'), headers: { 'User-Agent': UA } }));
                             }
-                        } catch (e) {
-                            streams.push(mkStream({
-                                url: mirrors.gdflix_res,
-                                quality: 'GDFlix • ' + (q || '1080p'),
-                                headers: { 'User-Agent': UA }
-                            }));
                         }
                     }
-                    // KatDrive, SendCM, Fast, 1Fichier — offer as direct pages
-                    if (mirrors.katdrive_res) streams.push(mkStream({ url: mirrors.katdrive_res, quality: 'KatDrive • ' + (q || ''), headers: { 'User-Agent': UA } }));
-                    if (mirrors.sendcm_res) streams.push(mkStream({ url: mirrors.sendcm_res, quality: 'SendCM • ' + (q || ''), headers: { 'User-Agent': UA } }));
-                    if (mirrors.ffast_res) streams.push(mkStream({ url: mirrors.ffast_res, quality: 'Fast • ' + (q || ''), headers: { 'User-Agent': UA } }));
-                    if (mirrors.fichier_res) streams.push(mkStream({ url: mirrors.fichier_res, quality: '1Fichier • ' + (q || ''), headers: { 'User-Agent': UA } }));
-                    // If touchme also returns streamtape/wish direct links (not codes), use them
-                    if (mirrors.streamtape_res && mirrors.streamtape_res.indexOf('http') === 0 && mirrors.streamtape_res.indexOf('/e/') < 0) {
-                        // Already a direct get_video link
-                        streams.push(mkStream({ url: mirrors.streamtape_res, quality: 'StreamTape • ' + q, headers: { 'User-Agent': UA } }));
+                    if (mirrors.streamwish_res && mirrors.streamwish_res.indexOf('http') === 0) {
+                        var sw = await loadExtractorSafe(mirrors.streamwish_res, 'StreamWish • ' + (q || '1080p'));
+                        if (sw) streams.push(sw);
+                        else streams.push(mkStream({ url: mirrors.streamwish_res, quality: 'StreamWish • ' + (q || '1080p'), headers: { 'User-Agent': UA } }));
                     }
                 } catch (e) {
                     console.error('fetchAllMirrors failed', e && e.message);
                 }
 
-                // 3) Fallback to GDFlix links found in post_content if touchme gave nothing
-                if (!streams.length) {
-                    var gLinks = content.match(/https?:\/\/(?:gdflix\.dev|gd\.kmhd\.eu|new\d*\.gdflix\.io)\/file\/[A-Za-z0-9]+/g) || [];
-                    for (var gk = 0; gk < Math.min(gLinks.length, 3); gk++) {
-                        try {
-                            var gd2 = await resolveGdflix(gLinks[gk]);
-                            var combined = gd2.instant.concat(gd2.urls);
-                            for (var gj = 0; gj < combined.length; gj++) {
-                                streams.push(mkStream({
-                                    url: combined[gj],
-                                    quality: 'GDFlix • ' + q,
-                                    headers: { 'User-Agent': UA }
-                                }));
-                            }
-                        } catch (e) {}
-                    }
+                // Deduplicate by URL
+                var seen = {};
+                var uniq = [];
+                for (var si = 0; si < streams.length; si++) {
+                    var su = streams[si].url;
+                    if (!seen[su]) { seen[su] = true; uniq.push(streams[si]); }
                 }
-
+                streams = uniq;
                 if (!streams.length) {
-                    return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No mirrors responded for ' + fileId + ' — try another episode or GDFlix 800-series' });
+                    return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No StreamTape/StreamWish/HubCloud mirrors for ' + fileId });
                 }
                 return cb({ success: true, data: streams });
             }
 
-            // ────── Plain movie URL (no fileId) — try first play file + GDFlix ──────
+            // ────── Plain movie URL — use first fileId ──────
             var links = parseKmhdLinks(content);
             var play = null;
             for (var li = 0; li < links.length; li++) if (links[li].kind === 'play') { play = links[li]; break; }
@@ -824,60 +782,46 @@
                     if (pd && pd.info) {
                         var keys = Object.keys(pd.info);
                         if (keys.length) {
-                            // Use first fileId to get all mirrors via touchme
                             var firstId = keys[0];
                             var first = pd.info[firstId];
                             var qFirst = qualityFromText(first.name) || '';
-                            // Try touchme for first file
                             var mirrorsFirst = await fetchAllMirrors(firstId);
                             if (mirrorsFirst.hubdrive_res) {
-                                streams.push(mkStream({ url: mirrorsFirst.hubdrive_res, quality: 'HubCloud • ' + qFirst + ' • Watch Online', headers: { 'User-Agent': UA } }));
-                            }
-                            if (mirrorsFirst.gdflix_res) {
-                                var gdFirst = await resolveGdflix(mirrorsFirst.gdflix_res);
-                                var allFirst = gdFirst.instant.concat(gdFirst.urls);
-                                if (allFirst.length) {
-                                    for (var gf = 0; gf < allFirst.length; gf++) {
-                                        streams.push(mkStream({ url: allFirst[gf], quality: 'GDFlix • ' + qFirst, headers: { 'User-Agent': UA } }));
+                                var hubFirst = await resolveHubcloud(mirrorsFirst.hubdrive_res);
+                                if (hubFirst.length) {
+                                    for (var hf = 0; hf < hubFirst.length; hf++) {
+                                        streams.push(mkStream({ url: hubFirst[hf], quality: 'HubCloud • ' + qFirst + ' • Direct', headers: { 'User-Agent': UA, 'Referer': mirrorsFirst.hubdrive_res } }));
                                     }
                                 } else {
-                                    streams.push(mkStream({ url: mirrorsFirst.gdflix_res, quality: 'GDFlix • ' + qFirst, headers: { 'User-Agent': UA } }));
+                                    streams.push(mkStream({ url: mirrorsFirst.hubdrive_res, quality: 'HubCloud • ' + qFirst + ' • Watch Online', headers: { 'User-Agent': UA } }));
                                 }
                             }
-                            // Also StreamTape
                             if (first.streamtape_res) {
                                 var d0 = await extractStreamTape('https://streamtape.com/e/' + first.streamtape_res);
-                                if (d0) {
-                                    streams.push(mkStream({ url: d0, quality: 'Watch • StreamTape • ' + qFirst, headers: { 'User-Agent': UA } }));
-                                } else {
-                                    var s4 = await loadExtractorSafe('https://streamtape.com/e/' + first.streamtape_res, 'Watch • StreamTape • ' + qFirst);
+                                if (d0) streams.push(mkStream({ url: d0, quality: 'StreamTape • ' + qFirst, headers: { 'User-Agent': UA } }));
+                                else {
+                                    var s4 = await loadExtractorSafe('https://streamtape.com/e/' + first.streamtape_res, 'StreamTape • ' + qFirst);
                                     if (s4) streams.push(s4);
                                 }
                             }
                             if (first.streamwish_res) {
-                                var s5 = await loadExtractorSafe('https://hglink.to/e/' + first.streamwish_res, 'Watch • StreamWish • ' + qFirst);
+                                var s5 = await loadExtractorSafe('https://hglink.to/e/' + first.streamwish_res, 'StreamWish • ' + qFirst);
                                 if (s5) streams.push(s5);
                             }
                         }
                     }
                 } catch (e) {}
             }
-            // Fallback GDFlix direct links in post
-            var gLinks3 = content.match(/https?:\/\/(?:gdflix\.dev|gd\.kmhd\.eu|new\d*\.gdflix\.io)\/file\/[A-Za-z0-9]+/g) || [];
-            for (var gm = 0; gm < Math.min(gLinks3.length, 4); gm++) {
-                try {
-                    var gd3 = await resolveGdflix(gLinks3[gm]);
-                    var all3 = gd3.instant.concat(gd3.urls);
-                    for (var gn = 0; gn < all3.length; gn++) {
-                        streams.push(mkStream({ url: all3[gn], quality: 'GDFlix • Direct', headers: { 'User-Agent': UA } }));
-                    }
-                    if (!all3.length) {
-                        streams.push(mkStream({ url: gLinks3[gm], quality: 'GDFlix • Direct', headers: { 'User-Agent': UA } }));
-                    }
-                } catch (e) {}
+            // Deduplicate
+            var seen2 = {};
+            var uniq2 = [];
+            for (var si2 = 0; si2 < streams.length; si2++) {
+                var su2 = streams[si2].url;
+                if (!seen2[su2]) { seen2[su2] = true; uniq2.push(streams[si2]); }
             }
+            streams = uniq2;
             if (!streams.length) {
-                return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No streams found for this title' });
+                return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No StreamTape/StreamWish/HubCloud streams found' });
             }
             return cb({ success: true, data: streams });
         } catch (e) {

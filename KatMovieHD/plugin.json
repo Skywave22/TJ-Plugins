@@ -1,7 +1,7 @@
 {
   "packageName": "com.katmoviehd.skystream",
   "name": "KatMovieHD",
-  "version": 6,
+  "version": 7,
   "baseUrl": "https://new.katmoviehd.top",
   "domains": [
     {
@@ -25,7 +25,7 @@
       "url": "https://katworld.net"
     }
   ],
-  "description": "KatMovieHD v6 - Fixed all no-streams: now uses KMHD touchme API to get HubCloud+GDFlix+KatDrive+SendCM+1Fichier for every episode. Play episodes give 6 streams (StreamTape direct + HubCloud R2 Direct + GDFlix etc). DL episodes now work (previously no streams). GDFlix 800-series fallback fixed.",
+  "description": "KatMovieHD v7 - Fix episode numbers 800/900 -> 1,2,3 + only StreamTape/StreamWish/HubCloud + geo bypass. Screenshot issue fixed: episodes now show 1,2 not 800,900. Streams: 3-4 per episode (StreamTape direct + HubCloud R2 Direct Watch Online + StreamWish) via touchme API. Geo bypass headers added.",
   "authors": [
     "Arena Agent"
   ],
