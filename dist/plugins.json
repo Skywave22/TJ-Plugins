@@ -1,313 +1,313 @@
 [
-    {
-        "packageName": "com.movies321uk.skystream",
-        "name": "321Movies UK",
-        "version": 1,
-        "baseUrl": "https://321movies.co.uk",
-        "description": "321Movies UK \u2014 movies and TV from 321movies.co.uk. Shows verified streams first; offers clearly labelled unverified player links when a CDN blocks probing.",
-        "authors": [
-            "Skywave22"
-        ],
-        "languages": [
-            "en",
-            "hi"
-        ],
-        "categories": [
-            "Movie",
-            "TvSeries"
-        ],
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movies321uk.skystream.sky"
-    },
-    {
-        "packageName": "com.cinefreak.skystream",
-        "name": "CineFreak",
-        "version": 4,
-        "baseUrl": "https://cinefreak.net",
-        "description": "CineFreak (cinefreak.net) - Bollywood, Hollywood, Hindi dubbed movies, web series & K-Drama. Multi-quality direct streams with honest language labels (dual-audio files marked, switch audio in player). Verified live.",
-        "authors": [
-            "Skywave22"
-        ],
-        "languages": [
-            "hi",
-            "en",
-            "mal"
-        ],
-        "categories": [
-            "Movie",
-            "TvSeries"
-        ],
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.cinefreak.skystream.sky"
-    },
-    {
-        "packageName": "com.cinehd.skystream",
-        "name": "CineHD",
-        "version": 6,
-        "baseUrl": "https://cinehd.vc",
-        "description": "CineHD (cinehd.vc) - Movies & series with 8+ servers per title (MovieBox Hindi family, Rock HLS/MP4, VidAPI and more, up to 1080p). TMDB catalog, AES-decrypted Rock servers, v6: all provider families fetched in parallel (2-3x faster play). Verified live.",
-        "authors": [
-            "Skywave22"
-        ],
-        "languages": [
-            "en"
-        ],
-        "categories": [
-            "Movie",
-            "TvSeries"
-        ],
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.cinehd.skystream.sky"
-    },
-    {
-        "packageName": "com.fmoviess.skystream",
-        "name": "FMoviess",
-        "version": 2,
-        "baseUrl": "https://fmoviess.tv",
-        "domains": [
-            {
-                "name": "fmoviess.tv (primary)",
-                "url": "https://fmoviess.tv"
-            }
-        ],
-        "description": "FMoviess - Watch HD Movies & TV Shows. Multi-server streams (MoviesAPI + VixSrc), multi-quality HLS with subtitles, Latest Updated section",
-        "authors": [
-            "Arena Agent"
-        ],
-        "languages": [
-            "en"
-        ],
-        "categories": [
-            "Movies",
-            "Series",
-            "Anime"
-        ],
-        "isAdult": false,
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.fmoviess.skystream.sky"
-    },
-    {
-        "packageName": "com.hicine.skystream",
-        "name": "HiCine",
-        "version": 6,
-        "baseUrl": "https://api.hicine.sbs",
-        "domains": [
-            {
-                "name": "api.hicine.sbs (primary)",
-                "url": "https://api.hicine.sbs"
-            }
-        ],
-        "description": "HiCine - Bollywood & Hollywood movies, series and anime (Hindi dual-audio). Movies, WEB series, K-dramas and anime from hicine.sbs",
-        "authors": [
-            "Happy"
-        ],
-        "languages": [
-            "hi",
-            "en"
-        ],
-        "categories": [
-            "Movies",
-            "Series",
-            "Anime"
-        ],
-        "isAdult": false,
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hicine.skystream.sky"
-    },
-    {
-        "packageName": "com.hindidubbed.provider",
-        "name": "Hindi Dubbed",
-        "version": 1,
-        "baseUrl": "https://www.youtube.com",
-        "description": "Hollywood Hindi dubbed, South Indian Hindi dubbed, Bollywood and Hindi cartoon/anime \u2014 all from 20 official YouTube channels (Goldmines network, Aditya, Bhavani, Volga, DRJ, Shemaroo, Ultra, Pen, Rajshri, B4U, Pok\u00e9mon Hindi, Discovery Kids). Full movies appear as single items; web series are grouped with auto-updating episodes. Fully on-device: 720p/1080p fMP4 HLS + merged HLS built in pure JS (no ffmpeg/yt-dlp/server), with 360p MP4 fallback.",
-        "authors": [
-            "HindiDubbedPlugin"
-        ],
-        "languages": [
-            "hi",
-            "en"
-        ],
-        "categories": [
-            "Movie",
-            "TvSeries"
-        ],
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hindidubbed.provider.sky"
-    },
-    {
-        "packageName": "com.kdramamaza.skystream",
-        "name": "KDramaMaza",
-        "version": 3,
-        "baseUrl": "https://kdramasmaza.net",
-        "description": "KDramaMaza (kdramasmaza.net) - Korean, Chinese, Turkish & Japanese dramas in Hindi/Urdu dubbed. Full episode lists, fast parallel resolution with HubCloud + GDFlix Instant direct-file servers (up to 1080p WEB-DL dual-audio). Verified live.",
-        "authors": [
-            "Skywave22"
-        ],
-        "languages": [
-            "en",
-            "hi",
-            "ur"
-        ],
-        "categories": [
-            "TvSeries"
-        ],
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.kdramamaza.skystream.sky"
-    },
-    {
-        "packageName": "com.katmoviehd.skystream",
-        "name": "KatMovieHD",
-        "version": 9,
-        "baseUrl": "https://new.katmoviehd.top",
-        "domains": [
-            {
-                "name": "new.katmoviehd.top (primary)",
-                "url": "https://new.katmoviehd.top"
-            },
-            {
-                "name": "katmoviehd.wiki",
-                "url": "https://katmoviehd.wiki"
-            },
-            {
-                "name": "katmoviehd.nexus",
-                "url": "https://katmoviehd.nexus"
-            },
-            {
-                "name": "katmoviehd.mom",
-                "url": "https://katmoviehd.mom"
-            },
-            {
-                "name": "katworld.net",
-                "url": "https://katworld.net"
-            }
-        ],
-        "description": "KatMovieHD v9 - Fix Idiots 2026 + season merge: Idiots had 1xPlayer+GoFile not KMHD, now parsed. MobLand S1/S2 merged into 12 eps with Season tabs. All titles now have streams via StreamTape/HubCloud/StreamWish+GDFlix fallback+1xPlayer/GoFile for CAMRip. Geo bypass.",
-        "authors": [
-            "Arena Agent"
-        ],
-        "languages": [
-            "hi",
-            "en"
-        ],
-        "categories": [
-            "Movies",
-            "Series",
-            "Anime"
-        ],
-        "isAdult": false,
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.katmoviehd.skystream.sky"
-    },
-    {
-        "packageName": "com.netmirror.skystream",
-        "name": "NetMirror",
-        "version": 5,
-        "baseUrl": "https://netmirror.center",
-        "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime & Reality TV, heavy on Hindi content. Signed direct-file servers per title/episode (R2 + quality-labeled MP4s, up to 1080p). v5: rate-limit friendly (top-3 links per server), full server coverage. Verified live.",
-        "authors": [
-            "Skywave22"
-        ],
-        "languages": [
-            "en",
-            "hi"
-        ],
-        "categories": [
-            "Movie",
-            "TvSeries"
-        ],
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.netmirror.skystream.sky"
-    },
-    {
-        "packageName": "com.rivestream.plugin",
-        "name": "RiveStream",
-        "version": 2,
-        "baseUrl": "https://rivestream.ru",
-        "description": "RiveStream (rivestream.ru) - \"Your Personal Streaming Oasis\". TMDB-powered catalog of movies & TV, streamed from rivestream's own Rive server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk). Default audio: Hindi - Hindi-dubbed tracks are ranked first in the server list, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Verified live.",
-        "authors": [
-            "Skywave22"
-        ],
-        "languages": [
-            "hi",
-            "en",
-            "ta",
-            "te",
-            "ur",
-            "mal",
-            "bn"
-        ],
-        "categories": [
-            "Movie",
-            "TvSeries"
-        ],
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.rivestream.plugin.sky"
-    },
-    {
-        "packageName": "com.ssr.skystream",
-        "name": "SSR Movies",
-        "version": 4,
-        "baseUrl": "https://ssrmovies.blue",
-        "domains": [
-            {
-                "name": "ssrmovies.blue (primary)",
-                "url": "https://ssrmovies.blue"
-            },
-            {
-                "name": "ssrmovies.moda",
-                "url": "https://ssrmovies.moda"
-            },
-            {
-                "name": "ssrmovies.com",
-                "url": "https://ssrmovies.com"
-            }
-        ],
-        "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. HubCloud + GDFlix download mirrors resolved to direct files",
-        "authors": [
-            "Arena Agent"
-        ],
-        "languages": [
-            "hi",
-            "en"
-        ],
-        "categories": [
-            "Movies",
-            "Series"
-        ],
-        "isAdult": false,
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.ssr.skystream.sky"
-    },
-    {
-        "packageName": "com.subdub.skystream",
-        "name": "SubDubAnime",
-        "version": 1,
-        "baseUrl": "https://www.subdubanime.site",
-        "description": "SubDubAnime (subdubanime.site) - Hindi & English dubbed/subbed anime: series, seasons and movies via the Blakite API. Direct HLS per episode (up to 1080p where available). Verified live.",
-        "authors": [
-            "Skywave22"
-        ],
-        "languages": [
-            "en",
-            "hi"
-        ],
-        "categories": [
-            "TvSeries",
-            "Movie"
-        ],
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.subdub.skystream.sky"
-    },
-    {
-        "packageName": "com.vidbox.plugin",
-        "name": "Vidbox",
-        "version": 1,
-        "baseUrl": "https://vidbox.vc",
-        "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Vidbox is a guide site that fans out to 47 embed servers; the one backend that hands back a directly playable manifest from a plugin runtime is its Nxsha multi-language server, so streams resolve through that. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every HLS/DASH manifest is verified before it is offered. Verified live.",
-        "authors": [
-            "Skywave22"
-        ],
-        "languages": [
-            "hi",
-            "en",
-            "ta",
-            "te",
-            "ur",
-            "mal",
-            "bn"
-        ],
-        "categories": [
-            "Movie",
-            "TvSeries"
-        ],
-        "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.vidbox.plugin.sky"
-    }
+  {
+    "packageName": "com.movies321uk.skystream",
+    "name": "321Movies UK",
+    "version": 1,
+    "baseUrl": "https://321movies.co.uk",
+    "description": "321Movies UK — movies and TV from 321movies.co.uk. Shows verified streams first; offers clearly labelled unverified player links when a CDN blocks probing.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movies321uk.skystream.sky"
+  },
+  {
+    "packageName": "com.cinefreak.skystream",
+    "name": "CineFreak",
+    "version": 4,
+    "baseUrl": "https://cinefreak.net",
+    "description": "CineFreak (cinefreak.net) - Bollywood, Hollywood, Hindi dubbed movies, web series & K-Drama. Multi-quality direct streams with honest language labels (dual-audio files marked, switch audio in player). Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "hi",
+      "en",
+      "mal"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.cinefreak.skystream.sky"
+  },
+  {
+    "packageName": "com.cinehd.skystream",
+    "name": "CineHD",
+    "version": 6,
+    "baseUrl": "https://cinehd.vc",
+    "description": "CineHD (cinehd.vc) - Movies & series with 8+ servers per title (MovieBox Hindi family, Rock HLS/MP4, VidAPI and more, up to 1080p). TMDB catalog, AES-decrypted Rock servers, v6: all provider families fetched in parallel (2-3x faster play). Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.cinehd.skystream.sky"
+  },
+  {
+    "packageName": "com.fmoviess.skystream",
+    "name": "FMoviess",
+    "version": 2,
+    "baseUrl": "https://fmoviess.tv",
+    "domains": [
+      {
+        "name": "fmoviess.tv (primary)",
+        "url": "https://fmoviess.tv"
+      }
+    ],
+    "description": "FMoviess - Watch HD Movies & TV Shows. Multi-server streams (MoviesAPI + VixSrc), multi-quality HLS with subtitles, Latest Updated section",
+    "authors": [
+      "Arena Agent"
+    ],
+    "languages": [
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "Series",
+      "Anime"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.fmoviess.skystream.sky"
+  },
+  {
+    "packageName": "com.hicine.skystream",
+    "name": "HiCine",
+    "version": 6,
+    "baseUrl": "https://api.hicine.sbs",
+    "domains": [
+      {
+        "name": "api.hicine.sbs (primary)",
+        "url": "https://api.hicine.sbs"
+      }
+    ],
+    "description": "HiCine - Bollywood & Hollywood movies, series and anime (Hindi dual-audio). Movies, WEB series, K-dramas and anime from hicine.sbs",
+    "authors": [
+      "Happy"
+    ],
+    "languages": [
+      "hi",
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "Series",
+      "Anime"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hicine.skystream.sky"
+  },
+  {
+    "packageName": "com.hindidubbed.provider",
+    "name": "Hindi Dubbed",
+    "version": 1,
+    "baseUrl": "https://www.youtube.com",
+    "description": "Hollywood Hindi dubbed, South Indian Hindi dubbed, Bollywood and Hindi cartoon/anime — all from 20 official YouTube channels (Goldmines network, Aditya, Bhavani, Volga, DRJ, Shemaroo, Ultra, Pen, Rajshri, B4U, Pokémon Hindi, Discovery Kids). Full movies appear as single items; web series are grouped with auto-updating episodes. Fully on-device: 720p/1080p fMP4 HLS + merged HLS built in pure JS (no ffmpeg/yt-dlp/server), with 360p MP4 fallback.",
+    "authors": [
+      "HindiDubbedPlugin"
+    ],
+    "languages": [
+      "hi",
+      "en"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hindidubbed.provider.sky"
+  },
+  {
+    "packageName": "com.kdramamaza.skystream",
+    "name": "KDramaMaza",
+    "version": 3,
+    "baseUrl": "https://kdramasmaza.net",
+    "description": "KDramaMaza (kdramasmaza.net) - Korean, Chinese, Turkish & Japanese dramas in Hindi/Urdu dubbed. Full episode lists, fast parallel resolution with HubCloud + GDFlix Instant direct-file servers (up to 1080p WEB-DL dual-audio). Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en",
+      "hi",
+      "ur"
+    ],
+    "categories": [
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.kdramamaza.skystream.sky"
+  },
+  {
+    "packageName": "com.katmoviehd.skystream",
+    "name": "KatMovieHD",
+    "version": 9,
+    "baseUrl": "https://new.katmoviehd.top",
+    "domains": [
+      {
+        "name": "new.katmoviehd.top (primary)",
+        "url": "https://new.katmoviehd.top"
+      },
+      {
+        "name": "katmoviehd.wiki",
+        "url": "https://katmoviehd.wiki"
+      },
+      {
+        "name": "katmoviehd.nexus",
+        "url": "https://katmoviehd.nexus"
+      },
+      {
+        "name": "katmoviehd.mom",
+        "url": "https://katmoviehd.mom"
+      },
+      {
+        "name": "katworld.net",
+        "url": "https://katworld.net"
+      }
+    ],
+    "description": "KatMovieHD v9 - Fix Idiots 2026 + season merge: Idiots had 1xPlayer+GoFile not KMHD, now parsed. MobLand S1/S2 merged into 12 eps with Season tabs. All titles now have streams via StreamTape/HubCloud/StreamWish+GDFlix fallback+1xPlayer/GoFile for CAMRip. Geo bypass.",
+    "authors": [
+      "Arena Agent"
+    ],
+    "languages": [
+      "hi",
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "Series",
+      "Anime"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.katmoviehd.skystream.sky"
+  },
+  {
+    "packageName": "com.netmirror.skystream",
+    "name": "NetMirror",
+    "version": 5,
+    "baseUrl": "https://netmirror.center",
+    "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime & Reality TV, heavy on Hindi content. Signed direct-file servers per title/episode (R2 + quality-labeled MP4s, up to 1080p). v5: rate-limit friendly (top-3 links per server), full server coverage. Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.netmirror.skystream.sky"
+  },
+  {
+    "packageName": "com.rivestream.plugin",
+    "name": "RiveStream",
+    "version": 2,
+    "baseUrl": "https://rivestream.ru",
+    "description": "RiveStream (rivestream.ru) - \"Your Personal Streaming Oasis\". TMDB-powered catalog of movies & TV, streamed from rivestream's own Rive server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk). Default audio: Hindi - Hindi-dubbed tracks are ranked first in the server list, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "hi",
+      "en",
+      "ta",
+      "te",
+      "ur",
+      "mal",
+      "bn"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.rivestream.plugin.sky"
+  },
+  {
+    "packageName": "com.ssr.skystream",
+    "name": "SSR Movies",
+    "version": 4,
+    "baseUrl": "https://ssrmovies.blue",
+    "domains": [
+      {
+        "name": "ssrmovies.blue (primary)",
+        "url": "https://ssrmovies.blue"
+      },
+      {
+        "name": "ssrmovies.moda",
+        "url": "https://ssrmovies.moda"
+      },
+      {
+        "name": "ssrmovies.com",
+        "url": "https://ssrmovies.com"
+      }
+    ],
+    "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. HubCloud + GDFlix download mirrors resolved to direct files",
+    "authors": [
+      "Arena Agent"
+    ],
+    "languages": [
+      "hi",
+      "en"
+    ],
+    "categories": [
+      "Movies",
+      "Series"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.ssr.skystream.sky"
+  },
+  {
+    "packageName": "com.subdub.skystream",
+    "name": "SubDubAnime",
+    "version": 1,
+    "baseUrl": "https://www.subdubanime.site",
+    "description": "SubDubAnime (subdubanime.site) - Hindi & English dubbed/subbed anime: series, seasons and movies via the Blakite API. Direct HLS per episode (up to 1080p where available). Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "TvSeries",
+      "Movie"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.subdub.skystream.sky"
+  },
+  {
+    "packageName": "com.vidbox.plugin",
+    "name": "Vidbox",
+    "version": 1,
+    "baseUrl": "https://vidbox.vc",
+    "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Vidbox is a guide site that fans out to 47 embed servers; the one backend that hands back a directly playable manifest from a plugin runtime is its Nxsha multi-language server, so streams resolve through that. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every HLS/DASH manifest is verified before it is offered. Verified live.",
+    "authors": [
+      "Skywave22"
+    ],
+    "languages": [
+      "hi",
+      "en",
+      "ta",
+      "te",
+      "ur",
+      "mal",
+      "bn"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.vidbox.plugin.sky"
+  }
 ]
