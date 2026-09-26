@@ -1,0 +1,11 @@
+{
+  "packageName": "com.tamilblasters.skystream",
+  "name": "TamilBlasters",
+  "version": 1,
+  "baseUrl": "https://www.1tamilblasters.tech",
+  "description": "TamilBlasters (1tamilblasters.tech) - Tamil, Telugu, Hindi, Malayalam, Kannada movies & series. WordPress REST API catalog, VidHide & LuluStream HLS embeds + HubCloud/GDFlix download mirrors via quantum redirector resolved to direct files. Geo-bypass enabled.",
+  "authors": ["Skywave22"],
+  "languages": ["en", "ta", "te", "hi", "ml", "kn"],
+  "categories": ["Movies", "Series"],
+  "isAdult": false
+}
