@@ -37,9 +37,55 @@
     const PLAY = "https://bet.watch21.shop/play";
     const SITE = "https://netmirror.center";
     const KEY = "net###@@sss";
-    const JSON_HDR = { "Content-Type": "application/json" };
+    const JSON_HDR = mergeGeoHeaders({ "Content-Type": "application/json" }, false);
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
+    // ── Universal Geo Bypass (no personal IP, public DNS) ──
+    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
+    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
+    const GEO_BYPASS_IP = "8.8.8.8";
+    const GEO_BYPASS_IP2 = "1.1.1.1";
+    const GEO_BYPASS_COUNTRY = "US";
+    const GEO_BYPASS_HEADERS = {
+        "X-Forwarded-For": GEO_BYPASS_IP,
+        "X-Real-IP": GEO_BYPASS_IP,
+        "X-Client-IP": GEO_BYPASS_IP,
+        "CF-Connecting-IP": GEO_BYPASS_IP,
+        "True-Client-IP": GEO_BYPASS_IP,
+        "CF-IPCountry": GEO_BYPASS_COUNTRY,
+        "X-Country": GEO_BYPASS_COUNTRY,
+        "cf-ipcountry": GEO_BYPASS_COUNTRY,
+        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
+        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
+        "X-Forwarded-Proto": "https",
+        "X-Forwarded-Host": "",
+        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
+    };
+    // For PK-specific sites (CineJoy), also include PK bypass
+    const PK_GEO_IP = "39.33.116.25";
+    const PK_GEO_HEADERS = {
+        "X-Forwarded-For": PK_GEO_IP,
+        "X-Real-IP": PK_GEO_IP,
+        "X-Client-IP": PK_GEO_IP,
+        "CF-Connecting-IP": PK_GEO_IP,
+        "CF-IPCountry": "PK",
+        "X-Country": "PK",
+        "cf-ipcountry": "PK",
+        "X-CF-IPCountry": "PK",
+        "X-Forwarded-Country": "PK",
+        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
+    };
+    function mergeGeoHeaders(base, isPK) {
+        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
+        const out = Object.assign({}, base || {});
+        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
+        // Always ensure bypass IP present if not already set
+        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
+        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
+        return out;
+    }
+
 
     // ────────────────── sha256 + hmac (pure JS) ──────────────────
 
@@ -131,7 +177,7 @@
     }
 
     async function apiGet(path) {
-        const r = await withTimeout(http_get(path.indexOf("http") === 0 ? path : API + path, Object.assign({ "User-Agent": UA }, JSON_HDR)), 25000);
+        const r = await withTimeout(http_get(path.indexOf("http") === 0 ? path : API + path, Object.assign(mergeGeoHeaders({ "User-Agent": UA }, false), JSON_HDR)), 25000);
         try { return JSON.parse((r && r.body) || "{}"); } catch (e) { return {}; }
     }
 
@@ -213,7 +259,7 @@
         try {
             if (!query || !String(query).trim()) return cb({ success: true, data: [] });
             const q = encodeURIComponent(String(query).trim()).replace(/%20/g, "+").replace(/%2F/g, "--slash--");
-            const r = await withTimeout(http_get(SEARCH + "/" + q + "?page=0", Object.assign({ "User-Agent": UA }, JSON_HDR)), 25000);
+            const r = await withTimeout(http_get(SEARCH + "/" + q + "?page=0", Object.assign(mergeGeoHeaders({ "User-Agent": UA }, false), JSON_HDR)), 25000);
             let j = {};
             try { j = JSON.parse((r && r.body) || "{}"); } catch (e) {}
             const results = (j && j.results) || [];
