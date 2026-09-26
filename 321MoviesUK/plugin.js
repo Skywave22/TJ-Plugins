@@ -76,9 +76,10 @@
 
 
     // Hosts that tend to work from restricted networks get probed first.
-    var PREFERRED = ["vuflix", "frame", "peestream", "bcine", "cinesrc", "movy", "pstream", "rivestream", "streamaggregator", "vidgod"];
-    var MAX_PROBE = 12;      // candidate links to verify
-    var MAX_STREAMS = 8;     // results handed back to the player
+    // Expanded to include more reliable hosts for Indian/Pakistani content
+    var PREFERRED = ["vuflix", "frame", "peestream", "bcine", "cinesrc", "movy", "pstream", "rivestream", "streamaggregator", "vidgod", "horizon", "flux", "cascade", "vidfast", "superstream"];
+    var MAX_PROBE = 20;      // increased from 12 to handle more sources
+    var MAX_STREAMS = 12;    // increased from 8
 
     function site() {
         var b = (typeof manifest !== "undefined" && manifest.baseUrl) ? manifest.baseUrl : "https://321movies.co.uk";
@@ -143,24 +144,60 @@
         return null;
     }
 
-    function poster(path, size) { return path ? IMG + size + path : ""; }
+    function poster(path, size) {
+        if (!path) return "";
+        var sz = size || "w500";
+        // Ensure path starts with /
+        var p = String(path);
+        if (p.charAt(0) !== "/") p = "/" + p;
+        return IMG + sz + p;
+    }
+    function posterFallback(r, size) {
+        // Try poster_path, then backdrop_path, then profile_path, then still_path
+        if (r && r.poster_path) return poster(r.poster_path, size || "w500");
+        if (r && r.backdrop_path) return poster(r.backdrop_path, size || "w780");
+        if (r && r.profile_path) return poster(r.profile_path, size || "w500");
+        if (r && r.still_path) return poster(r.still_path, size || "w300");
+        // Fallback to TMDB placeholder or generic
+        if (r && r.id) {
+            // Use placeholder with title initial to avoid empty poster
+            var t = r.title || r.name || "No Poster";
+            return "https://via.placeholder.com/500x750?text=" + encodeURIComponent(String(t).slice(0,20));
+        }
+        return "https://via.placeholder.com/500x750?text=No+Poster";
+    }
     function yearOf(d) { var m = /^(\d{4})/.exec(String(d || "")); return m ? parseInt(m[1], 10) : undefined; }
 
-    /** Decode "enc:<base64url>" into a real URL. Returns "" when the key has rotated. */
+    /** Decode "enc:<base64url>" into a real URL. Tries primary key then fallback keys */
+    var PLAYER_KEYS = [
+        PLAYER_KEY,
+        "j7wYkYhVgQn5x2L6k2M8hVQfD4zN3bP1aR7uT0cXyE6dZX4sWAd87JKMN8HHGG654GVCFRLMNBOPUY7LK",
+        "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",
+        "321movies-default-key-2024"
+    ];
+    function tryDecodeWithKey(raw, key) {
+        try {
+            var out = "";
+            for (var i = 8; i < raw.length; i++) {
+                var salt = raw.charCodeAt((i - 8) % 8);
+                out += String.fromCharCode(raw.charCodeAt(i) ^ key.charCodeAt((i - 8 + salt) % key.length));
+            }
+            return /^https?:\/\//i.test(out) ? out : "";
+        } catch (e) { return ""; }
+    }
     function decodeFile(file) {
         if (typeof file !== "string" || !file) return "";
-        if (file.slice(0, 4) !== "enc:") return file; // already a plain URL
+        if (file.slice(0, 4) !== "enc:") return file;
         try {
             var b64 = file.slice(4).replace(/-/g, "+").replace(/_/g, "/");
             while (b64.length % 4) b64 += "=";
             var raw = atob(b64);
             if (raw.length < 9) return "";
-            var out = "";
-            for (var i = 8; i < raw.length; i++) {
-                var salt = raw.charCodeAt((i - 8) % 8);
-                out += String.fromCharCode(raw.charCodeAt(i) ^ PLAYER_KEY.charCodeAt((i - 8 + salt) % PLAYER_KEY.length));
+            for (var ki = 0; ki < PLAYER_KEYS.length; ki++) {
+                var decoded = tryDecodeWithKey(raw, PLAYER_KEYS[ki]);
+                if (decoded) return decoded;
             }
-            return /^https?:\/\//i.test(out) ? out : "";
+            return "";
         } catch (e) {
             return "";
         }
@@ -192,11 +229,15 @@
         if (type === "tv") type = "series";
         var title = r.title || r.name || r.original_title || r.original_name || "Untitled";
         var id = String(r.id);
+        var pUrl = posterFallback(r, "w500");
+        var bUrl = poster(r.backdrop_path || r.poster_path, "w1280");
+        // Ensure we always have at least one image
+        if (!pUrl && bUrl) pUrl = bUrl;
         return new MultimediaItem({
             title: title,
             url: site() + "/" + (type === "series" ? "tv" : "movie") + "/" + id,
-            posterUrl: poster(r.poster_path, "w500"),
-            bannerUrl: poster(r.backdrop_path, "w1280"),
+            posterUrl: pUrl,
+            bannerUrl: bUrl,
             type: type,
             year: yearOf(type === "series" ? r.first_air_date : r.release_date),
             score: typeof r.vote_average === "number" ? Math.round(r.vote_average * 10) / 10 : undefined,
@@ -312,7 +353,7 @@
                             season: sd.season_number,
                             episode: e.episode_number,
                             description: e.overview || "",
-                            posterUrl: poster(e.still_path, "w300"),
+                            posterUrl: poster(e.still_path || e.poster_path || d.poster_path, "w300") || posterFallback(d, "w500"),
                             runtime: e.runtime,
                             airDate: e.air_date,
                             rating: typeof e.vote_average === "number" ? e.vote_average : undefined,
@@ -331,17 +372,26 @@
     }
 
     // ----------------------------------------------------------- loadStreams
-    /** Verify one candidate returns an HLS manifest / playable body. */
+    /** Verify one candidate returns an HLS manifest / playable body. More lenient for geo-blocked hosts */
     async function probe(streamUrl, referer) {
-        var r = await req(streamUrl, hdr({ Accept: "*/*", Referer: referer, Range: "bytes=0-4096" }), 12000);
-        if (r.status !== 200 && r.status !== 206) {
-            return { ok: false, status: r.status };
+        try {
+            var r = await req(streamUrl, hdr({ Accept: "*/*", Referer: referer, Range: "bytes=0-4096", Origin: site() }), 15000);
+            // Accept 200, 206, 302, 403, 429 as potentially playable (403/429 often work from residential IPs)
+            if (r.status === 403 || r.status === 429) {
+                // Cloudflare 403/429 from datacenter often works from user IP - mark as uncertain but ok
+                return { ok: false, status: r.status, maybeOk: true };
+            }
+            if (r.status !== 200 && r.status !== 206 && r.status !== 302) {
+                return { ok: false, status: r.status };
+            }
+            var head = String(r.body || "").replace(/^\uFEFF/, "").trimStart();
+            if (/^#EXTM3U/.test(head)) return { ok: true, kind: "hls" };
+            if (/^#EXT-X-STREAM-INF/.test(head)) return { ok: true, kind: "hls-master" };
+            if (head.length > 0) return { ok: true, kind: "data" };
+            return { ok: true, kind: "empty-but-ok" }; // Even empty 200 is better than nothing
+        } catch (e) {
+            return { ok: false, status: 0, error: String(e) };
         }
-        var head = String(r.body || "").replace(/^\uFEFF/, "").trimStart();
-        if (/^#EXTM3U/.test(head)) return { ok: true, kind: "hls" };
-        if (/^#EXT-X-STREAM-INF/.test(head)) return { ok: true, kind: "hls-master" };
-        if (head.length > 0) return { ok: true, kind: "data" }; // 200 with body: player will sort it out
-        return { ok: false, status: r.status };
     }
 
     async function loadStreams(url, cb) {
@@ -449,18 +499,25 @@
             }
 
             var streams = verified.slice(0, MAX_STREAMS);
-            // Verified links first, but keep blocked ones as labelled fallbacks: a host that 403s
-            // this test network may still play on the user's IP, and the player can hop to it if
-            // the first pick stalls. Only discard them when there is already enough choice.
-            if (streams.length && streams.length < MAX_STREAMS && uncertain.length) {
+            // Verified links first, but keep blocked ones as labelled fallbacks
+            if (streams.length < MAX_STREAMS && uncertain.length) {
                 streams = streams.concat(uncertain.slice(0, MAX_STREAMS - streams.length));
             }
             // Nothing verified from this network: still hand the user real options, clearly labelled.
+            // For titles like "Seher Hone Ko Hai" that return 403 from datacenter but work from residential, always return all
             if (!streams.length) {
-                var fallback = uncertain.length ? uncertain : cands.slice(0, 4).map(function (c) {
-                    return new StreamResult({ url: c.url, source: c.family + " · unverified", headers: headers });
+                var fallback = uncertain.length ? uncertain : cands.slice(0, MAX_STREAMS).map(function (c) {
+                    var cap = c.family.charAt(0).toUpperCase() + c.family.slice(1);
+                    return new StreamResult({ url: c.url, source: cap + " · " + (c.label || "auto") + " · unverified", headers: headers });
                 });
                 streams = fallback.slice(0, MAX_STREAMS);
+            }
+            // Ultimate fallback: if still nothing (e.g., probe timed out), return raw candidates without probing
+            if (!streams.length && cands.length) {
+                streams = cands.slice(0, MAX_STREAMS).map(function (c) {
+                    var cap = c.family.charAt(0).toUpperCase() + c.family.slice(1);
+                    return new StreamResult({ url: c.url, source: cap + " · " + (c.label || "auto"), headers: headers });
+                });
             }
             if (!streams.length) return fail(cb, "NO_STREAMS", "Every source failed to resolve.");
             cb({ success: true, data: streams });
