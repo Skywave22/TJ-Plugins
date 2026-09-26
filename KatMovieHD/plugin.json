@@ -1,7 +1,7 @@
 {
   "packageName": "com.katmoviehd.skystream",
   "name": "KatMovieHD",
-  "version": 4,
+  "version": 5,
   "baseUrl": "https://new.katmoviehd.top",
   "domains": [
     {
@@ -9,11 +9,23 @@
       "url": "https://new.katmoviehd.top"
     },
     {
-      "name": "katworld.net mirror",
-      "url": "https://new.katmoviehd.top"
+      "name": "katmoviehd.wiki",
+      "url": "https://katmoviehd.wiki"
+    },
+    {
+      "name": "katmoviehd.nexus",
+      "url": "https://katmoviehd.nexus"
+    },
+    {
+      "name": "katmoviehd.mom",
+      "url": "https://katmoviehd.mom"
+    },
+    {
+      "name": "katworld.net",
+      "url": "https://katworld.net"
     }
   ],
-  "description": "KatMovieHD - Hindi dubbed & dual audio movies and web series. Watch online (StreamTape/StreamWish) + download mirrors (HubCloud)",
+  "description": "KatMovieHD - Hindi dubbed & dual audio movies and web series. Fixed 2026-09-26: migrated from dead WP REST API to SvelteKit __data.json, updated hubcloud.ist + new4.gdflix.io resolvers, StreamTape/StreamWish watch + GDFlix download.",
   "authors": [
     "Arena Agent"
   ],
