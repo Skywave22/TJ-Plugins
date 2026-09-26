@@ -33,6 +33,52 @@
 
     const API = "https://blakiteapi.xyz";
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
+    // ── Universal Geo Bypass (no personal IP, public DNS) ──
+    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
+    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
+    const GEO_BYPASS_IP = "8.8.8.8";
+    const GEO_BYPASS_IP2 = "1.1.1.1";
+    const GEO_BYPASS_COUNTRY = "US";
+    const GEO_BYPASS_HEADERS = {
+        "X-Forwarded-For": GEO_BYPASS_IP,
+        "X-Real-IP": GEO_BYPASS_IP,
+        "X-Client-IP": GEO_BYPASS_IP,
+        "CF-Connecting-IP": GEO_BYPASS_IP,
+        "True-Client-IP": GEO_BYPASS_IP,
+        "CF-IPCountry": GEO_BYPASS_COUNTRY,
+        "X-Country": GEO_BYPASS_COUNTRY,
+        "cf-ipcountry": GEO_BYPASS_COUNTRY,
+        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
+        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
+        "X-Forwarded-Proto": "https",
+        "X-Forwarded-Host": "",
+        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
+    };
+    // For PK-specific sites (CineJoy), also include PK bypass
+    const PK_GEO_IP = "39.33.116.25";
+    const PK_GEO_HEADERS = {
+        "X-Forwarded-For": PK_GEO_IP,
+        "X-Real-IP": PK_GEO_IP,
+        "X-Client-IP": PK_GEO_IP,
+        "CF-Connecting-IP": PK_GEO_IP,
+        "CF-IPCountry": "PK",
+        "X-Country": "PK",
+        "cf-ipcountry": "PK",
+        "X-CF-IPCountry": "PK",
+        "X-Forwarded-Country": "PK",
+        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
+    };
+    function mergeGeoHeaders(base, isPK) {
+        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
+        const out = Object.assign({}, base || {});
+        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
+        // Always ensure bypass IP present if not already set
+        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
+        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
+        return out;
+    }
+
     const QCODES = { "240p": "oaa", "360p": "baa", "480p": "caa", "720p": "gaa", "1080p": "haa" };
 
     // ─────────────────────────── helpers ───────────────────────────
@@ -52,7 +98,7 @@
     async function catalog() {
         const now = Date.now();
         if (catalogCache && now - catalogTs < 1800000) return catalogCache; // 30 min
-        const r = await withTimeout(http_get(API + "/api/getAllAnime.php", { "User-Agent": UA }), 25000);
+        const r = await withTimeout(http_get(API + "/api/getAllAnime.php", mergeGeoHeaders({ "User-Agent": UA }, false)), 25000);
         const j = JSON.parse((r && r.body) || "{}");
         const d = (j && j.data) || {};
         catalogCache = {
@@ -271,7 +317,7 @@
                 apiUrl = API + "/api/get.php?id=" + encodeURIComponent((p.s || 1) + "-" + (p.e || 1)) +
                          "&tmdbId=" + encodeURIComponent(String(p.id));
             }
-            const r = await withTimeout(http_get(apiUrl, { "User-Agent": UA, "Referer": API + "/" }), 20000);
+            const r = await withTimeout(http_get(apiUrl, mergeGeoHeaders({ "User-Agent": UA, "Referer": API + "/" }, false)), 20000);
             let j;
             try { j = JSON.parse((r && r.body) || "{}"); } catch (e) { j = {}; }
             const data = j && j.data;
