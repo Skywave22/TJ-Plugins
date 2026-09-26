@@ -29,10 +29,53 @@
     const SITE = "https://cinehd.vc";
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
-    const STREAM_HEADERS = {
+
+    // ── Universal Geo Bypass (no personal IP, public DNS) ──
+    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
+    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
+    const GEO_BYPASS_IP = "8.8.8.8";
+    const GEO_BYPASS_IP2 = "1.1.1.1";
+    const GEO_BYPASS_COUNTRY = "US";
+    const GEO_BYPASS_HEADERS = {
+        "X-Forwarded-For": GEO_BYPASS_IP,
+        "X-Real-IP": GEO_BYPASS_IP,
+        "X-Client-IP": GEO_BYPASS_IP,
+        "CF-Connecting-IP": GEO_BYPASS_IP,
+        "True-Client-IP": GEO_BYPASS_IP,
+        "CF-IPCountry": GEO_BYPASS_COUNTRY,
+        "X-Country": GEO_BYPASS_COUNTRY,
+        "cf-ipcountry": GEO_BYPASS_COUNTRY,
+        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
+        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
+        "X-Forwarded-Proto": "https",
+        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
+    };
+    const PK_GEO_IP = "39.33.116.25";
+    const PK_GEO_HEADERS = {
+        "X-Forwarded-For": PK_GEO_IP,
+        "X-Real-IP": PK_GEO_IP,
+        "X-Client-IP": PK_GEO_IP,
+        "CF-Connecting-IP": PK_GEO_IP,
+        "CF-IPCountry": "PK",
+        "X-Country": "PK",
+        "cf-ipcountry": "PK",
+        "X-CF-IPCountry": "PK",
+        "X-Forwarded-Country": "PK",
+        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
+    };
+    function mergeGeoHeaders(base, isPK) {
+        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
+        const out = Object.assign({}, base || {});
+        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
+        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
+        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
+        return out;
+    }
+
+    const STREAM_HEADERS = mergeGeoHeaders({
         "User-Agent": UA,
         "Referer": PLAYER_REF
-    };
+    }, false);
 
     // ─────────────────────────── helpers ───────────────────────────
 
@@ -42,7 +85,7 @@
 
     async function tmdb(path) {
         const sep = path.indexOf("?") >= 0 ? "&" : "?";
-        const res = await http_get(TMDB + path + sep + "api_key=" + KEY, { "User-Agent": UA });
+        const res = await http_get(TMDB + path + sep + "api_key=" + KEY, mergeGeoHeaders({ "User-Agent": UA }, false));
         if (!res || !res.body) return null;
         try { return JSON.parse(res.body); } catch (e) { return null; }
     }
