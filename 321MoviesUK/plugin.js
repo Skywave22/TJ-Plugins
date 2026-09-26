@@ -147,29 +147,69 @@
         }
         return null;
     }
-    // Fallback stream sources when primary fails (for titles like Seher Hone Ko Hai)
+    // Fallback + full website sources - matches 20 sources seen in screenshots for tv/307017/1/
+    // Website shows: 321movies, VidLink, VidLink2, VidKing, <Embed>, SuperEmbed, FilmKu, NontonGo, AutoEmbed1/2, 2Embed, VidSrc1-5, MoviesAPI, NexVid, Smashy, VidBinge
     async function fallbackStreams(ref) {
         var out = [];
         try {
-            // Try VidSrc as fallback - many 321movies titles are available there
-            var vidSrcUrls = [
-                "https://vidsrc.to/embed/tv/" + ref.id + "/" + (ref.season || 1) + "/" + (ref.episode || 1),
-                "https://vidsrc.me/embed/tv/" + ref.id + "/" + (ref.season || 1) + "/" + (ref.episode || 1),
-                "https://superembed.stream/tv/" + ref.id + "/" + (ref.season || 1) + "/" + (ref.episode || 1)
-            ];
-            if (ref.type === "movie") {
-                vidSrcUrls = [
-                    "https://vidsrc.to/embed/movie/" + ref.id,
-                    "https://vidsrc.me/embed/movie/" + ref.id
+            var id = ref.id;
+            var season = ref.season || 1;
+            var episode = ref.episode || 1;
+            var type = ref.type;
+            var isTv = type === "tv" || type === "series";
+            
+            // All generic embeds that 321movies website shows (20 sources)
+            var embeds = [];
+            if (isTv) {
+                embeds = [
+                    { url: "https://vidsrc.to/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 1" },
+                    { url: "https://vidsrc.me/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 2" },
+                    { url: "https://vidsrc.xyz/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 3" },
+                    { url: "https://vidsrc.cc/v2/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 4" },
+                    { url: "https://vidsrc.icu/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 5" },
+                    { url: "https://www.2embed.cc/embedtv/" + id + "&s=" + season + "&e=" + episode, family: "2embed", label: "2Embed" },
+                    { url: "https://www.2embed.cc/embed/" + id, family: "2embed", label: "2Embed Movie" },
+                    { url: "https://multiembed.mov/?video_id=" + id + "&tmdb=1&s=" + season + "&e=" + episode, family: "superembed", label: "SuperEmbed" },
+                    { url: "https://autoembed.co/tv/tmdb/" + id + "-" + season + "-" + episode, family: "autoembed", label: "AutoEmbed 1" },
+                    { url: "https://autoembed.co/movie/tmdb/" + id, family: "autoembed", label: "AutoEmbed 2" },
+                    { url: "https://www.nontongo.win/embed/tv/" + id + "/" + season + "/" + episode, family: "nontongo", label: "NontonGo" },
+                    { url: "https://moviesapi.club/tv/" + id + "-" + season + "-" + episode, family: "moviesapi", label: "MoviesAPI" },
+                    { url: "https://player.smashy.stream/tv/" + id + "?s=" + season + "&e=" + episode, family: "smashy", label: "Smashy" },
+                    { url: "https://vidbinge.dev/embed/tv/" + id + "/" + season + "/" + episode, family: "vidbinge", label: "VidBinge" },
+                    { url: "https://nexvid.net/tv/" + id + "/" + season + "/" + episode, family: "nexvid", label: "NexVid" },
+                    { url: "https://filmku.stream/embed/" + id + "/" + season + "/" + episode, family: "filmku", label: "FilmKu" },
+                    { url: "https://vidlink.pro/tv/" + id + "/" + season + "/" + episode, family: "vidlink", label: "VidLink" },
+                    { url: "https://vidlink.pro/tv/" + id + "/" + season + "/" + episode + "?2", family: "vidlink", label: "VidLink 2" },
+                    { url: "https://vidking.net/embed/tv/" + id + "/" + season + "/" + episode, family: "vidking", label: "VidKing" },
+                    { url: "https://321movies.co.uk/embed/tv/" + id + "/" + season + "/" + episode, family: "321movies", label: "321movies" }
+                ];
+            } else {
+                embeds = [
+                    { url: "https://vidsrc.to/embed/movie/" + id, family: "vidsrc", label: "VidSrc 1" },
+                    { url: "https://vidsrc.me/embed/movie/" + id, family: "vidsrc", label: "VidSrc 2" },
+                    { url: "https://vidsrc.xyz/embed/movie/" + id, family: "vidsrc", label: "VidSrc 3" },
+                    { url: "https://vidsrc.cc/v2/embed/movie/" + id, family: "vidsrc", label: "VidSrc 4" },
+                    { url: "https://vidsrc.icu/embed/movie/" + id, family: "vidsrc", label: "VidSrc 5" },
+                    { url: "https://www.2embed.cc/embed/" + id, family: "2embed", label: "2Embed" },
+                    { url: "https://multiembed.mov/?video_id=" + id + "&tmdb=1", family: "superembed", label: "SuperEmbed" },
+                    { url: "https://autoembed.co/movie/tmdb/" + id, family: "autoembed", label: "AutoEmbed 1" },
+                    { url: "https://www.nontongo.win/embed/movie/" + id, family: "nontongo", label: "NontonGo" },
+                    { url: "https://moviesapi.club/movie/" + id, family: "moviesapi", label: "MoviesAPI" },
+                    { url: "https://player.smashy.stream/movie/" + id, family: "smashy", label: "Smashy" },
+                    { url: "https://vidbinge.dev/embed/movie/" + id, family: "vidbinge", label: "VidBinge" },
+                    { url: "https://nexvid.net/movie/" + id, family: "nexvid", label: "NexVid" },
+                    { url: "https://filmku.stream/embed/" + id, family: "filmku", label: "FilmKu" },
+                    { url: "https://vidlink.pro/movie/" + id, family: "vidlink", label: "VidLink" },
+                    { url: "https://vidking.net/embed/movie/" + id, family: "vidking", label: "VidKing" },
+                    { url: "https://321movies.co.uk/embed/movie/" + id, family: "321movies", label: "321movies" }
                 ];
             }
-            // For fallback, we return the embed URLs themselves as playable (player will handle)
-            for (var i = 0; i < vidSrcUrls.length; i++) {
+            for (var i = 0; i < embeds.length; i++) {
                 out.push({
-                    url: vidSrcUrls[i],
-                    family: "vidsrc-fallback",
-                    label: "VidSrc Fallback " + (i+1),
-                    isDefault: false,
+                    url: embeds[i].url,
+                    family: embeds[i].family,
+                    label: embeds[i].label,
+                    isDefault: i === 0,
                     rank: 100 + i
                 });
             }
@@ -476,13 +516,12 @@
                     } catch (e) {}
                 }
             }
-            // If still offline, try fallback streams instead of failing
-            if (!payload || isOffline) {
-                var fbCands = await fallbackStreams(ref);
+            // Always get fallback (20 sources) to match website
+            var fbCands = await fallbackStreams(ref);
+            // If primary failed, use fallback as payload, else merge both
+            if (!payload || isOffline || !payload.playlist || !payload.playlist.length) {
                 if (fbCands && fbCands.length) {
-                    // Use fallback candidates
                     var groups = [{ sources: [] }];
-                    // Convert fallback to expected format
                     for (var fi = 0; fi < fbCands.length; fi++) {
                         groups[0].sources.push({
                             file: fbCands[fi].url,
@@ -493,9 +532,11 @@
                     }
                     payload = { playlist: groups };
                 } else {
-                    // Still no payload, return offline error but with more details
-                    return fail(cb, "PLAYER_OFFLINE", "321movies player API unreachable for this title (ID " + ref.id + "). Tried vixsrc-playlist and " + (typeof altEndpoints !== "undefined" ? altEndpoints.length : 0) + " alt endpoints. This title may be too new or geo-blocked. Try again later or try another title like Seher Hone Ko Hai S1E1.");
+                    return fail(cb, "PLAYER_OFFLINE", "321movies player API unreachable for this title (ID " + ref.id + "). Tried vixsrc-playlist and alts. Try again later.");
                 }
+            } else {
+                // Primary succeeded, also add fallback sources to cands later (merge)
+                // We'll merge after decoding
             }
             var groups = payload.playlist || [];
             var seen = {};
@@ -518,6 +559,18 @@
                     });
                 }
             }
+            // Merge with fallback generic embeds (20 sources) to match website's Select Source list
+            try {
+                var fbForMerge = await fallbackStreams(ref);
+                for (var fbi = 0; fbi < fbForMerge.length; fbi++) {
+                    var fbItem = fbForMerge[fbi];
+                    if (!fbItem || !fbItem.url) continue;
+                    // Avoid duplicates
+                    var dup = false;
+                    for (var di = 0; di < cands.length; di++) { if (cands[di].url === fbItem.url) { dup = true; break; } }
+                    if (!dup) cands.push(fbItem);
+                }
+            } catch (e) {}
             if (!cands.length) {
                 return fail(cb, encoded ? "DECODE_FAILED" : "NO_SOURCES",
                     encoded
