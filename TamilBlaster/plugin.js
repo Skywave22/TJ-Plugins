@@ -245,17 +245,48 @@
         try {
             var origin = (embedUrl.match(/^(https?:\/\/[^\/]+)/) || [])[1] || '';
             var html = await getText(embedUrl, { "Referer": SITE + "/", "Accept": "text/html" });
+            // Extract cookies set via JS: file_id, aff, ref_url
+            var fileId = (html.match(/\$\.cookie\('file_id',\s*'([^']+)'/) || html.match(/file_id['"]?,\s*['"]([^'"]+)['"]/) || [])[1] || "";
+            var aff = (html.match(/\$\.cookie\('aff',\s*'([^']+)'/) || [])[1] || "";
+            var refUrl = (html.match(/\$\.cookie\('ref_url',\s*'([^']+)'/) || [])[1] || "";
+            var cookieParts = [];
+            if (fileId) cookieParts.push("file_id=" + fileId);
+            if (aff) cookieParts.push("aff=" + aff);
+            if (refUrl) cookieParts.push("ref_url=" + refUrl);
+            var cookieHeader = cookieParts.join("; ");
+
             var m3u8s = extractM3U8(html, origin);
             for (var i = 0; i < m3u8s.length; i++) {
                 var u = m3u8s[i];
-                // filter out thumbnails etc
                 if (/\.jpg|\.png|_xt\.m3u8/i.test(u) && !/master\.m3u8/i.test(u)) continue;
                 var q = qualityFromText(u) || "1080p";
-                // infer quality from page if possible
                 if (/720p/i.test(html) && !/1080p/i.test(u)) q = "720p";
-                streams.push({ url: u, quality: q, headers: { "User-Agent": UA, "Referer": embedUrl, "Origin": origin } });
+                var headers = { "User-Agent": UA, "Referer": embedUrl, "Origin": origin };
+                if (cookieHeader) headers["Cookie"] = cookieHeader;
+                // Prioritize /stream/ URLs over direct CDN - they handle auth better
+                var isStreamProxy = /\/stream\//.test(u);
+                var qualityLabel = /lulust|tnmr/.test(embedUrl) ? "LuluStream • " + q : /morencius|vidhide|acek|dramiyos/.test(embedUrl) ? "VidHide • " + q : "Embed • " + q;
+                if (isStreamProxy) qualityLabel = qualityLabel + " [Proxy]";
+                streams.push({ url: u, quality: q, qualityLabel: qualityLabel, headers: headers, isProxy: isStreamProxy });
             }
-        } catch (e) {}
+            // Sort to put proxy URLs first (more reliable)
+            streams.sort(function(a,b){ return (b.isProxy?1:0) - (a.isProxy?1:0); });
+
+            // Also return the embed URL itself as fallback for SkyStream's built-in extractor
+            // This allows the app to try its own VidHide/LuluStream resolver if our HLS fails
+            if (streams.length) {
+                // Add embed URL as additional stream with lower priority
+                streams.push({ url: embedUrl, quality: "Embed • 1080p (via Extractor)", headers: { "User-Agent": UA, "Referer": SITE + "/" } });
+            } else {
+                // If no HLS found, return embed URL directly
+                streams.push({ url: embedUrl, quality: "Embed • 1080p", headers: { "User-Agent": UA, "Referer": SITE + "/" } });
+            }
+        } catch (e) {
+            // On error, return embed URL as fallback
+            try {
+                streams.push({ url: embedUrl, quality: "Embed • 1080p", headers: { "User-Agent": UA, "Referer": SITE + "/" } });
+            } catch (e2) {}
+        }
         return streams;
     }
 
@@ -596,8 +627,17 @@
                     var embStreams = await resolveEmbed(emb);
                     for (var es = 0; es < embStreams.length; es++) {
                         var s = embStreams[es];
-                        var q = s.quality || "1080p";
-                        var label = /lulust|tnmr/.test(emb) ? "LuluStream • " + q : /morencius|vidhide|acek|dramiyos/.test(emb) ? "VidHide • " + q : "Embed • " + q;
+                        // s may already have qualityLabel from resolveEmbed (e.g. with [Proxy] tag)
+                        var label = s.qualityLabel || s.quality || "1080p";
+                        // If label is just a quality like 1080p, prepend source name
+                        if (/^\d+p$/i.test(label) || label === "1080p" || label === "720p") {
+                            var q = label;
+                            label = /lulust|tnmr/.test(emb) ? "LuluStream • " + q : /morencius|vidhide|acek|dramiyos/.test(emb) ? "VidHide • " + q : "Embed • " + q;
+                        }
+                        // If URL is the embed page itself, keep its special label
+                        if (s.url === emb) {
+                            label = s.quality || "Embed • 1080p (via Extractor)";
+                        }
                         allStreams.push(mkStream({ url: s.url, quality: label, headers: s.headers || { "User-Agent": UA, "Referer": emb } }));
                     }
                 } catch (e) {}
@@ -607,7 +647,7 @@
             // If we already have embed streams, only try first download file with short timeout to avoid long waits
             var hasEmbed = allStreams.length > 0;
             var maxDl = hasEmbed ? Math.min(downloadFiles.length, 1) : Math.min(downloadFiles.length, 2);
-            var dlTimeout = hasEmbed ? 6000 : 10000;
+            var dlTimeout = hasEmbed ? 15000 : 12000;
             for (var di = 0; di < maxDl; di++) {
                 var df = downloadFiles[di];
                 var dUrl = df.downloadUrl;
@@ -669,6 +709,22 @@
                     uniq.push(mkStream({ url: iframes[fi], quality: "Embed • 1080p", headers: { "User-Agent": UA, "Referer": referer } }));
                 }
             }
+            // Always add download redirector URLs as additional options (for download manager / external browser)
+            // Even if we have embed streams, user may want direct download
+            if (downloadFiles.length && uniq.length < 10) {
+                for (var dj = 0; dj < downloadFiles.length; dj++) {
+                    var df2 = downloadFiles[dj];
+                    // Avoid duplicate if already resolved to HubCloud/GDFlix
+                    var already = uniq.some(function(s){ return s.url && s.url.indexOf(df2.file) >=0; });
+                    if (already) continue;
+                    // Only add if not already present
+                    var exists = uniq.some(function(s){ return s.url === df2.downloadUrl; });
+                    if (!exists) {
+                        uniq.push(mkStream({ url: df2.downloadUrl, quality: "Download • " + (df2.quality || "1080p") + (df2.size ? " • " + df2.size : "") + " (Redirector)", headers: { "User-Agent": UA, "Referer": referer } }));
+                    }
+                }
+            }
+
             if (!uniq.length) {
                 // If we have download files, return them as streams pointing to redirector (user can open in external browser)
                 for (var dj = 0; dj < downloadFiles.length; dj++) {
