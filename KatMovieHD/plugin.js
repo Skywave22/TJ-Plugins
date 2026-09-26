@@ -309,6 +309,16 @@
             var label2 = stripTags(m[2]);
             out.push({ kind: 'gdflix_direct', id: m[1], label: label2, url: m[1] });
         }
+        // Extra hosts found in Idiots 2026 and other CAMRip titles: 1xplayer iframe, bbupload, gofile
+        var reIframe = /<iframe[^>]+src=["'](https?:\/\/(?:vd\.)?1xplayer\.com\/[^"']+)["']/gi;
+        while ((m = reIframe.exec(contentHtml)) !== null) {
+            out.push({ kind: '1xplayer', id: m[1], label: '1XPlayer', url: m[1] });
+        }
+        var reGoFile = /<a[^>]+href=["'](https?:\/\/(?:download\.bbupload\.to\/download\?v=[A-Za-z0-9]+|gofile\.io\/d\/[A-Za-z0-9]+|bbupload\.to\/[^"']+))["'][^>]*>([\s\S]*?)<\/a>/gi;
+        while ((m = reGoFile.exec(contentHtml)) !== null) {
+            var label3 = stripTags(m[2]) || 'GoFile';
+            out.push({ kind: 'gofile', id: m[1], label: label3, url: m[1] });
+        }
         return out;
     }
 
@@ -939,6 +949,23 @@
                             streams.push(mkStream({ url: gLinks3[gm], quality: 'GDFlix • Direct', headers: { 'User-Agent': UA } }));
                         }
                     } catch (e) {}
+                }
+            }
+            // Fallback: 1xPlayer iframe and GoFile/BBUpload for CAMRip titles like Idiots 2026
+            if (!streams.length) {
+                var extraLinks = parseKmhdLinks(content);
+                for (var eli = 0; eli < extraLinks.length; eli++) {
+                    var el = extraLinks[eli];
+                    if (el.kind === '1xplayer') {
+                        // Try extractor first, then direct iframe as fallback
+                        var ex1 = await loadExtractorSafe(el.url, '1XPlayer • ' + (qualityFromText(content) || '1080p'));
+                        if (ex1) streams.push(ex1);
+                        else streams.push(mkStream({ url: el.url, quality: '1XPlayer • ' + (qualityFromText(content) || '1080p'), headers: { 'User-Agent': UA, 'Referer': SITE + '/' } }));
+                    } else if (el.kind === 'gofile') {
+                        var exG = await loadExtractorSafe(el.url, 'GoFile • ' + (el.label || '1080p'));
+                        if (exG) streams.push(exG);
+                        else streams.push(mkStream({ url: el.url, quality: 'GoFile • ' + (el.label || '1080p'), headers: { 'User-Agent': UA } }));
+                    }
                 }
             }
             // Deduplicate
