@@ -309,7 +309,7 @@
     "name": "TamilBlasters",
     "version": 2,
     "baseUrl": "https://www.1tamilblasters.tech",
-    "description": "TamilBlasters (1tamilblasters.tech) - Tamil, Telugu, Hindi, Malayalam, Kannada movies & series. WordPress REST API catalog, VidHide & LuluStream HLS embeds + HubCloud/GDFlix download mirrors via quantum redirector resolved to direct files. Geo-bypass enabled.",
+    "description": "TamilBlasters (1tamilblasters.tech) - Fixed streams: VidHide proxy /stream/ + CDN with cookies, LuluStream HLS with file_id cookie, embed fallback via extractor, HubCloud/GDFlix via quantum redirector with 15s timeout. Geo-bypass without CF-Connecting-IP.",
     "authors": [
       "Skywave22"
     ],
