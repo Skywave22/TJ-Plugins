@@ -24,8 +24,9 @@
     var GDFLIX_HOST = 'new4.gdflix.io';
     var GD_KEY = 'acbe2066696a1d44345698deb3d9ebf9ae9bbdfd';
 
-    // Only 3 working hosts per user request: StreamTape, StreamWish, HubCloud
-    var TOUCHME_CODES = ['streamtape_res', 'streamwish_res', 'hubdrive_res'];
+    // Working hosts: StreamTape, StreamWish, HubCloud, GDFlix (GDFlix kept as fallback for titles that only have GDFlix)
+    var TOUCHME_CODES = ['streamtape_res', 'streamwish_res', 'hubdrive_res', 'gdflix_res'];
+    var PRIORITY_CODES = ['streamtape_res', 'streamwish_res', 'hubdrive_res']; // user requested these 3
     // Geo bypass headers
     var GEO_HEADERS = {
         'X-Forwarded-For': '8.8.8.8',
@@ -566,28 +567,98 @@
 
             var baseItemUrl = SITE + '/' + p.slug;
             var episodes = [];
+            var isSeries = false;
 
             if (play) {
                 try {
                     var playData = await fetchPlayData(play.id);
                     if (playData && playData.info) {
                         var eps = parsePlayInfoFromData(playData);
-                        // Sort by episode number to ensure 1,2,3 order
+                        // Sort by season/episode
                         eps.sort(function (a, b) { return (a.season - b.season) || (a.episode - b.episode); });
                         eps.forEach(function (e, idx) {
+                            // Use parsed season, but episode number sequential within season
                             episodes.push(mkEpisode({
                                 name: e.name,
                                 url: baseItemUrl + '?play=' + play.id + '&ep=' + e.key,
                                 season: e.season,
-                                episode: idx + 1,
+                                episode: e.episode,
                                 posterUrl: poster,
                                 dubStatus: 'none',
                                 playbackPolicy: 'none'
                             }));
                         });
+                        if (eps.length > 1 || /season/i.test(pt.name)) isSeries = true;
                     }
                 } catch (e) {
                     console.error('Play data fetch failed', e && e.message);
+                }
+
+                // ── Try to merge other seasons under same base title (fix separate posters for S1/S2) ──
+                try {
+                    // Derive base name from slug for reliable search: mobland-s2-hindi -> mobland
+                    var baseSlug = p.slug.toLowerCase();
+                    var mBase = baseSlug.match(/^(.+?)-s\d+/);
+                    if (!mBase) mBase = baseSlug.match(/^(.+?)-season-\d+/);
+                    var baseSearch = mBase ? mBase[1].replace(/-/g, ' ') : pt.name;
+                    var baseName = baseSearch; // e.g., "mobland"
+                    // Search for related seasons
+                    var searchUrl = SITE + '/__data.json?x-sveltekit-invalidated=01&q=' + encodeURIComponent(baseName) + '&page=1';
+                    var searchData = await withTimeout(fetchSvelteItems(searchUrl), 8000);
+                    var related = (searchData.items || []).filter(function (it) {
+                        if (!it.slug || it.slug === p.slug) return false;
+                        var title = (it.post_title || '').toLowerCase();
+                        var baseLower = baseName.toLowerCase();
+                        // Must contain base name and be a season
+                        if (title.indexOf(baseLower) < 0) return false;
+                        if (!/season\s*\d+/i.test(it.post_title || '')) return false;
+                        // Avoid duplicates
+                        return true;
+                    }).slice(0, 3); // max 3 other seasons
+
+                    for (var ri = 0; ri < related.length; ri++) {
+                        var rel = related[ri];
+                        try {
+                            var relContent = await withTimeout(fetchPostContent(rel.slug), 8000);
+                            var relLinks = parseKmhdLinks(relContent);
+                            var relPlay = null;
+                            for (var rli = 0; rli < relLinks.length; rli++) if (relLinks[rli].kind === 'play') { relPlay = relLinks[rli]; break; }
+                            if (!relPlay) continue;
+                            var relPlayData = await withTimeout(fetchPlayData(relPlay.id), 8000);
+                            if (!relPlayData || !relPlayData.info) continue;
+                            var relEps = parsePlayInfoFromData(relPlayData);
+                            relEps.forEach(function (re) {
+                                // Avoid duplicate file keys
+                                var exists = episodes.some(function (ex) { return ex.url.indexOf(re.key) >= 0; });
+                                if (exists) return;
+                                episodes.push(mkEpisode({
+                                    name: re.name,
+                                    url: baseItemUrl + '?play=' + relPlay.id + '&ep=' + re.key,
+                                    season: re.season,
+                                    episode: re.episode,
+                                    posterUrl: poster,
+                                    dubStatus: 'none',
+                                    playbackPolicy: 'none'
+                                }));
+                            });
+                            isSeries = true;
+                        } catch (e) {}
+                    }
+                    // Re-sort after merging and deduplicate by season+episode
+                    episodes.sort(function (a, b) { return (a.season - b.season) || (a.episode - b.episode); });
+                    var seenEp = {};
+                    var deduped = [];
+                    for (var di = 0; di < episodes.length; di++) {
+                        var ep = episodes[di];
+                        var key = ep.season + ':' + ep.episode;
+                        if (!seenEp[key]) {
+                            seenEp[key] = true;
+                            deduped.push(ep);
+                        }
+                    }
+                    episodes = deduped;
+                } catch (e) {
+                    console.error('Season merge failed', e && e.message);
                 }
             }
 
@@ -601,12 +672,13 @@
                 }));
             }
 
+            // For movies without play data, ensure we have at least 1 episode that will try GDFlix direct links in loadStreams
             var item = mkItem({
                 title: pt.name || p.slug,
                 url: baseItemUrl,
                 posterUrl: poster,
                 bannerUrl: poster,
-                type: episodes.length > 1 ? 'series' : 'movie',
+                type: (isSeries || episodes.length > 1) ? 'series' : 'movie',
                 year: pt.year,
                 episodes: episodes
             });
@@ -716,9 +788,10 @@
                     } catch (e) {}
                 }
 
-                // 2) HubCloud via touchme — with geo bypass + R2 direct
+                // 2) HubCloud via touchme — with geo bypass + R2 direct + GDFlix fallback
                 try {
                     var mirrors = await fetchAllMirrors(fileId);
+                    // Priority: StreamTape, StreamWish, HubCloud
                     if (mirrors.hubdrive_res) {
                         var hubLinks = await resolveHubcloud(mirrors.hubdrive_res);
                         if (hubLinks.length) {
@@ -737,9 +810,32 @@
                             }));
                         }
                     }
+                    // GDFlix fallback — for titles that only have GDFlix on website
+                    if (!streams.length && mirrors.gdflix_res) {
+                        try {
+                            var gd = await resolveGdflix(mirrors.gdflix_res);
+                            var allG = gd.instant.concat(gd.urls);
+                            if (allG.length) {
+                                for (var gi = 0; gi < allG.length; gi++) {
+                                    streams.push(mkStream({
+                                        url: allG[gi],
+                                        quality: 'GDFlix • ' + (q || '1080p') + ' • ' + (gi === 0 ? 'Instant' : 'Direct'),
+                                        headers: { 'User-Agent': UA, 'Referer': mirrors.gdflix_res, 'Accept-Language': GEO_HEADERS['Accept-Language'] }
+                                    }));
+                                }
+                            } else {
+                                streams.push(mkStream({
+                                    url: mirrors.gdflix_res,
+                                    quality: 'GDFlix • ' + (q || '1080p'),
+                                    headers: { 'User-Agent': UA, 'Referer': 'https://' + GDFLIX_HOST + '/' }
+                                }));
+                            }
+                        } catch (e) {
+                            streams.push(mkStream({ url: mirrors.gdflix_res, quality: 'GDFlix • ' + (q || '1080p'), headers: { 'User-Agent': UA } }));
+                        }
+                    }
                     // If touchme returned StreamTape/StreamWish as direct http links (not codes), also add
                     if (mirrors.streamtape_res && mirrors.streamtape_res.indexOf('http') === 0) {
-                        // Could be direct e/ link or get_video
                         if (mirrors.streamtape_res.indexOf('streamtape.com/e/') >= 0) {
                             var stDirect = await extractStreamTape(mirrors.streamtape_res);
                             if (stDirect) {
@@ -772,7 +868,7 @@
                 return cb({ success: true, data: streams });
             }
 
-            // ────── Plain movie URL — use first fileId ──────
+            // ────── Plain movie URL — use first fileId + GDFlix direct fallback ──────
             var links = parseKmhdLinks(content);
             var play = null;
             for (var li = 0; li < links.length; li++) if (links[li].kind === 'play') { play = links[li]; break; }
@@ -790,10 +886,10 @@
                                 var hubFirst = await resolveHubcloud(mirrorsFirst.hubdrive_res);
                                 if (hubFirst.length) {
                                     for (var hf = 0; hf < hubFirst.length; hf++) {
-                                        streams.push(mkStream({ url: hubFirst[hf], quality: 'HubCloud • ' + qFirst + ' • Direct', headers: { 'User-Agent': UA, 'Referer': mirrorsFirst.hubdrive_res } }));
+                                        streams.push(mkStream({ url: hubFirst[hf], quality: 'HubCloud • ' + qFirst + ' • Direct', headers: { 'User-Agent': UA, 'Referer': mirrorsFirst.hubdrive_res, 'Accept-Language': GEO_HEADERS['Accept-Language'] } }));
                                     }
                                 } else {
-                                    streams.push(mkStream({ url: mirrorsFirst.hubdrive_res, quality: 'HubCloud • ' + qFirst + ' • Watch Online', headers: { 'User-Agent': UA } }));
+                                    streams.push(mkStream({ url: mirrorsFirst.hubdrive_res, quality: 'HubCloud • ' + qFirst + ' • Watch Online', headers: { 'User-Agent': UA, 'Accept-Language': GEO_HEADERS['Accept-Language'] } }));
                                 }
                             }
                             if (first.streamtape_res) {
@@ -808,9 +904,42 @@
                                 var s5 = await loadExtractorSafe('https://hglink.to/e/' + first.streamwish_res, 'StreamWish • ' + qFirst);
                                 if (s5) streams.push(s5);
                             }
+                            // GDFlix fallback if priority hosts gave nothing
+                            if (!streams.length && mirrorsFirst.gdflix_res) {
+                                try {
+                                    var gdFirst = await resolveGdflix(mirrorsFirst.gdflix_res);
+                                    var allFirst = gdFirst.instant.concat(gdFirst.urls);
+                                    if (allFirst.length) {
+                                        for (var gf = 0; gf < allFirst.length; gf++) {
+                                            streams.push(mkStream({ url: allFirst[gf], quality: 'GDFlix • ' + qFirst, headers: { 'User-Agent': UA } }));
+                                        }
+                                    } else {
+                                        streams.push(mkStream({ url: mirrorsFirst.gdflix_res, quality: 'GDFlix • ' + qFirst, headers: { 'User-Agent': UA } }));
+                                    }
+                                } catch (e) {
+                                    streams.push(mkStream({ url: mirrorsFirst.gdflix_res, quality: 'GDFlix • ' + qFirst, headers: { 'User-Agent': UA } }));
+                                }
+                            }
                         }
                     }
                 } catch (e) {}
+            }
+            // Fallback: GDFlix direct links found in post_content (for movies that only have GDFlix on website)
+            if (!streams.length) {
+                var gLinks3 = content.match(/https?:\/\/(?:gdflix\.dev|gd\.kmhd\.eu|new\d*\.gdflix\.io)\/file\/[A-Za-z0-9]+/g) || [];
+                for (var gm = 0; gm < Math.min(gLinks3.length, 2); gm++) {
+                    try {
+                        var gd3 = await resolveGdflix(gLinks3[gm]);
+                        var all3 = gd3.instant.concat(gd3.urls);
+                        if (all3.length) {
+                            for (var gn = 0; gn < all3.length; gn++) {
+                                streams.push(mkStream({ url: all3[gn], quality: 'GDFlix • Direct • ' + (qualityFromText(content) || '1080p'), headers: { 'User-Agent': UA, 'Referer': gLinks3[gm] } }));
+                            }
+                        } else {
+                            streams.push(mkStream({ url: gLinks3[gm], quality: 'GDFlix • Direct', headers: { 'User-Agent': UA } }));
+                        }
+                    } catch (e) {}
+                }
             }
             // Deduplicate
             var seen2 = {};

@@ -1,7 +1,7 @@
 {
   "packageName": "com.katmoviehd.skystream",
   "name": "KatMovieHD",
-  "version": 7,
+  "version": 8,
   "baseUrl": "https://new.katmoviehd.top",
   "domains": [
     {
@@ -25,7 +25,7 @@
       "url": "https://katworld.net"
     }
   ],
-  "description": "KatMovieHD v7 - Fix episode numbers 800/900 -> 1,2,3 + only StreamTape/StreamWish/HubCloud + geo bypass. Screenshot issue fixed: episodes now show 1,2 not 800,900. Streams: 3-4 per episode (StreamTape direct + HubCloud R2 Direct Watch Online + StreamWish) via touchme API. Geo bypass headers added.",
+  "description": "KatMovieHD v8 - Fix season posters merging + no-streams: S1/S2 now merged (12 eps for MobLand), episode numbers 1,2 not 800/900, only StreamTape/StreamWish/HubCloud+GDFlix fallback, geo bypass, deduped.",
   "authors": [
     "Arena Agent"
   ],
