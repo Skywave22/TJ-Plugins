@@ -70,6 +70,19 @@
 
     // ── helpers ──
     function mkItem(obj) { try { return new MultimediaItem(obj); } catch (_) { return obj; } }
+    function buildVlcUrl(url, headers) {
+        try {
+            var parts = [];
+            if (headers) {
+                if (headers["User-Agent"]) parts.push("User-Agent=" + encodeURIComponent(headers["User-Agent"]));
+                if (headers["Referer"]) parts.push("Referer=" + encodeURIComponent(headers["Referer"]));
+                if (headers["Origin"]) parts.push("Origin=" + encodeURIComponent(headers["Origin"]));
+                if (headers["Cookie"]) parts.push("Cookie=" + encodeURIComponent(headers["Cookie"]));
+            }
+            if (parts.length) return url + "|" + parts.join("&");
+        } catch (e) {}
+        return url;
+    }
     function mkEpisode(obj) { try { return new Episode(obj); } catch (_) { return obj; } }
     function mkStream(obj) {
         var s;
@@ -263,11 +276,12 @@
                 if (/720p/i.test(html) && !/1080p/i.test(u)) q = "720p";
                 var headers = { "User-Agent": UA, "Referer": embedUrl, "Origin": origin };
                 if (cookieHeader) headers["Cookie"] = cookieHeader;
-                // Prioritize /stream/ URLs over direct CDN - they handle auth better
                 var isStreamProxy = /\/stream\//.test(u);
                 var qualityLabel = /lulust|tnmr/.test(embedUrl) ? "LuluStream • " + q : /morencius|vidhide|acek|dramiyos/.test(embedUrl) ? "VidHide • " + q : "Embed • " + q;
                 if (isStreamProxy) qualityLabel = qualityLabel + " [Proxy]";
-                streams.push({ url: u, quality: q, qualityLabel: qualityLabel, headers: headers, isProxy: isStreamProxy });
+                // For VLC player, also provide URL with |User-Agent| syntax as fallback (some VLC builds ignore headers object)
+                var vlcUrl = buildVlcUrl(u, headers);
+                streams.push({ url: u, vlcUrl: vlcUrl, quality: q, qualityLabel: qualityLabel, headers: headers, isProxy: isStreamProxy });
             }
             // Sort to put proxy URLs first (more reliable)
             streams.sort(function(a,b){ return (b.isProxy?1:0) - (a.isProxy?1:0); });
@@ -627,18 +641,22 @@
                     var embStreams = await resolveEmbed(emb);
                     for (var es = 0; es < embStreams.length; es++) {
                         var s = embStreams[es];
-                        // s may already have qualityLabel from resolveEmbed (e.g. with [Proxy] tag)
                         var label = s.qualityLabel || s.quality || "1080p";
-                        // If label is just a quality like 1080p, prepend source name
                         if (/^\d+p$/i.test(label) || label === "1080p" || label === "720p") {
                             var q = label;
                             label = /lulust|tnmr/.test(emb) ? "LuluStream • " + q : /morencius|vidhide|acek|dramiyos/.test(emb) ? "VidHide • " + q : "Embed • " + q;
                         }
-                        // If URL is the embed page itself, keep its special label
                         if (s.url === emb) {
                             label = s.quality || "Embed • 1080p (via Extractor)";
                         }
+                        // Try to use vlcUrl with | headers for VLC internal player if available, but also keep original for extractor
+                        var finalUrl = s.vlcUrl || s.url;
+                        // For LuluStream, VLC blocks direct CDN, so we MUST use proxy URL if available, and ensure Mozilla UA
+                        // Return both: original HLS and VLC-formatted URL as separate streams
                         allStreams.push(mkStream({ url: s.url, quality: label, headers: s.headers || { "User-Agent": UA, "Referer": emb } }));
+                        if (s.vlcUrl && s.vlcUrl !== s.url) {
+                            allStreams.push(mkStream({ url: s.vlcUrl, quality: label + " (VLC Headers)", headers: s.headers || { "User-Agent": UA, "Referer": emb } }));
+                        }
                     }
                 } catch (e) {}
             }
@@ -646,8 +664,8 @@
             // 2) Resolve download buttons via quantum redirector -> HubCloud/GDFlix (with timeout, datacenter may block)
             // If we already have embed streams, only try first download file with short timeout to avoid long waits
             var hasEmbed = allStreams.length > 0;
-            var maxDl = hasEmbed ? Math.min(downloadFiles.length, 1) : Math.min(downloadFiles.length, 2);
-            var dlTimeout = hasEmbed ? 15000 : 12000;
+            var maxDl = hasEmbed ? Math.min(downloadFiles.length, 2) : Math.min(downloadFiles.length, 3);
+            var dlTimeout = hasEmbed ? 8000 : 12000;
             for (var di = 0; di < maxDl; di++) {
                 var df = downloadFiles[di];
                 var dUrl = df.downloadUrl;
