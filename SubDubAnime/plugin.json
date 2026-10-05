@@ -1,11 +1,11 @@
 {
   "packageName": "com.subdub.skystream",
   "name": "SubDubAnime",
-  "version": 1,
+  "version": 3,
   "baseUrl": "https://www.subdubanime.site",
-  "description": "SubDubAnime (subdubanime.site) - Hindi & English dubbed/subbed anime: series, seasons and movies via the Blakite API. Direct HLS per episode (up to 1080p where available). Verified live.",
+  "description": "SubDubAnime (subdubanime.site) - Hindi & English dubbed/subbed anime: series, seasons and movies via the Blakite API. Direct HLS per episode (up to 1080p where available). Verified live. v3: hardened the TMDB metadata mapping - description/genre/score values are normalised, so one malformed upstream field can no longer fail the whole dashboard.",
   "authors": [
-    "Skywave22"
+    "TJ Plugins"
   ],
   "languages": [
     "en",

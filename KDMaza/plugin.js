@@ -26,7 +26,11 @@
     //  WEB-DL dual-audio 687MB served with video/mkv).
     // ═══════════════════════════════════════════════════════════
 
-    const SITE = "https://kdramasmaza.net";
+    // Dynamic base URL: the app injects the domain the user picked in the
+    // plugin's settings gear (mirrors), so never hardcode the primary host.
+    const SITE = (typeof manifest !== "undefined" && manifest.baseUrl)
+        ? String(manifest.baseUrl).replace(/\/+$/, "")
+        : "https://kdramasmaza.net";
     const API = SITE + "/wp-json/wp/v2";
 
     // ── hoster endpoints ────────────────────────────────────────────

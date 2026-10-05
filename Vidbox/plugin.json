@@ -1,11 +1,11 @@
 {
   "packageName": "com.vidbox.plugin",
   "name": "Vidbox",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://vidbox.vc",
-  "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Vidbox is a guide site that fans out to 47 embed servers; the one backend that hands back a directly playable manifest from a plugin runtime is its Nxsha multi-language server, so streams resolve through that. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every HLS/DASH manifest is verified before it is offered. Verified live.",
+  "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Streams resolve through the Nxsha multi-language server. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali; every HLS/DASH manifest is verified before it is offered. v2: removed a dead duplicate stream function and fixed episode items (name/airDate) plus genre tags so they render in the app.",
   "authors": [
-    "Skywave22"
+    "TJ Plugins"
   ],
   "languages": [
     "hi",

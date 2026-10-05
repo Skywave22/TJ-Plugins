@@ -2,11 +2,11 @@
  {
   "packageName": "com.cinefreak.skystream",
   "name": "CineFreak",
-  "version": 4,
+  "version": 5,
   "baseUrl": "https://cinefreak.net",
-  "description": "CineFreak (cinefreak.net) - Bollywood, Hollywood, Hindi dubbed movies, web series & K-Drama. Multi-quality direct streams with honest language labels (dual-audio files marked, switch audio in player). Verified live.",
+  "description": "CineFreak (cinefreak.net) - Bollywood, Hollywood, Hindi dubbed movies, web series & K-Drama. Multi-quality direct streams with honest language labels (dual-audio files marked, switch audio in player). v5: the site domain now follows the domain selected in the plugin's settings (manifest.baseUrl).",
   "authors": [
-   "Skywave22"
+   "TJ Plugins"
   ],
   "languages": [
    "hi",
@@ -22,7 +22,7 @@
  {
   "packageName": "com.hicine.skystream",
   "name": "HiCine",
-  "version": 6,
+  "version": 7,
   "baseUrl": "https://api.hicine.sbs",
   "domains": [
    {
@@ -32,7 +32,7 @@
   ],
   "description": "HiCine - Bollywood & Hollywood movies, series and anime (Hindi dual-audio). Movies, WEB series, K-dramas and anime from hicine.sbs",
   "authors": [
-   "Happy"
+   "TJ Plugins"
   ],
   "languages": [
    "hi",
@@ -49,11 +49,11 @@
  {
   "packageName": "com.hindidubbed.provider",
   "name": "Hindi Dubbed",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://www.youtube.com",
-  "description": "Hollywood Hindi dubbed, South Indian Hindi dubbed, Bollywood and Hindi cartoon/anime — all from 20 official YouTube channels (Goldmines network, Aditya, Bhavani, Volga, DRJ, Shemaroo, Ultra, Pen, Rajshri, B4U, Pokémon Hindi, Discovery Kids). Full movies appear as single items; web series are grouped with auto-updating episodes. Fully on-device: 720p/1080p fMP4 HLS + merged HLS built in pure JS (no ffmpeg/yt-dlp/server), with 360p MP4 fallback.",
+  "description": "Hollywood Hindi dubbed, South Indian Hindi dubbed, Bollywood and Hindi cartoon/anime - all from 20 official YouTube channels (Goldmines network, Aditya, Bhavani, Volga, DRJ, Shemaroo, Ultra, Pen, Rajshri, B4U, Pokemon Hindi, Discovery Kids). Full movies appear as single items; web series are grouped with auto-updating episodes. Fully on-device: 720p/1080p fMP4 HLS + merged HLS built in pure JS, with 360p MP4 fallback. v2: reports an error instead of showing a blank dashboard when YouTube returns nothing.",
   "authors": [
-   "HindiDubbedPlugin"
+   "TJ Plugins"
   ],
   "languages": [
    "hi",
@@ -68,7 +68,7 @@
  {
   "packageName": "com.katmoviehd.skystream",
   "name": "KatMovieHD",
-  "version": 4,
+  "version": 10,
   "baseUrl": "https://new.katmoviehd.top",
   "domains": [
    {
@@ -76,13 +76,25 @@
     "url": "https://new.katmoviehd.top"
    },
    {
-    "name": "katworld.net mirror",
-    "url": "https://new.katmoviehd.top"
+    "name": "katmoviehd.wiki",
+    "url": "https://katmoviehd.wiki"
+   },
+   {
+    "name": "katmoviehd.nexus",
+    "url": "https://katmoviehd.nexus"
+   },
+   {
+    "name": "katmoviehd.mom",
+    "url": "https://katmoviehd.mom"
+   },
+   {
+    "name": "katworld.net",
+    "url": "https://katworld.net"
    }
   ],
-  "description": "KatMovieHD - Hindi dubbed & dual audio movies and web series. Watch online (StreamTape/StreamWish) + download mirrors (HubCloud)",
+  "description": "KatMovieHD v9 - Fix Idiots 2026 + season merge: Idiots had 1xPlayer+GoFile not KMHD, now parsed. MobLand S1/S2 merged into 12 eps with Season tabs. All titles now have streams via StreamTape/HubCloud/StreamWish+GDFlix fallback+1xPlayer/GoFile for CAMRip. Geo bypass.",
   "authors": [
-   "Arena Agent"
+   "TJ Plugins"
   ],
   "languages": [
    "hi",
@@ -99,11 +111,11 @@
  {
   "packageName": "com.rivestream.plugin",
   "name": "RiveStream",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://rivestream.ru",
   "description": "RiveStream (rivestream.ru) - \"Your Personal Streaming Oasis\". TMDB-powered catalog of movies & TV, streamed from rivestream's own Rive server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk). Default audio: Hindi - Hindi-dubbed tracks are ranked first in the server list, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Verified live.",
   "authors": [
-   "Skywave22"
+   "TJ Plugins"
   ],
   "languages": [
    "hi",
@@ -123,7 +135,7 @@
  {
   "packageName": "com.ssr.skystream",
   "name": "SSR Movies",
-  "version": 4,
+  "version": 5,
   "baseUrl": "https://ssrmovies.blue",
   "domains": [
    {
@@ -141,7 +153,7 @@
   ],
   "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. HubCloud + GDFlix download mirrors resolved to direct files",
   "authors": [
-   "Arena Agent"
+   "TJ Plugins"
   ],
   "languages": [
    "hi",
@@ -157,11 +169,11 @@
  {
   "packageName": "com.vidbox.plugin",
   "name": "Vidbox",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://vidbox.vc",
-  "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Vidbox is a guide site that fans out to 47 embed servers; the one backend that hands back a directly playable manifest from a plugin runtime is its Nxsha multi-language server, so streams resolve through that. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every HLS/DASH manifest is verified before it is offered. Verified live.",
+  "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Streams resolve through the Nxsha multi-language server. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali; every HLS/DASH manifest is verified before it is offered. v2: removed a dead duplicate stream function and fixed episode items (name/airDate) plus genre tags so they render in the app.",
   "authors": [
-   "Skywave22"
+   "TJ Plugins"
   ],
   "languages": [
    "hi",

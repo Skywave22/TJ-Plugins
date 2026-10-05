@@ -13,7 +13,10 @@
 (function () {
     'use strict';
 
-    var SITE = (manifest && manifest.baseUrl) || 'https://new.katmoviehd.top';
+    // Dynamic base URL: the app injects the domain picked in the settings gear.
+    var SITE = (typeof manifest !== 'undefined' && manifest.baseUrl)
+        ? String(manifest.baseUrl).replace(/\/+$/, '')
+        : 'https://new.katmoviehd.top';
     if (SITE.slice(-1) === '/') SITE = SITE.slice(0, -1);
     var KMHD = 'https://links.kmhd.me';
 

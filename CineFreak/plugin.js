@@ -39,7 +39,11 @@
     //  Episode objects use `name` (not `title`) + int season/episode.
     // ═══════════════════════════════════════════════════════════
 
-    const SITE       = "https://cinefreak.net";
+    // Dynamic base URL: the app injects the domain the user picked in the
+    // plugin's settings gear (mirrors), so never hardcode the primary host.
+    const SITE       = (typeof manifest !== "undefined" && manifest.baseUrl)
+        ? String(manifest.baseUrl).replace(/\/+$/, "")
+        : "https://cinefreak.net";
     const STREAM_API = "https://subtitle.yagaverse.net/stream-api.php";
     const STREAM_KEY = "pushpa";
 

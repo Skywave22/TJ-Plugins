@@ -2,7 +2,7 @@
  {
   "packageName": "com.fmoviess.skystream",
   "name": "FMoviess",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://fmoviess.tv",
   "domains": [
    {
@@ -12,7 +12,7 @@
   ],
   "description": "FMoviess - Watch HD Movies & TV Shows. Multi-server streams (MoviesAPI + VixSrc), multi-quality HLS with subtitles, Latest Updated section",
   "authors": [
-   "Arena Agent"
+   "TJ Plugins"
   ],
   "languages": [
    "en"
@@ -28,7 +28,7 @@
  {
   "packageName": "com.hicine.skystream",
   "name": "HiCine",
-  "version": 6,
+  "version": 7,
   "baseUrl": "https://api.hicine.sbs",
   "domains": [
    {
@@ -38,7 +38,7 @@
   ],
   "description": "HiCine - Bollywood & Hollywood movies, series and anime (Hindi dual-audio). Movies, WEB series, K-dramas and anime from hicine.sbs",
   "authors": [
-   "Happy"
+   "TJ Plugins"
   ],
   "languages": [
    "hi",
@@ -55,7 +55,7 @@
  {
   "packageName": "com.katmoviehd.skystream",
   "name": "KatMovieHD",
-  "version": 4,
+  "version": 10,
   "baseUrl": "https://new.katmoviehd.top",
   "domains": [
    {
@@ -63,13 +63,25 @@
     "url": "https://new.katmoviehd.top"
    },
    {
-    "name": "katworld.net mirror",
-    "url": "https://new.katmoviehd.top"
+    "name": "katmoviehd.wiki",
+    "url": "https://katmoviehd.wiki"
+   },
+   {
+    "name": "katmoviehd.nexus",
+    "url": "https://katmoviehd.nexus"
+   },
+   {
+    "name": "katmoviehd.mom",
+    "url": "https://katmoviehd.mom"
+   },
+   {
+    "name": "katworld.net",
+    "url": "https://katworld.net"
    }
   ],
-  "description": "KatMovieHD - Hindi dubbed & dual audio movies and web series. Watch online (StreamTape/StreamWish) + download mirrors (HubCloud)",
+  "description": "KatMovieHD v9 - Fix Idiots 2026 + season merge: Idiots had 1xPlayer+GoFile not KMHD, now parsed. MobLand S1/S2 merged into 12 eps with Season tabs. All titles now have streams via StreamTape/HubCloud/StreamWish+GDFlix fallback+1xPlayer/GoFile for CAMRip. Geo bypass.",
   "authors": [
-   "Arena Agent"
+   "TJ Plugins"
   ],
   "languages": [
    "hi",

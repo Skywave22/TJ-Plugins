@@ -413,6 +413,15 @@
                 if (rows[i] && rows[i].items && rows[i].items.length) home[rows[i].name] = rows[i].items;
             }
         } catch (e) { /* leave home empty */ }
+        // An empty map renders as a blank dashboard with no explanation, so
+        // report the failure instead of pretending there is content.
+        if (!Object.keys(home).length) {
+            return cb({
+                success: false,
+                errorCode: "SITE_OFFLINE",
+                message: "YouTube returned no videos for any of the 20 channels - check your connection and try again."
+            });
+        }
         cb({ success: true, data: home });
     }
 

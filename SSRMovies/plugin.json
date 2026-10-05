@@ -1,7 +1,7 @@
 {
   "packageName": "com.ssr.skystream",
   "name": "SSR Movies",
-  "version": 4,
+  "version": 5,
   "baseUrl": "https://ssrmovies.blue",
   "domains": [
     {
@@ -19,7 +19,7 @@
   ],
   "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. HubCloud + GDFlix download mirrors resolved to direct files",
   "authors": [
-    "Arena Agent"
+    "TJ Plugins"
   ],
   "languages": [
     "hi",

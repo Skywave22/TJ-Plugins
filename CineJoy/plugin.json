@@ -1,10 +1,17 @@
 {
   "packageName": "com.cinejoy.skystream",
   "name": "CineJoy",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://cinejoy.pk",
   "description": "CineJoy (cinejoy.pk) - Trending Movies & Series with 4 official servers (Nebula, Solara, Lisbon 4K, Athens) + 10+ backup sources. TMDB catalog using CineJoy's own key, WASM-GC stream API documented, fallback to VidLove/VidRock/NxSha for instant HLS/MP4. Verified live.",
-  "authors": ["Skywave22"],
-  "languages": ["en"],
-  "categories": ["Movie", "TvSeries"]
+  "authors": [
+    "TJ Plugins"
+  ],
+  "languages": [
+    "en"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries"
+  ]
 }

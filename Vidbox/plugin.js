@@ -427,7 +427,7 @@
                     year: yearOf(d.release_date),
                     description: d.overview || "",
                     score: d.vote_average ? Math.round(d.vote_average * 10) / 10 : null,
-                    genres: (d.genres || []).map(function (g) { return g.name; }).filter(Boolean)
+                    tags: (d.genres || []).map(function (g) { return g.name; }).filter(Boolean)
                 }) });
             }
 
@@ -446,13 +446,13 @@
                     try { sd = JSON.parse(r && r.body); } catch (_) { sd = null; }
                     for (const e of ((sd && sd.episodes) || [])) {
                         eps.push(mkEpisode({
-                            title: e.name || ("Episode " + e.episode_number),
+                            name: e.name || ("Episode " + e.episode_number),
                             url: itemUrl("tv", p.id, d.name, e.season_number, e.episode_number),
                             posterUrl: poster(e.still_path, "w300"),
                             season: e.season_number,
                             episode: e.episode_number,
                             description: e.overview || "",
-                            date: e.air_date || ""
+                            airDate: e.air_date || ""
                         }));
                     }
                 }
@@ -466,7 +466,7 @@
                 year: yearOf(d.first_air_date),
                 description: d.overview || "",
                 score: d.vote_average ? Math.round(d.vote_average * 10) / 10 : null,
-                genres: (d.genres || []).map(function (g) { return g.name; }).filter(Boolean),
+                tags: (d.genres || []).map(function (g) { return g.name; }).filter(Boolean),
                 episodes: eps
             }) });
         } catch (e) {
@@ -587,108 +587,6 @@
         return parts.join(" - ");
     }
 
-    async function loadStreams(url, cb) {
-        try {
-            const p = parseUrl(url);
-            if (!p) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized RiveStream url" });
-
-            const servers = await riveServers(p);
-
-            // Only ask for servers we know how to label. Rive backends first so
-            // rivestream's own sources are always offered ahead of fallbacks.
-            const available = {};
-            for (const s of servers) { if (s && s.scraper) available[s.scraper] = s; }
-            const wanted = RIVE_PROVIDERS.concat(FALLBACK_PROVIDERS).filter(function (k) { return !!available[k]; });
-
-            if (!wanted.length) {
-                return cb({
-                    success: false,
-                    errorCode: "NO_SERVERS",
-                    message: "No RiveStream server currently carries this title. Try another title or episode."
-                });
-            }
-
-            // Phase 1: resolve every wanted server concurrently and collect all
-            // sources. Nothing is dropped here - language ranking happens next,
-            // so a Hindi track on a later server still beats an English one on
-            // an earlier one.
-            const all = [];
-            const seen = {};
-            const batches = [];
-            const CHUNK = 8;
-            for (let i = 0; i < wanted.length; i += CHUNK) {
-                batches.push(wanted.slice(i, i + CHUNK));
-            }
-
-            for (const batch of batches) {
-                const results = await Promise.all(batch.map(function (scraper) {
-                    return riveSources(p, scraper).catch(function () { return []; });
-                }));
-                for (const group of results) {
-                    for (const item of group) {
-                        const u = pickUrl(item.src);
-                        if (!u) continue;
-                        if (item.src.isEmbed === true) continue;
-                        if (/embed/i.test(String(item.src.type || ""))) continue;
-                        // Skip subtitle-only variants.
-                        if (/\bsub\b/i.test(String(item.src.label || ""))) continue;
-                        const key = String(u).split("?")[0];
-                        if (seen[key]) continue;
-                        seen[key] = 1;
-                        all.push({ item: item, url: u, lang: sourceLang(item) });
-                    }
-                }
-            }
-
-            // Phase 2: rank by language. The default language comes first, then
-            // the remaining declared languages in the order of LANG_ORDER, then
-            // unnamed multi-audio masters, then anything unrecognised.
-            const LANG_ORDER = [DEFAULT_LANGUAGE].concat(LANG_CODES.filter(function (c) {
-                return c !== DEFAULT_LANGUAGE;
-            }));
-
-            function langRank(code) {
-                const i = LANG_ORDER.indexOf(code);
-                if (i >= 0) return i;
-                return code === "" ? LANG_ORDER.length : LANG_ORDER.length + 1;
-            }
-
-            // Stable sort: within one language tier the original server priority
-            // (Rive backends before fallbacks) is preserved.
-            const ranked = all.map(function (s, idx) {
-                return { s: s, idx: idx, rank: langRank(s.lang) };
-            }).sort(function (a, b) {
-                return (a.rank - b.rank) || (a.idx - b.idx);
-            }).map(function (x) { return x.s; });
-
-            // Phase 3: cap the list.
-            const streams = [];
-            for (const s of ranked) {
-                if (streams.length >= MAX_STREAMS) break;
-                // NOTE: StreamResult has no `quality` field - the runtime class
-                // only takes url, source, headers, subtitles, drmKid, drmKey
-                // and licenseUrl (the schema in DEVELOPER.md lists quality, but
-                // the injected class drops it). Quality therefore has to ride
-                // along inside `source`, which sourceLabel() already does.
-                streams.push(mkStream({
-                    url: s.url,
-                    source: sourceLabel(s.item),
-                    headers: nxHeaders()
-                }));
-            }
-
-            if (!streams.length) {
-                return cb({
-                    success: false,
-                    errorCode: "NO_STREAMS",
-                    message: "RiveStream servers listed this title but returned no playable file for it. Try another title or episode."
-                });
-            }
-            cb({ success: true, data: streams });
-        } catch (e) {
-            cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
-        }
-    }
     async function loadStreams(url, cb) {
         try {
             const p = parseUrl(url);

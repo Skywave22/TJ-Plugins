@@ -26,7 +26,11 @@
     const VLA = "https://api.vidlove.cc";
     const PLAYER_REF = "https://player.vidlove.cc/";
     const VROCK = "https://vidrock.net";
-    const SITE = "https://cinehd.vc";
+    // Dynamic base URL: the app injects the domain the user picked in the
+    // plugin's settings gear (mirrors), so never hardcode the primary host.
+    const SITE = (typeof manifest !== "undefined" && manifest.baseUrl)
+        ? String(manifest.baseUrl).replace(/\/+$/, "")
+        : "https://cinehd.vc";
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 

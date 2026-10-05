@@ -2,11 +2,11 @@
   {
     "packageName": "com.movies321uk.skystream",
     "name": "321Movies UK",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://321movies.co.uk",
     "description": "321Movies UK — movies and TV from 321movies.co.uk. Shows verified streams first; offers clearly labelled unverified player links when a CDN blocks probing.",
     "authors": [
-      "Skywave22"
+      "TJ Plugins"
     ],
     "languages": [
       "en",
@@ -21,11 +21,11 @@
   {
     "packageName": "com.cinefreak.skystream",
     "name": "CineFreak",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://cinefreak.net",
-    "description": "CineFreak (cinefreak.net) - Bollywood, Hollywood, Hindi dubbed movies, web series & K-Drama. Multi-quality direct streams with honest language labels (dual-audio files marked, switch audio in player). Verified live.",
+    "description": "CineFreak (cinefreak.net) - Bollywood, Hollywood, Hindi dubbed movies, web series & K-Drama. Multi-quality direct streams with honest language labels (dual-audio files marked, switch audio in player). v5: the site domain now follows the domain selected in the plugin's settings (manifest.baseUrl).",
     "authors": [
-      "Skywave22"
+      "TJ Plugins"
     ],
     "languages": [
       "hi",
@@ -41,11 +41,11 @@
   {
     "packageName": "com.cinehd.skystream",
     "name": "CineHD",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://cinehd.vc",
-    "description": "CineHD (cinehd.vc) - Movies & series with 8+ servers per title (MovieBox Hindi family, Rock HLS/MP4, VidAPI and more, up to 1080p). TMDB catalog, AES-decrypted Rock servers, v6: all provider families fetched in parallel (2-3x faster play). Verified live.",
+    "description": "CineHD (cinehd.vc) - Movies & series with 8+ servers per title (MovieBox Hindi family, Rock HLS/MP4, VidAPI and more, up to 1080p). TMDB catalog, AES-decrypted Rock servers. v7: the site domain now follows the domain selected in the plugin's settings (manifest.baseUrl); v6: all provider families fetched in parallel (2-3x faster play).",
     "authors": [
-      "Skywave22"
+      "TJ Plugins"
     ],
     "languages": [
       "en"
@@ -59,11 +59,11 @@
   {
     "packageName": "com.cinejoy.skystream",
     "name": "CineJoy",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://cinejoy.pk",
     "description": "CineJoy (cinejoy.pk) - Trending Movies & Series with 4 official servers (Nebula, Solara, Lisbon 4K, Athens) + 10+ backup sources. TMDB catalog using CineJoy's own key, WASM-GC stream API documented, fallback to VidLove/VidRock/NxSha for instant HLS/MP4. Verified live.",
     "authors": [
-      "Skywave22"
+      "TJ Plugins"
     ],
     "languages": [
       "en"
@@ -77,7 +77,7 @@
   {
     "packageName": "com.fmoviess.skystream",
     "name": "FMoviess",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://fmoviess.tv",
     "domains": [
       {
@@ -87,7 +87,7 @@
     ],
     "description": "FMoviess - Watch HD Movies & TV Shows. Multi-server streams (MoviesAPI + VixSrc), multi-quality HLS with subtitles, Latest Updated section",
     "authors": [
-      "Arena Agent"
+      "TJ Plugins"
     ],
     "languages": [
       "en"
@@ -103,7 +103,7 @@
   {
     "packageName": "com.hicine.skystream",
     "name": "HiCine",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://api.hicine.sbs",
     "domains": [
       {
@@ -113,7 +113,7 @@
     ],
     "description": "HiCine - Bollywood & Hollywood movies, series and anime (Hindi dual-audio). Movies, WEB series, K-dramas and anime from hicine.sbs",
     "authors": [
-      "Happy"
+      "TJ Plugins"
     ],
     "languages": [
       "hi",
@@ -130,11 +130,11 @@
   {
     "packageName": "com.hindidubbed.provider",
     "name": "Hindi Dubbed",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://www.youtube.com",
-    "description": "Hollywood Hindi dubbed, South Indian Hindi dubbed, Bollywood and Hindi cartoon/anime — all from 20 official YouTube channels (Goldmines network, Aditya, Bhavani, Volga, DRJ, Shemaroo, Ultra, Pen, Rajshri, B4U, Pokémon Hindi, Discovery Kids). Full movies appear as single items; web series are grouped with auto-updating episodes. Fully on-device: 720p/1080p fMP4 HLS + merged HLS built in pure JS (no ffmpeg/yt-dlp/server), with 360p MP4 fallback.",
+    "description": "Hollywood Hindi dubbed, South Indian Hindi dubbed, Bollywood and Hindi cartoon/anime - all from 20 official YouTube channels (Goldmines network, Aditya, Bhavani, Volga, DRJ, Shemaroo, Ultra, Pen, Rajshri, B4U, Pokemon Hindi, Discovery Kids). Full movies appear as single items; web series are grouped with auto-updating episodes. Fully on-device: 720p/1080p fMP4 HLS + merged HLS built in pure JS, with 360p MP4 fallback. v2: reports an error instead of showing a blank dashboard when YouTube returns nothing.",
     "authors": [
-      "HindiDubbedPlugin"
+      "TJ Plugins"
     ],
     "languages": [
       "hi",
@@ -149,11 +149,11 @@
   {
     "packageName": "com.kdramamaza.skystream",
     "name": "KDramaMaza",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://kdramasmaza.net",
-    "description": "KDramaMaza (kdramasmaza.net) - Korean, Chinese, Turkish & Japanese dramas in Hindi/Urdu dubbed. Full episode lists, fast parallel resolution with HubCloud + GDFlix Instant direct-file servers (up to 1080p WEB-DL dual-audio). Verified live.",
+    "description": "KDramaMaza (kdramasmaza.net) - Korean, Chinese, Turkish & Japanese dramas in Hindi/Urdu dubbed. Full episode lists, fast parallel resolution with HubCloud + GDFlix Instant direct-file servers (up to 1080p WEB-DL dual-audio). v4: the site domain now follows the domain selected in the plugin's settings (manifest.baseUrl).",
     "authors": [
-      "Skywave22"
+      "TJ Plugins"
     ],
     "languages": [
       "en",
@@ -168,7 +168,7 @@
   {
     "packageName": "com.katmoviehd.skystream",
     "name": "KatMovieHD",
-    "version": 9,
+    "version": 10,
     "baseUrl": "https://new.katmoviehd.top",
     "domains": [
       {
@@ -194,7 +194,7 @@
     ],
     "description": "KatMovieHD v9 - Fix Idiots 2026 + season merge: Idiots had 1xPlayer+GoFile not KMHD, now parsed. MobLand S1/S2 merged into 12 eps with Season tabs. All titles now have streams via StreamTape/HubCloud/StreamWish+GDFlix fallback+1xPlayer/GoFile for CAMRip. Geo bypass.",
     "authors": [
-      "Arena Agent"
+      "TJ Plugins"
     ],
     "languages": [
       "hi",
@@ -211,11 +211,11 @@
   {
     "packageName": "com.netmirror.skystream",
     "name": "NetMirror",
-    "version": 5,
+    "version": 6,
     "baseUrl": "https://netmirror.center",
-    "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime & Reality TV, heavy on Hindi content. Signed direct-file servers per title/episode (R2 + quality-labeled MP4s, up to 1080p). v5: rate-limit friendly (top-3 links per server), full server coverage. Verified live.",
+    "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime & Reality TV, heavy on Hindi content. Signed direct-file servers per title/episode (R2 + quality-labeled MP4s, up to 1080p). v6: fixed the install-time crash (a header constant called the geo helper before its constants existed) and the site domain now follows the selected mirror. v5: rate-limit friendly (top-3 links per server).",
     "authors": [
-      "Skywave22"
+      "TJ Plugins"
     ],
     "languages": [
       "en",
@@ -230,11 +230,11 @@
   {
     "packageName": "com.rivestream.plugin",
     "name": "RiveStream",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://rivestream.ru",
     "description": "RiveStream (rivestream.ru) - \"Your Personal Streaming Oasis\". TMDB-powered catalog of movies & TV, streamed from rivestream's own Rive server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk). Default audio: Hindi - Hindi-dubbed tracks are ranked first in the server list, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Verified live.",
     "authors": [
-      "Skywave22"
+      "TJ Plugins"
     ],
     "languages": [
       "hi",
@@ -254,7 +254,7 @@
   {
     "packageName": "com.ssr.skystream",
     "name": "SSR Movies",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://ssrmovies.blue",
     "domains": [
       {
@@ -272,7 +272,7 @@
     ],
     "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. HubCloud + GDFlix download mirrors resolved to direct files",
     "authors": [
-      "Arena Agent"
+      "TJ Plugins"
     ],
     "languages": [
       "hi",
@@ -288,11 +288,11 @@
   {
     "packageName": "com.subdub.skystream",
     "name": "SubDubAnime",
-    "version": 1,
+    "version": 3,
     "baseUrl": "https://www.subdubanime.site",
-    "description": "SubDubAnime (subdubanime.site) - Hindi & English dubbed/subbed anime: series, seasons and movies via the Blakite API. Direct HLS per episode (up to 1080p where available). Verified live.",
+    "description": "SubDubAnime (subdubanime.site) - Hindi & English dubbed/subbed anime: series, seasons and movies via the Blakite API. Direct HLS per episode (up to 1080p where available). Verified live. v3: hardened the TMDB metadata mapping - description/genre/score values are normalised, so one malformed upstream field can no longer fail the whole dashboard.",
     "authors": [
-      "Skywave22"
+      "TJ Plugins"
     ],
     "languages": [
       "en",
@@ -307,11 +307,11 @@
   {
     "packageName": "com.vidbox.plugin",
     "name": "Vidbox",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://vidbox.vc",
-    "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Vidbox is a guide site that fans out to 47 embed servers; the one backend that hands back a directly playable manifest from a plugin runtime is its Nxsha multi-language server, so streams resolve through that. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every HLS/DASH manifest is verified before it is offered. Verified live.",
+    "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Streams resolve through the Nxsha multi-language server. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali; every HLS/DASH manifest is verified before it is offered. v2: removed a dead duplicate stream function and fixed episode items (name/airDate) plus genre tags so they render in the app.",
     "authors": [
-      "Skywave22"
+      "TJ Plugins"
     ],
     "languages": [
       "hi",

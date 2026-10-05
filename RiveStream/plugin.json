@@ -1,11 +1,11 @@
 {
   "packageName": "com.rivestream.plugin",
   "name": "RiveStream",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://rivestream.ru",
   "description": "RiveStream (rivestream.ru) - \"Your Personal Streaming Oasis\". TMDB-powered catalog of movies & TV, streamed from rivestream's own Rive server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk). Default audio: Hindi - Hindi-dubbed tracks are ranked first in the server list, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Verified live.",
   "authors": [
-    "Skywave22"
+    "TJ Plugins"
   ],
   "languages": [
     "hi",

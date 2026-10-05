@@ -1,7 +1,7 @@
 {
   "packageName": "com.fmoviess.skystream",
   "name": "FMoviess",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://fmoviess.tv",
   "domains": [
     {
@@ -11,7 +11,7 @@
   ],
   "description": "FMoviess - Watch HD Movies & TV Shows. Multi-server streams (MoviesAPI + VixSrc), multi-quality HLS with subtitles, Latest Updated section",
   "authors": [
-    "Arena Agent"
+    "TJ Plugins"
   ],
   "languages": [
     "en"
