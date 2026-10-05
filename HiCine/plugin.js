@@ -58,7 +58,10 @@
         return out;
     }
 
-    var API = (manifest && manifest.baseUrl) || 'https://api.hicine.sbs';
+    // Dynamic base URL: the app injects the domain picked in the settings gear.
+    var API = (typeof manifest !== 'undefined' && manifest.baseUrl)
+        ? String(manifest.baseUrl).replace(/\/+$/, '')
+        : 'https://api.hicine.sbs';
     if (API.slice(-1) === '/') API = API.slice(0, -1);
 
     var PLACEHOLDER = 'https://placehold.co/400x600.png?text=HiCine';

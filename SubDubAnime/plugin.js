@@ -115,6 +115,17 @@
         return m ? parseInt(m[1], 10) : null;
     }
 
+    // The upstream API embeds a TMDB snapshot. The app's item parser requires
+    // description to be a string and every tag to be a string - one malformed
+    // value would fail the whole dashboard - so normalise defensively.
+    function toText(v) { return typeof v === "string" ? v : (v == null ? "" : String(v)); }
+    function toScore(v) { const n = parseFloat(v); return isFinite(n) ? n : null; }
+    function toTags(v) {
+        if (!Array.isArray(v)) return [];
+        return v.map(function (g) { return typeof g === "string" ? g : (g && (g.name || g.title)) || ""; })
+            .filter(Boolean).slice(0, 4);
+    }
+
     function entryToItem(entry, cat) {
         if (!entry || !entry.tmdbId || !entry.title) return null;
         const img = entry.IMAGES || {};
@@ -128,9 +139,9 @@
             bannerUrl: img.backdrop || img.poster || "",
             type: isSeries ? "tv" : "movie",
             year: yearOf(tmd.releaseDate),
-            description: (tmd.synopsis || "").slice(0, 400),
-            score: tmd.rating ? parseFloat(tmd.rating) : null,
-            tags: (tmd.genres || []).slice(0, 4)
+            description: toText(tmd.synopsis).slice(0, 400),
+            score: toScore(tmd.rating),
+            tags: toTags(tmd.genres)
         });
     }
 
@@ -236,7 +247,7 @@
                     season: 1,
                     episode: 1,
                     posterUrl: img.poster || "",
-                    description: tmd.synopsis || ""
+                    description: toText(tmd.synopsis)
                 }));
             } else {
                 const seasons = entry.seasons || {};
@@ -270,9 +281,9 @@
                     bannerUrl: img.backdrop || img.poster || "",
                     type: p.cat === "movies" ? "movie" : "tv",
                     year: yearOf(tmd.releaseDate),
-                    description: (tmd.synopsis || "").slice(0, 700),
-                    score: tmd.rating ? parseFloat(tmd.rating) : null,
-                    tags: (tmd.genres || []).slice(0, 4),
+                    description: toText(tmd.synopsis).slice(0, 700),
+                    score: toScore(tmd.rating),
+                    tags: toTags(tmd.genres),
                     episodes: episodes
                 })
             });

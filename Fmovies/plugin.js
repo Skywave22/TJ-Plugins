@@ -13,7 +13,10 @@
 
     'use strict';
 
-    var SITE = (manifest && manifest.baseUrl) || 'https://fmoviess.tv';
+    // Dynamic base URL: the app injects the domain picked in the settings gear.
+    var SITE = (typeof manifest !== 'undefined' && manifest.baseUrl)
+        ? String(manifest.baseUrl).replace(/\/+$/, '')
+        : 'https://fmoviess.tv';
     if (SITE.slice(-1) === '/') SITE = SITE.slice(0, -1);
 
     var TMDB_KEY = 'e716f19ab4d25edc5247239a8f3494f8'; // public key shipped in the player bundle

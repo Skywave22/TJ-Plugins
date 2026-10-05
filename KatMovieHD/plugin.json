@@ -1,7 +1,7 @@
 {
   "packageName": "com.katmoviehd.skystream",
   "name": "KatMovieHD",
-  "version": 9,
+  "version": 10,
   "baseUrl": "https://new.katmoviehd.top",
   "domains": [
     {
@@ -27,7 +27,7 @@
   ],
   "description": "KatMovieHD v9 - Fix Idiots 2026 + season merge: Idiots had 1xPlayer+GoFile not KMHD, now parsed. MobLand S1/S2 merged into 12 eps with Season tabs. All titles now have streams via StreamTape/HubCloud/StreamWish+GDFlix fallback+1xPlayer/GoFile for CAMRip. Geo bypass.",
   "authors": [
-    "Arena Agent"
+    "TJ Plugins"
   ],
   "languages": [
     "hi",

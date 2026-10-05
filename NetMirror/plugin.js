@@ -35,9 +35,12 @@
     const API = "https://api2.imdb3.shop/api";
     const SEARCH = "https://api2.imdb4.shop/api/search2";
     const PLAY = "https://bet.watch21.shop/play";
-    const SITE = "https://netmirror.center";
+    // Dynamic base URL: the app injects the domain the user picked in the
+    // plugin's settings gear (mirrors), so never hardcode the primary host.
+    const SITE = (typeof manifest !== "undefined" && manifest.baseUrl)
+        ? String(manifest.baseUrl).replace(/\/+$/, "")
+        : "https://netmirror.center";
     const KEY = "net###@@sss";
-    const JSON_HDR = mergeGeoHeaders({ "Content-Type": "application/json" }, false);
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -85,6 +88,12 @@
         if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
         return out;
     }
+
+    // Built after mergeGeoHeaders/GEO_BYPASS_HEADERS exist: a top-level
+    // initializer that calls the helper before the consts are initialized
+    // throws "Cannot access 'GEO_BYPASS_HEADERS' before initialization" and
+    // kills the whole plugin at install time.
+    const JSON_HDR = mergeGeoHeaders({ "Content-Type": "application/json" }, false);
 
 
     // ────────────────── sha256 + hmac (pure JS) ──────────────────
