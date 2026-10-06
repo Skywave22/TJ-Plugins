@@ -13,7 +13,7 @@
     //
     //  DETAIL   GET https://cinefreak.net/<slug>/
     //           page embeds a minified player dataset:
-    //             const dataset={"type":"movie","is_combo":!1,
+    //             const dataset = {"type":"movie","is_combo":false,
     //               "sources":{"1080p":"cd4a0171","720p":"d23b7aee",...}};
     //           or for series:
     //             const dataset={"type":"series","is_combo":!1,
@@ -21,6 +21,8 @@
     //                 "sources":{...} }, ... ] }, ...]};
     //           (!1 / !0 are minified false / true -> fixed before parse)
     //
+    //  PREPARE  GET  stream-prepare.php?action=status&r720p=<tok>... -> {state}
+    //           POST stream-prepare.php?action=start&...  (when not "ready")
     //  PLAYBACK GET https://subtitle.yagaverse.net/stream-api.php
     //             ?key=pushpa&r480p=<tok>&r720p=<tok>&r1080p=<tok>
     //             &id=<primary token>
@@ -49,50 +51,9 @@
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    // For PK-specific sites (CineJoy), also include PK bypass
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        // Always ensure bypass IP present if not already set
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
+    function mergeGeoHeaders(base) { return Object.assign({}, base || {}); }
 
 
     const HTML_HEADERS = mergeGeoHeaders({
@@ -221,7 +182,8 @@
 
     function parseCards(html, forcedType) {
         const out = [], seen = {};
-        const anchorRe = /<a[^>]+href="https:\/\/cinefreak\.net\/([a-z0-9][a-z0-9-]*)\/"[^>]*class="movie-card"[^>]*>([\s\S]*?)<\/a>/g;
+        const host = SITE.replace(/^https?:\/\//, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const anchorRe = new RegExp('<a[^>]+href="https?://(?:www\\.)?' + host + '/([a-z0-9][a-z0-9-]*)/"[^>]*class="movie-card"[^>]*>([\\s\\S]*?)</a>', "g");
         let m;
         while ((m = anchorRe.exec(html)) !== null) {
             const slug = m[1];
@@ -293,15 +255,32 @@
 
     // ─────────────────────────── detail ────────────────────────────
 
+    /** Cut the balanced {...} literal that starts at html[i] (string-aware). */
+    function sliceObject(html, i) {
+        let depth = 0, inStr = false, esc = false;
+        for (let k = i; k < html.length; k++) {
+            const ch = html[k];
+            if (inStr) {
+                if (esc) esc = false;
+                else if (ch === "\\") esc = true;
+                else if (ch === "\"") inStr = false;
+                continue;
+            }
+            if (ch === "\"") inStr = true;
+            else if (ch === "{") depth++;
+            else if (ch === "}") { depth--; if (depth === 0) return html.slice(i, k + 1); }
+        }
+        return null;
+    }
+
+    // The player script declares `const dataset = {...};` (older builds were minified:
+    // `const dataset={..."is_combo":!1...}`), so accept both spellings.
     function extractDataset(html) {
-        const di = html.indexOf("const dataset=");
-        if (di < 0) return null;
-        const start = di + "const dataset=".length;
-        let end = html.indexOf(";let currentSeasonIdx", start);
-        if (end < 0) end = html.indexOf(";</script>", start);
-        if (end < 0) return null;
-        let raw = html.slice(start, end);
-        raw = raw.replace(/!0\b/g, "true").replace(/!1\b/g, "false");
+        const m = /const\s+dataset\s*=\s*\{/.exec(html);
+        if (!m) return null;
+        let raw = sliceObject(html, m.index + m[0].length - 1);
+        if (!raw) return null;
+        raw = raw.replace(/:\s*!0\b/g, ":true").replace(/:\s*!1\b/g, ":false");
         try { return JSON.parse(raw); } catch (e) { return null; }
     }
 
@@ -328,6 +307,11 @@
                 const imgM = html.match(/<meta property="og:image" content="([^"]*)"/);
                 if (imgM && imgM[1].indexOf("admin-ajax") < 0) poster = fixPoster(imgM[1]);
             }
+
+            const dM = html.match(/<meta (?:property="og:description"|name="description") content="([^"]*)"/);
+            const description = dM ? decodeEntities(dM[1]).replace(/\s+/g, " ").trim() : "";
+            const yM = (tM ? tM[1] : slug).match(/\b(19[3-9]\d|20[0-4]\d)\b/);
+            const year = yM ? parseInt(yM[1], 10) : undefined;
 
             const data = extractDataset(html);
             const isSeries = !!(data && data.type === "series");
@@ -356,7 +340,7 @@
             if (!episodes.length) {
                 // movie (or series post without per-episode data): single play-all
                 episodes.push(mkEpisode({
-                    name: "Play Full Movie",
+                    name: title,
                     url: JSON.stringify({ slug: slug, s: -1, e: -1 }),
                     season: 1,
                     episode: 1
@@ -371,6 +355,8 @@
                     posterUrl: poster,
                     bannerUrl: poster,
                     type: isSeries ? "tv" : "movie",
+                    description: description,
+                    year: year,
                     episodes: episodes
                 })
             });
@@ -384,6 +370,48 @@
     function qualityNum(q) {
         const m = String(q || "").match(/(\d{3,4})/);
         return m ? parseInt(m[1], 10) : 0;
+    }
+
+    const PREPARE_API = "https://subtitle.yagaverse.net/stream-prepare.php";
+
+    function prepareQuery(sources) {
+        return ["480p", "720p", "1080p"].filter(function (q) { return sources[q]; })
+            .map(function (q) { return "r" + q + "=" + encodeURIComponent(sources[q]); }).join("&");
+    }
+
+    /**
+     * Since Oct 2026 the site only streams files that were "prepared" (copied to its R2
+     * bucket). The web player asks ?action=status first and, when the file is not ready,
+     * POSTs ?action=start and polls. Do the same, within the app's 90 s budget.
+     * Returns "ready", or a user-facing reason why it is not.
+     */
+    async function ensurePrepared(sources) {
+        const q = prepareQuery(sources);
+        if (!q) return "ready";
+        const status = async function () {
+            try { return await fetchJson(PREPARE_API + "?action=status&" + q, JSON_HEADERS); } catch (e) { return {}; }
+        };
+        let st = await status();
+        if (!st || !st.state) return "ready"; // check unavailable: the web player then just tries to play
+        if (st.state === "ready") return "ready";
+        if (st.state === "unavailable") return st.message || "Streaming is unavailable for this title (download-only).";
+        if (st.state === "limited") return st.message || "CineFreak is rate-limiting stream preparation. Try again shortly.";
+        if (st.state !== "uploading") {
+            try {
+                const r = await withTimeout(http_post(PREPARE_API + "?action=start&" + q, JSON_HEADERS, ""), 15000);
+                st = JSON.parse((r && r.body) || "{}") || {};
+            } catch (e) { st = {}; }
+            if (st.state === "ready") return "ready";
+        }
+        const deadline = Date.now() + 55000;
+        while (Date.now() < deadline) {
+            await new Promise(function (ok) { setTimeout(ok, 4000); });
+            st = await status();
+            if (st && st.state === "ready") return "ready";
+            if (st && (st.state === "failed" || st.state === "unavailable" || st.state === "error")) break;
+        }
+        const pct = st && st.progress ? " (" + st.progress + "% done)" : "";
+        return "CineFreak is preparing this video for streaming" + pct + ". Try again in a minute.";
     }
 
     async function resolveSources(sources) {
@@ -406,16 +434,14 @@
             out.push(mkStream({
                 url: String(r.url),
                 source: "CineFreak · " + String(r.quality || "Auto") + (langOf(r.url) ? " · " + langOf(r.url) : ""),
-                headers: STREAM_HEADERS,
-                isDirect: true
+                headers: STREAM_HEADERS
             }));
         }
         if (!out.length && j.videoUrl) {
             out.push(mkStream({
                 url: String(j.videoUrl),
                 source: "CineFreak",
-                headers: STREAM_HEADERS,
-                isDirect: true
+                headers: STREAM_HEADERS
             }));
         }
         return out.slice(0, 10);
@@ -439,6 +465,10 @@
                 sources = ep && ep.sources;
             }
             if (!sources) sources = data.sources;
+
+            if (!sources) return cb({ success: false, errorCode: "NO_STREAMS", message: "This post has no online player (download links only)." });
+            const prep = await ensurePrepared(sources);
+            if (prep !== "ready") return cb({ success: false, errorCode: "NOT_READY", message: prep });
 
             const streams = await resolveSources(sources);
             if (!streams.length) return cb({ success: false, errorCode: "NO_STREAMS", message: "No playable source right now — try again in a moment." });
