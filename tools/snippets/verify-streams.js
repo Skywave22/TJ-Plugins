@@ -13,6 +13,9 @@
     async function __tjProbe(s) {
         const u = String((s && s.url) || "");
         if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        // Freshly minted Google download links ignore Range and stream the whole
+        // file; probing them only burns data (and crashes the CLI, which buffers it).
+        if (/^https:\/\/video-downloads\.googleusercontent\.com\//i.test(u)) return "ok";
         const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
         const r = await __tjDeadline(http_get(u, h), 9000);
         if (!r) return "unknown";

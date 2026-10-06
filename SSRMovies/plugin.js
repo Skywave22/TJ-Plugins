@@ -20,56 +20,14 @@
     // Dynamic base URL: the app injects the domain picked in the settings gear.
     var SITE = (typeof manifest !== 'undefined' && manifest.baseUrl)
         ? String(manifest.baseUrl).replace(/\/+$/, '')
-        : 'https://ssrmovies.blue';
+        : 'https://ssrmovies.name';
     if (SITE.slice(-1) === '/') SITE = SITE.slice(0, -1);
     var API = SITE + '/wp-json/wp/v2';
 
     var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    // For PK-specific sites (CineJoy), also include PK bypass
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        // Always ensure bypass IP present if not already set
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
 
     var PLACEHOLDER = 'https://placehold.co/400x600.png?text=SSR+Movies';
 
@@ -221,14 +179,27 @@
         return false;
     }
 
-    // linkszilla anchors in DOM order: {url, label}
+    // linkszilla anchors in DOM order: {url, label, ep?, epTitle?}
+    // Daily shows (Bigg Boss, Khatron…) put the episode in a heading and the
+    // buttons only say "Watch & Download in 1080p", so remember the last
+    // "Episode N" heading and tag every following anchor with it.
     function parseLinkAnchors(contentHtml) {
         var out = [];
-        var re = /<a[^>]+href=["'](https:\/\/[^"']*linkszilla[^"']*\/view\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-        var m;
+        var re = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>|<a[^>]+href=["'](https:\/\/(?:[^"']*linkszilla[^"']*\/view\/|[a-z0-9.-]*direct-cloud\.[a-z]+\/d\/)[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        var m, curEp = null, curTitle = '';
         while ((m = re.exec(contentHtml)) !== null) {
-            var label = stripTags(m[2]);
-            if (label) out.push({ url: m[1], label: label });
+            if (m[1] != null && m[2] == null) {
+                var h = stripTags(m[1]).replace(/\|\|/g, ' ').replace(/\s+/g, ' ').trim();
+                var em = h.match(/\bEpisode\s*0*(\d+)/i);
+                if (em && !/Ep(?:isode)?s?\s*0*\d+\s*[-–]\s*0*\d+(?![a-z\d])/i.test(h)) { curEp = parseInt(em[1], 10); curTitle = h; }
+                else if (/\bSeason\b|\bS\d{1,2}\b|Download|Links/i.test(h)) { curEp = null; curTitle = ''; }
+                continue;
+            }
+            var label = stripTags(m[3]);
+            if (!label) continue;
+            var a = { url: m[2], label: label };
+            if (curEp != null) { a.ep = curEp; a.epTitle = curTitle; }
+            out.push(a);
         }
         return out;
     }
@@ -246,13 +217,14 @@
             var key;
             if (r) key = 'r:' + parseInt(r[1], 10) + '-' + parseInt(r[2], 10);
             else if (e && !/Watch/i.test(a.label)) key = 'e:' + parseInt(e[1], 10);
+            else if (a.ep != null) { key = 'e:' + a.ep; e = [null, String(a.ep)]; }
             else { key = 'main'; }
             var g = null;
             for (var i = 0; i < groups.length; i++) if (groups[i].key === key) g = groups[i];
             if (!g) {
                 g = { key: key, kind: r ? 'range' : (key === 'main' ? 'main' : 'ep'),
                       a: r ? parseInt(r[1], 10) : undefined, b: r ? parseInt(r[2], 10) : undefined,
-                      n: e ? parseInt(e[1], 10) : undefined, items: [] };
+                      n: e ? parseInt(e[1], 10) : undefined, title: a.epTitle || '', items: [] };
                 groups.push(g);
             }
             g.items.push(a);
@@ -387,7 +359,7 @@
                     if (g.kind === 'main') continue; // goes into All Links below
                     var name = g.kind === 'range'
                         ? ('Ep ' + pad2(g.a) + '–' + pad2(g.b) + ' Pack')
-                        : ('Episode ' + g.n);
+                        : (g.title || ('Episode ' + g.n));
                     var q = qualityFromText(g.items[0].label);
                     if (q && g.items.length === 1) name += ' • ' + q;
                     episodes.push(mkEpisode({
@@ -460,6 +432,42 @@
     // gamerxyt.com/hubcloud.php?host=hubcloud&id=<ID>&token=<...>, which
     // serves a signed *.r2.cloudflarestorage.com URL plus pixeldrain
     // fallbacks. Pure GET chain, so it resolves fine from the JS runtime.
+    // direct-cloud (dl.direct-cloud.top/d/<id> -> storage.direct-cloud.org/d/<uid>)
+    // The page carries data-uid + data-token (the token embeds our User-Agent)
+    // and its script POSTs {type:"DOWNLOAD_GENERATE", payload:{uid, access_token}}
+    // to /action with the page's PHPSESSID, getting a Google video-downloads URL.
+    // The app only auto-sends Cloudflare cookies, so forward PHPSESSID by hand.
+    async function resolveDirectCloud(pageUrl) {
+        var r = await withTimeout(http_get(pageUrl, { 'User-Agent': UA, 'Referer': SITE + '/' }), 12000);
+        var html = String((r && r.body) || '');
+        var uid = (html.match(/data-uid=["']([^"']+)["']/) || [])[1];
+        var tok = (html.match(/data-token=["']([^"']+)["']/) || [])[1];
+        if (!uid || !tok) return null;
+        var fin = String((r && r.finalUrl) || '');
+        var origin = (fin.match(/^https?:\/\/[^\/]+/) || ['https://storage.direct-cloud.org'])[0];
+        var sc = r && r.headers ? (r.headers['set-cookie'] || r.headers['Set-Cookie']) : null;
+        var list = Array.isArray(sc) ? sc : (sc ? String(sc).split(/,(?=\s*[A-Za-z0-9_]+=)/) : []);
+        var cookie = '';
+        for (var i = 0; i < list.length; i++) {
+            var c = String(list[i]).split(';')[0].trim();
+            if (/^PHPSESSID=/i.test(c)) cookie = c; // last one wins (final response)
+        }
+        var h = {
+            'User-Agent': UA,
+            'Content-Type': 'application/json; charset=UTF-8',
+            'X-Requested-With': 'xmlhttprequest',
+            'Referer': fin || pageUrl,
+            'Origin': origin
+        };
+        if (cookie) h['Cookie'] = cookie;
+        var pr = await withTimeout(http_post(origin + '/action', h,
+            JSON.stringify({ type: 'DOWNLOAD_GENERATE', payload: { uid: uid, access_token: tok } })), 12000);
+        try {
+            var j = JSON.parse(String((pr && pr.body) || ''));
+            return j && j.download_url ? String(j.download_url) : null;
+        } catch (_) { return null; }
+    }
+
     async function resolveHubcloud(pageUrl) {
         var out = [];
         try {
@@ -570,6 +578,62 @@
 
     // ─────────────────────────── loadStreams ───────────────────────────
 
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/426/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        // Freshly minted Google download links ignore Range and stream the whole
+        // file; probing them only burns data (and crashes the CLI, which buffers it).
+        if (/^https:\/\/video-downloads\.googleusercontent\.com\//i.test(u)) return "ok";
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) {
+            const err = String(r.error || "");
+            // The app refuses bodies over 8 MB (it hangs up on the Content-Length):
+            // a server that ignores Range and sends a huge body is serving the file.
+            if (/too ?large|exceed/i.test(err)) return "ok";
+            return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(err) ? "dead" : "unknown";
+        }
+        if (st === 401 || st === 403 || st === 426 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        const out = ok.concat(keep), count = {}, idx = {};
+        out.forEach(function (s) { const k = String(s.source || "Stream"); count[k] = (count[k] || 0) + 1; });
+        out.forEach(function (s) {
+            const k = String(s.source || "Stream");
+            if (count[k] > 1) { idx[k] = (idx[k] || 0) + 1; s.source = k + " #" + idx[k]; }
+        });
+        return out;
+    }
+
     async function loadStreams(url, cb) {
         try {
             var p = parseItemUrl(url);
@@ -583,10 +647,10 @@
 
             var targets = [];
             if (p.grp != null && p.grp !== ALL_LINKS_EPISODE) {
-                var idx = p.grp; // groups are sorted: main=0, then episodes from 1
-                if (idx >= 1 && idx < groups.length) {
-                    targets = groups[idx].items;
-                }
+                // load() numbers the non-main groups from 1 (there may be no main group)
+                var epGroups = groups.filter(function (g) { return g.kind !== 'main'; });
+                var idx = p.grp - 1;
+                if (idx >= 0 && idx < epGroups.length) targets = epGroups[idx].items;
             }
             if (!targets.length) targets = anchors; // main / All Links
 
@@ -608,6 +672,18 @@
                 while (cursor < targets.length && !stop) {
                     var t = targets[cursor++];
                     try {
+                        if (/direct-cloud\.[a-z]+\/d\//i.test(t.url)) {
+                            var dq = qualityFromText(t.label) || 'Link';
+                            var dsz = sizeFromText(t.label);
+                            var du = await withTimeout(resolveDirectCloud(t.url), 20000);
+                            if (du) streams.push(mkStream({
+                                url: du,
+                                quality: 'Direct • ' + dq + (dsz ? ' • ' + dsz : ''),
+                                headers: { 'User-Agent': UA }
+                            }));
+                            if (streams.length >= ENOUGH_STREAMS) stop = true;
+                            continue;
+                        }
                         var mirrors = await withTimeout(unlockLinkszilla(t.url), 14000);
                         for (var i = 0; i < mirrors.length && !stop; i++) {
                             var mu = mirrors[i];
@@ -669,9 +745,12 @@
             var seen = {}, unique = [];
             streams.forEach(function (s) { if (!seen[s.url]) { seen[s.url] = 1; unique.push(s); } });
 
+            // probe before listing: working first, dead dropped
+            unique = unique.length ? await verifyStreams(unique, 3) : [];
+
             if (!unique.length) {
                 return cb({ success: false, errorCode: 'NO_STREAMS',
-                            message: 'Mirrors for this title are hosted on providers SkyStream cannot resolve (GDrive/Direct-Cloud pages) — try another title.' });
+                            message: 'None of the download mirrors for this title returned a working file right now — try another title or episode.' });
             }
             cb({ success: true, data: unique });
         } catch (e) {

@@ -1,25 +1,25 @@
 {
   "packageName": "com.ssr.skystream",
   "name": "SSR Movies",
-  "version": 5,
-  "baseUrl": "https://ssrmovies.blue",
+  "version": 6,
+  "baseUrl": "https://ssrmovies.name",
   "domains": [
     {
-      "name": "ssrmovies.blue (primary)",
-      "url": "https://ssrmovies.blue"
+      "name": "ssrmovies.name (primary)",
+      "url": "https://ssrmovies.name"
     },
     {
-      "name": "ssrmovies.moda",
-      "url": "https://ssrmovies.moda"
+      "name": "ssrmovies.blue",
+      "url": "https://ssrmovies.blue"
     },
     {
       "name": "ssrmovies.com",
       "url": "https://ssrmovies.com"
     }
   ],
-  "description": "SSR Movies - Hindi dubbed & dual audio movies, Bollywood, Hollywood, web series, WWE shows in 480p-4K. HubCloud + GDFlix download mirrors resolved to direct files",
+  "description": "SSR Movies (ssrmovies.name) - Hindi dubbed and dual audio movies, Bollywood, Hollywood, web series, TV and WWE shows in 480p to 4K. Daily shows list every episode by date. Streams come from Watch (HLS), HubCloud, GDFlix and Direct-Cloud mirrors resolved to direct files; every link is checked before it is shown.",
   "authors": [
-    "TJ Plugins"
+    "TJ-Plugins"
   ],
   "languages": [
     "hi",
