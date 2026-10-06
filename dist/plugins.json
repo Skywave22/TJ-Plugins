@@ -230,11 +230,11 @@
   {
     "packageName": "com.rivestream.plugin",
     "name": "RiveStream",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://rivestream.ru",
-    "description": "RiveStream (rivestream.ru) - \"Your Personal Streaming Oasis\". TMDB-powered catalog of movies & TV, streamed from rivestream's own Rive server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk). Default audio: Hindi - Hindi-dubbed tracks are ranked first in the server list, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Verified live.",
+    "description": "RiveStream (rivestream.ru) - TMDB-powered catalog of movies and TV shows, streamed from rivestream's server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk) plus MhPly, AwsPly, VidPi and HDHub as fallbacks. Hindi audio is listed first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every link is checked before it is shown; working links come first.",
     "authors": [
-      "TJ Plugins"
+      "TJ-Plugins"
     ],
     "languages": [
       "hi",
