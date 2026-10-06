@@ -403,7 +403,13 @@
             if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
             return "ok";
         }
-        if (st === 0) return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(String(r.error || "")) ? "dead" : "unknown";
+        if (st === 0) {
+            const err = String(r.error || "");
+            // The app refuses bodies over 8 MB (it hangs up on the Content-Length):
+            // a server that ignores Range and sends a huge body is serving the file.
+            if (/too ?large|exceed/i.test(err)) return "ok";
+            return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(err) ? "dead" : "unknown";
+        }
         if (st === 401 || st === 403 || st === 429) return "unknown";
         return "dead";
     }

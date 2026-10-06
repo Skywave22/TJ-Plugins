@@ -1,7 +1,7 @@
 {
   "packageName": "com.cinejoy.skystream",
   "name": "CineJoy",
-  "version": 3,
+  "version": 4,
   "baseUrl": "https://cinejoy.pk",
   "description": "CineJoy (cinejoy.pk) — movies & series from a TMDB catalog (Netflix/Prime rows) with many servers per title: Nitro multi-audio, MhPly/AwsPly Hindi, HDHub, VidAPI, MovieBox, Rock HLS. Links are checked before they are shown.",
   "authors": [
