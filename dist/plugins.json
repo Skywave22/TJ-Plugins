@@ -228,6 +228,29 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.netmirror.skystream.sky"
   },
   {
+    "packageName": "com.rareanimes.skystream",
+    "name": "RareAnimes",
+    "version": 1,
+    "baseUrl": "https://www.rareanimes.mov",
+    "description": "RareAnimes / Rare Toons India (rareanimes.mov) - Hindi, Tamil, Telugu and Malayalam dubbed anime, cartoons and animated movies. Every audio language an episode has is listed (Hindi, Tamil, Telugu, Untouched NF/CR), played as direct HD files from the site's StreamBeta servers; each link is checked before it is shown.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "hi",
+      "ta",
+      "te",
+      "ml"
+    ],
+    "categories": [
+      "Anime",
+      "TvSeries",
+      "Movie"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.rareanimes.skystream.sky"
+  },
+  {
     "packageName": "com.rivestream.plugin",
     "name": "RiveStream",
     "version": 4,
