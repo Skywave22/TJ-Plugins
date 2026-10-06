@@ -2,11 +2,11 @@
   {
     "packageName": "com.movies321uk.skystream",
     "name": "321Movies UK",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://321movies.co.uk",
-    "description": "321Movies UK — movies and TV from 321movies.co.uk. Shows verified streams first; offers clearly labelled unverified player links when a CDN blocks probing.",
+    "description": "321Movies UK — movies & TV series from 321movies.co.uk (TMDB catalog). Real HLS sources from the site's own player (Cascade, StreamAggregator, Surge, Movy…), each probed before it is offered; Hindi audio first.",
     "authors": [
-      "TJ Plugins"
+      "TJ-Plugins"
     ],
     "languages": [
       "en",
