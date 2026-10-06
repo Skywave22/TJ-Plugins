@@ -97,6 +97,24 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.desidubanime.skystream.sky"
   },
   {
+    "packageName": "com.desiserialonline.skystream",
+    "name": "DesiSerialOnline",
+    "version": 1,
+    "baseUrl": "https://desiserialonline.su",
+    "description": "DesiSerialOnline / Yo Desi Serial (desiserialonline.su) - daily Hindi TV serials and reality shows (Star Plus, Colors, Zee, Sony, Dangal and more). Every show with its full episode history by air date; plays direct MP4 from VKSpeed and Blogger (720p/360p, multi-part episodes listed as Part 1, 2, ...). Each link is checked before it is shown.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "hi"
+    ],
+    "categories": [
+      "TvSeries"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.desiserialonline.skystream.sky"
+  },
+  {
     "packageName": "com.fmoviess.skystream",
     "name": "FMoviess",
     "version": 5,
