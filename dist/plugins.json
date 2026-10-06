@@ -149,11 +149,11 @@
   {
     "packageName": "com.kdramamaza.skystream",
     "name": "KDramaMaza",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://kdramasmaza.net",
-    "description": "KDramaMaza (kdramasmaza.net) - Korean, Chinese, Turkish & Japanese dramas in Hindi/Urdu dubbed. Full episode lists, fast parallel resolution with HubCloud + GDFlix Instant direct-file servers (up to 1080p WEB-DL dual-audio). v4: the site domain now follows the domain selected in the plugin's settings (manifest.baseUrl).",
+    "description": "KDramaMaza (kdramasmaza.net) — Korean, Chinese, Turkish & Japanese dramas plus anime in Hindi/Urdu dub. Full episode lists with direct HubCloud and GDFlix (Instant / Drive) files, checked before they are shown.",
     "authors": [
-      "TJ Plugins"
+      "TJ-Plugins"
     ],
     "languages": [
       "en",
