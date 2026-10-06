@@ -13,50 +13,9 @@
 
     var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    // For PK-specific sites (CineJoy), also include PK bypass
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        // Always ensure bypass IP present if not already set
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
+    function mergeGeoHeaders(base) { return Object.assign({}, base || {}); }
 
     // Dynamic base URL: the app injects the domain picked in the settings gear.
     var API = (typeof manifest !== 'undefined' && manifest.baseUrl)
@@ -439,12 +398,33 @@
             var ia = SERVER_PREFERENCE.indexOf(a); var ib = SERVER_PREFERENCE.indexOf(b);
             return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
         });
-        keys.forEach(function (t) {
-            var tk = tokens[t] || {};
-            if (!tk.ts || !tk.sig) return;
-            out.push(buildGoStream(ctx, t, tk, quality, size, lang));
-        });
+        for (var k = 0; k < keys.length; k++) {
+            var tk = tokens[keys[k]] || {};
+            if (!tk.ts || !tk.sig) continue;
+            var st = buildGoStream(ctx, keys[k], tk, quality, size, lang);
+            if (keys[k] === 'pixel') {
+                var direct = await pixeldrainDirect(st.url);
+                if (!direct) continue;
+                st.url = direct;
+            }
+            out.push(st);
+        }
         return out;
+    }
+
+    // The worker's "pixel" /go redirects to pixeldrain.*/u/<id> — an HTML page.
+    // Follow it (1-byte range, so a direct file is never downloaded) and turn it
+    // into the direct file URL /api/file/<id>.
+    async function pixeldrainDirect(goUrl) {
+        try {
+            var r = await Promise.race([
+                http_get(goUrl, { 'User-Agent': UA, 'Range': 'bytes=0-0' }),
+                sleep(8000).then(function () { return null; })
+            ]);
+            var fin = String((r && (r.finalUrl || r.url)) || '');
+            var m = fin.match(/^https?:\/\/(pixeldrain\.[a-z]+)\/(?:u|api\/file)\/([A-Za-z0-9]+)/);
+            return m ? 'https://' + m[1] + '/api/file/' + m[2] : null;
+        } catch (_) { return null; }
     }
 
     // Bulk mode: one link per file — try the most reliable server first, fall
@@ -635,6 +615,33 @@
         }
     }
 
+    // HiCine's API has no plot for most titles. Its poster file names are TMDB
+    // poster paths, so look the title up on TMDB and match on that (or year).
+    var TMDB_KEY = 'e716f19ab4d25edc5247239a8f3494f8';
+    async function tmdbInfo(title, year, type, posterUrl) {
+        try {
+            var kind = type === 'movie' ? 'movie' : 'tv';
+            var q = String(title || '').replace(/\s*\(\d{4}\)\s*$/, '').replace(/:\s*(\d+)$/, ' $1').trim();
+            if (!q) return null;
+            var res = await http_get('https://api.themoviedb.org/3/search/' + kind + '?api_key=' + TMDB_KEY
+                + '&query=' + encodeURIComponent(q), { 'User-Agent': UA, 'Accept': 'application/json' });
+            var list = (JSON.parse((res && res.body) || '{}').results) || [];
+            if (!list.length) return null;
+            var key = (String(posterUrl || '').match(/\/([A-Za-z0-9]{20,})\.(?:webp|jpe?g|png)/) || [])[1];
+            var hit = null;
+            if (key) hit = list.filter(function (r) { return String(r.poster_path || '').indexOf(key) >= 0; })[0];
+            if (!hit && year) hit = list.filter(function (r) {
+                return String(r.release_date || r.first_air_date || '').slice(0, 4) === String(year);
+            })[0];
+            if (!hit) return null;
+            return {
+                overview: hit.overview || '',
+                score: typeof hit.vote_average === 'number' && hit.vote_average > 0 ? Math.round(hit.vote_average * 10) / 10 : undefined,
+                backdrop: hit.backdrop_path ? 'https://image.tmdb.org/t/p/w1280' + hit.backdrop_path : undefined
+            };
+        } catch (_) { return null; }
+    }
+
     // ─────────────────────────── load ───────────────────────────
 
     async function load(url, cb) {
@@ -649,8 +656,14 @@
 
             var info = COLLECTIONS[p.ct];
             var description = stripTags(det.content || det.excerpt || '');
-            var cats = String(det.categories || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-            if (cats.length && description) description += '\n\n' + cats.join(' • ');
+            var cats = String(det.categories || '').split(',').map(function (s) { return s.trim(); })
+                .filter(function (c) { return c && !/^(\d{3,4}p|\d{4}|featured)$/i.test(c); });
+            var tm = null;
+            if (!description) {
+                tm = await tmdbInfo(cleanTitle(det.title), parseYear(det), info.type, det.featured_image || det.poster);
+                if (tm && tm.overview) description = tm.overview;
+            }
+            if (cats.length) description = (description ? description + '\n\n' : '') + cats.join(' • ');
 
             var item = {
                 title: cleanTitle(det.title),
@@ -661,7 +674,8 @@
                 description: description || undefined,
                 isAdult: false
             };
-            item.bannerUrl = item.posterUrl;
+            item.bannerUrl = (tm && tm.backdrop) || item.posterUrl;
+            if (tm && tm.score) item.score = tm.score;
 
             // Series / anime — build the episode list from season_1..season_N
             var poster = item.posterUrl;
