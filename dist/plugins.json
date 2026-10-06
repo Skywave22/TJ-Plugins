@@ -41,7 +41,7 @@
   {
     "packageName": "com.cinehd.skystream",
     "name": "CineHD",
-    "version": 8,
+    "version": 9,
     "baseUrl": "https://cinehd.vc",
     "description": "CineHD (cinehd.vc) — movies & series from a TMDB catalog with many servers per title (MhPly/AwsPly Hindi, Nitro multi-audio, HDHub, Rock HLS, MovieBox, VidAPI…). Every link is checked before it is shown; Hindi first.",
     "authors": [
@@ -59,7 +59,7 @@
   {
     "packageName": "com.cinejoy.skystream",
     "name": "CineJoy",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://cinejoy.pk",
     "description": "CineJoy (cinejoy.pk) — movies & series from a TMDB catalog (Netflix/Prime rows) with many servers per title: Nitro multi-audio, MhPly/AwsPly Hindi, HDHub, VidAPI, MovieBox, Rock HLS. Links are checked before they are shown.",
     "authors": [
@@ -77,7 +77,7 @@
   {
     "packageName": "com.fmoviess.skystream",
     "name": "FMoviess",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://fmoviess.tv",
     "domains": [
       {
@@ -149,7 +149,7 @@
   {
     "packageName": "com.kdramamaza.skystream",
     "name": "KDramaMaza",
-    "version": 5,
+    "version": 6,
     "baseUrl": "https://kdramasmaza.net",
     "description": "KDramaMaza (kdramasmaza.net) — Korean, Chinese, Turkish & Japanese dramas plus anime in Hindi/Urdu dub. Full episode lists with direct HubCloud and GDFlix (Instant / Drive) files, checked before they are shown.",
     "authors": [
