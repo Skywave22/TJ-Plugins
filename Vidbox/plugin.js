@@ -25,55 +25,14 @@
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
-
-
     // NB: NX_BASE and NX_PASS are declared by the AES bridge section further
     // down, so nxHeaders() has to be built lazily.
     function nxHeaders() {
-        return mergeGeoHeaders({
+        return {
             "User-Agent": UA,
             "Referer": NX_BASE + "/",
             "Accept": "application/json"
-        }, false);
+        };
     }
 
     // Server preference, most reliable first. These are the nxsha scrapers that
@@ -85,7 +44,6 @@
     ];
     // Anything else the backend lists, used to fill out the list.
     const MAX_STREAMS = 20;
-    const MAX_PROBES  = 40;
 
     // Display names for the stream labels. Same scraper ids as the backend
     // reports; these are the names vidbox shows in its own server picker.
@@ -144,7 +102,7 @@
 
     async function tmdb(path) {
         const sep = path.indexOf("?") >= 0 ? "&" : "?";
-        const res = await http_get(TMDB + path + sep + "api_key=" + KEY, mergeGeoHeaders({ "User-Agent": UA }, false));
+        const res = await http_get(TMDB + path + sep + "api_key=" + KEY, { "User-Agent": UA });
         if (!res || !res.body) return null;
         try { return JSON.parse(res.body); } catch (e) { return null; }
     }
@@ -196,7 +154,7 @@
     }
 
     const NX_BASE = "https://nxsha.space";
-    const NX_PASS = "S8x!Jk4ZP1uG8$my";
+    const NX_PASS = "f4488ab4da401203d23baa129fc546153898162524635d6776826d0c867ccaa3";
 
     function nxMd5(str, raw) {
         const msg = raw ? str : unescape(encodeURIComponent(str));
@@ -427,7 +385,18 @@
                     year: yearOf(d.release_date),
                     description: d.overview || "",
                     score: d.vote_average ? Math.round(d.vote_average * 10) / 10 : null,
-                    tags: (d.genres || []).map(function (g) { return g.name; }).filter(Boolean)
+                    tags: (d.genres || []).map(function (g) { return g.name; }).filter(Boolean),
+                    syncData: { tmdb: String(d.id), imdb: d.imdb_id || "" },
+                    // The app's Play button plays episodes[0] for movies, so a movie
+                    // needs exactly one episode pointing back at itself.
+                    episodes: [mkEpisode({
+                        name: d.title || "Full Movie",
+                        url: itemUrl("movie", d.id, d.title),
+                        season: 1,
+                        episode: 1,
+                        posterUrl: poster(d.backdrop_path || d.poster_path, "w780"),
+                        description: d.overview || ""
+                    })]
                 }) });
             }
 
@@ -509,20 +478,79 @@
 
     function pickUrl(src) { return (src && (src.url || src.file)) || null; }
 
-    /** Only m3u8/hls/mpd can be verified without downloading a whole file. */
-    function isProbeable(u) {
-        const s = String(u || "").toLowerCase().split("?")[0];
-        return /\.(m3u8|mpd)$/.test(s) || /\.(m3u8|mpd)\b/.test(String(u || "").toLowerCase());
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) {
+            const err = String(r.error || "");
+            // The app refuses bodies over 8 MB (it hangs up on the Content-Length):
+            // a server that ignores Range and sends a huge body is serving the file.
+            if (/too ?large|exceed/i.test(err)) return "ok";
+            return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(err) ? "dead" : "unknown";
+        }
+        if (st === 401 || st === 403 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        const out = ok.concat(keep), count = {}, idx = {};
+        out.forEach(function (s) { const k = String(s.source || "Stream"); count[k] = (count[k] || 0) + 1; });
+        out.forEach(function (s) {
+            const k = String(s.source || "Stream");
+            if (count[k] > 1) { idx[k] = (idx[k] || 0) + 1; s.source = k + " #" + idx[k]; }
+        });
+        return out;
     }
 
-    /** Fetch the manifest and confirm it really is a playlist. */
-    async function looksPlayable(u) {
-        try {
-            const r = await withTimeout(http_get(u, { "User-Agent": UA, "Referer": NX_BASE + "/" }), 8000);
-            const b = String((r && r.body) || "").slice(0, 400);
-            return b.indexOf("#EXTM3U") === 0 || /<MPD[\s>]/.test(b) || b.indexOf("urn:mpeg:dash") >= 0;
-        } catch (e) { return false; }
+    // nxsha serves cached source lists; signed CDN links in them can already be
+    // past their expiry, which the CDN answers with
+    // 403 "Sign expired". Drop those before probing.
+    function isExpired(u) {
+        // Citadel "?expire=<ms>", Vidstack Hubstream "/v4/<token>/<unix>/…"
+        const m = /[?&]expire=(\d{10,13})/.exec(String(u)) || /\/v\d\/[^\/]+\/(\d{10})\//.exec(String(u));
+        if (!m) return false;
+        let t = Number(m[1]);
+        if (t < 1e12) t *= 1000;
+        return t < Date.now() + 60000;
     }
+
+    // Player headers: whatever the source asks for, on top of a browser UA.
+    function streamHeaders(src) {
+        const h = { "User-Agent": UA, "Referer": NX_BASE + "/" };
+        const extra = (src && src.headers && typeof src.headers === "object") ? src.headers : {};
+        for (const k in extra) { if (extra[k] != null && extra[k] !== "") h[k] = String(extra[k]); }
+        return h;
+    }
+
     // ─────────────────────── language selection ───────────────────────
     //
     // The source API carries no discrete language field - the language is baked
@@ -611,7 +639,7 @@
             // Phase 1 - resolve every server concurrently, collect every source.
             const all = [];
             const seen = {};
-            const CHUNK = 8;
+            const CHUNK = 32;
             for (let i = 0; i < wanted.length; i += CHUNK) {
                 const batch = wanted.slice(i, i + CHUNK);
                 // http_parallel is for raw HTTP requests; vbxSources is an async
@@ -624,6 +652,9 @@
                         const u = pickUrl(item.src);
                         if (!u) continue;
                         if (item.src.isEmbed === true) continue;
+                        if (isExpired(u)) continue;
+                        // file-host landing pages (e.g. hdstream4u.com/file/<id>) are HTML, not video
+                        if (/\/file\/[A-Za-z0-9]+\/?$/.test(String(u).split("?")[0])) continue;
                         if (/embed/i.test(String(item.src.type || ""))) continue;
                         if (/\bsub\b/i.test(String(item.src.label || ""))) continue;
                         const key = String(u).split("?")[0];
@@ -650,37 +681,14 @@
                 return (a.rank - b.rank) || (a.idx - b.idx);
             }).map(function (x) { return x.s; });
 
-            // Phase 3 - verify the manifests we can verify. Only m3u8/mpd can be
-            // checked without pulling a whole file; direct mp4s go in behind the
-            // verified ones rather than being trusted blindly.
-            const verified = [];
-            const unverified = [];
-            let probes = 0;
-            const PB = 6;
-            for (let i = 0; i < ranked.length && verified.length < MAX_STREAMS; i += PB) {
-                const slice = ranked.slice(i, i + PB);
-                const checks = await Promise.all(slice.map(function (s) {
-                    if (!isProbeable(s.url) || probes >= MAX_PROBES) return Promise.resolve(null);
-                    probes++;
-                    return looksPlayable(s.url).catch(function () { return false; });
-                }));
-                for (let j = 0; j < slice.length; j++) {
-                    const s = slice[j];
-                    if (checks[j] === true) verified.push(s);
-                    else if (checks[j] === false) { /* dead - drop it */ }
-                    else unverified.push(s);
-                }
-            }
-
-            const final = verified.concat(unverified).slice(0, MAX_STREAMS);
-            const streams = final.map(function (s) {
-                // StreamResult silently drops unknown fields, so quality rides
-                // inside `source`; sourceLabel() already composes it.
-                const st = mkStream({ url: s.url, source: sourceLabel(s.item), headers: nxHeaders() });
-                const q = s.item && s.item.src && s.item.src.quality;
-                if (q) st.quality = q;
-                return st;
+            // Phase 3 - probe every candidate (manifests and direct files alike);
+            // verifyStreams keeps the order inside each verdict, so language
+            // ranking survives. StreamResult drops unknown fields, so quality
+            // rides inside `source` via sourceLabel().
+            const candidates = ranked.slice(0, MAX_STREAMS + 8).map(function (s) {
+                return mkStream({ url: s.url, source: sourceLabel(s.item), headers: streamHeaders(s.item.src) });
             });
+            const streams = (await verifyStreams(candidates, 4)).slice(0, MAX_STREAMS);
 
             if (!streams.length) {
                 return cb({ success: false, errorCode: "NO_STREAMS",

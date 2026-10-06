@@ -516,6 +516,9 @@ for (const it of pick) {
   const eps = Array.isArray(d.episodes) ? d.episodes : [];
   const isSeries = /series|anime|tv/i.test(d.type || it.type || "");
   if (isSeries && !eps.length) errs.push("series has no episodes (app shows nothing to play)");
+  // details_controller.handlePlayPress: movies play details.episodes!.first.url, so a
+  // movie/livestream with no episodes throws when Play is pressed.
+  else if (!eps.length) errs.push("no episodes: the app's Play button needs episodes[0] (wrap a movie in one Episode)");
   eps.forEach((e, i) => { if (e && !e.url) errs.push(`episodes[${i}] has empty url`); });
   step(label, errs.length === 0, `${ld.ms}ms — ${eps.length} episode(s)${d.description ? "" : ", no description"}${d.posterUrl ? "" : ", no poster"}`, errs);
   if (errs.length === 0) loadOk++;
