@@ -103,7 +103,7 @@
   {
     "packageName": "com.hicine.skystream",
     "name": "HiCine",
-    "version": 7,
+    "version": 8,
     "baseUrl": "https://api.hicine.sbs",
     "domains": [
       {
@@ -111,9 +111,9 @@
         "url": "https://api.hicine.sbs"
       }
     ],
-    "description": "HiCine - Bollywood & Hollywood movies, series and anime (Hindi dual-audio). Movies, WEB series, K-dramas and anime from hicine.sbs",
+    "description": "HiCine (hicine.sbs) — Bollywood & Hollywood movies, web series, K-dramas and anime in Hindi dual-audio. Direct 1080p/720p/480p files on FSL, Server 1, FSL v2 and PixelDrain; plot, rating and backdrop from TMDB.",
     "authors": [
-      "TJ Plugins"
+      "TJ-Plugins"
     ],
     "languages": [
       "hi",
