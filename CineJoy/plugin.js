@@ -30,12 +30,11 @@
     //   (api.vidlove.cc), VidRock AES-GCM API (vidrock.net), NxSha
     //   CryptoJS-AES (nxsha.space). These return same content as CineJoy
     //   and are verified live 2026-09.
-    // - Host filter (user req): Only StreamTape/StreamWish/HubCloud (regex /streamtape|streamwish|hubcloud/i)
-    //   drop GDFlix/KatDrive/SendCM/1Fichier/Fast. Prioritize HubCloud > StreamWish > StreamTape.
+    // - Host order: HubCloud > StreamWish > StreamTape first, then all other verified servers;
+    //   GDFlix/KatDrive/SendCM/1Fichier/Fast are skipped.
     // - Episode fix: 800/801/900/901 -> 1,2,3,4 via fixEpisode(e) = e>=800 ? (e%100)+1 + (floor(e/100)-8)*2 : e
     //   Applied in parseUrl() and load() episode building.
-    // - Geo bypass (PK): X-Forwarded-For 39.33.116.25 (PK range 39.33.116.0/39.32.0.0),
-    //   CF-IPCountry PK, X-Country PK, cf-ipcountry PK, Accept-Language en-PK.
+    // - No spoofed IP/country headers (Cloudflare answers them with 403).
     // ═══════════════════════════════════════════════════════════════════
 
     const TMDB = "https://api.themoviedb.org/3";
@@ -48,73 +47,21 @@
     const PLAYER_REF = "https://player.vidlove.cc/";
     const VROCK = "https://vidrock.net";
     const NX_BASE = "https://nxsha.space";
-    const NX_PASS = "S8x!Jk4ZP1uG8$my";
+    // AES passphrase from nxsha.space front-end bundle (rotated 2026-10).
+    const NX_PASS = "f4488ab4da401203d23baa129fc546153898162524635d6776826d0c867ccaa3";
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    // For PK-specific sites (CineJoy), also include PK bypass
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        // Always ensure bypass IP present if not already set
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
+    function mergeGeoHeaders(base) { return Object.assign({}, base || {}); }
 
-    const PK_IP = "39.33.116.25";
-    const PK_IP2 = "39.32.45.12";
     const GEO_HEADERS = {
         "User-Agent": UA,
         "Referer": SITE + "/",
         "Origin": SITE,
         "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "X-Forwarded-For": PK_IP,
-        "X-Real-IP": PK_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "cf-ipcountry": "PK",
-        "x-country": "PK",
-        "X-Client-IP": PK_IP,
-        "X-Originating-IP": PK_IP
     };
     const STREAM_HEADERS = {
         "User-Agent": UA,
@@ -122,13 +69,6 @@
         "Origin": SITE,
         "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8",
         "Accept": "*/*",
-        "X-Forwarded-For": PK_IP,
-        "X-Real-IP": PK_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "x-country": "PK",
-        "X-Client-IP": PK_IP
     };
 
     function mkItem(o) { try { return new MultimediaItem(o); } catch (_) { return o; } }
@@ -138,9 +78,7 @@
     async function tmdb(path, useFallback) {
         const sep = path.indexOf("?") >= 0 ? "&" : "?";
         const key = useFallback ? FALLBACK_KEY : KEY;
-        const res = await http_get(TMDB + path + sep + "api_key=" + key, { "User-Agent": UA, "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8",
-                "CF-IPCountry": "PK",
-                "X-Country": "PK" });
+        const res = await http_get(TMDB + path + sep + "api_key=" + key, { "User-Agent": UA, "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8" });
         if (!res || !res.body) {
             if (!useFallback) return tmdb(path, true);
             return null;
@@ -396,12 +334,6 @@
                 "Referer": PLAYER_REF,
                 "Accept": "application/json",
                 "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8",
-                "X-Forwarded-For": PK_IP,
-                "X-Real-IP": PK_IP,
-                "CF-IPCountry": "PK",
-                "X-Country": "PK",
-                "cf-ipcountry": "PK",
-                "X-Client-IP": PK_IP
             });
             if (!res || !res.body) return null;
             let j;
@@ -452,11 +384,6 @@
                 "Referer": VROCK + "/",
                 "Accept": "application/json",
                 "Accept-Language": "en-PK,en;q=0.9",
-                "X-Forwarded-For": PK_IP,
-                "X-Real-IP": PK_IP,
-                "CF-IPCountry": "PK",
-                "X-Country": "PK",
-                "cf-ipcountry": "PK"
             });
             if (!res || !res.body) return [];
             let j;
@@ -482,9 +409,6 @@
                 "User-Agent": UA,
                 "Referer": VROCK + "/",
                 "Accept-Language": "en-PK,en;q=0.9",
-                "X-Forwarded-For": PK_IP,
-                "CF-IPCountry": "PK",
-                "X-Country": "PK"
             }), 12000);
             if (!res || !res.body) return out;
             const arr = JSON.parse(res.body);
@@ -495,9 +419,7 @@
                 out.push({
                     name: label + " • MP4 " + (arr[i].resolution || "?") + "p",
                     url: arr[i].url,
-                    headers: { "User-Agent": UA, "Referer": VROCK + "/", "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8",
-                "CF-IPCountry": "PK",
-                "X-Country": "PK" }
+                    headers: { "User-Agent": UA, "Referer": VROCK + "/", "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8" }
                 });
             }
         } catch (e) {}
@@ -662,9 +584,6 @@
                 "User-Agent": UA,
                 "Referer": NX_BASE + "/",
                 "Accept-Language": "en-PK,en;q=0.9",
-                "X-Forwarded-For": PK_IP,
-                "CF-IPCountry": "PK",
-                "X-Country": "PK"
             }), 8000);
             if (!r1 || !r1.body) return out;
             const sv = await nxDecode(JSON.parse(r1.body)._hash);
@@ -679,9 +598,6 @@
                 "User-Agent": UA,
                 "Referer": NX_BASE + "/",
                 "Accept-Language": "en-PK,en;q=0.9",
-                "X-Forwarded-For": PK_IP,
-                "CF-IPCountry": "PK",
-                "X-Country": "PK"
             }), 8000);
                         const so = await nxDecode(JSON.parse(r2.body)._hash);
                         return (so.sources || []).map(x => ({ server: srv.name, src: x }));
@@ -696,6 +612,53 @@
 
     const ALLOWED_HOST_RE = /streamtape|strtape|stape|streamwish|wish|hubcloud|hubdrive/i;
     const BLOCKED_HOST_RE = /gdflix|katdrive|sendcm|1fichier|fastpic|faststream|gdflix|gdriveplayer|gdtot|filepress|sharer/i;
+
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(String(r.error || "")) ? "dead" : "unknown";
+        if (st === 401 || st === 403 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        const out = ok.concat(keep), count = {}, idx = {};
+        out.forEach(function (s) { const k = String(s.source || "Stream"); count[k] = (count[k] || 0) + 1; });
+        out.forEach(function (s) {
+            const k = String(s.source || "Stream");
+            if (count[k] > 1) { idx[k] = (idx[k] || 0) + 1; s.source = k + " #" + idx[k]; }
+        });
+        return out;
+    }
 
     async function loadStreams(url, cb) {
         try {
@@ -745,7 +708,7 @@
                     obj.subtitles = subs.map(s => ({
                         url: s.file || s.url,
                         label: s.label || s.language || "English",
-                        language: s.language || s.label || "en"
+                        lang: s.language || s.label || "en"
                     })).filter(s => s.url);
                 }
                 streams.push(mkStream(obj));
@@ -799,10 +762,6 @@
                     "User-Agent": UA,
                     "Referer": NX_BASE + "/",
                     "Accept-Language": "en-PK,en;q=0.9",
-                    "X-Forwarded-For": PK_IP,
-                    "CF-IPCountry": "PK",
-                    "X-Country": "PK",
-                    "cf-ipcountry": "PK"
                 });
             }
 
@@ -816,50 +775,29 @@
                         "User-Agent": UA,
                         "Referer": VROCK + "/",
                         "Accept-Language": "en-PK,en;q=0.9",
-                        "X-Forwarded-For": PK_IP,
-                        "CF-IPCountry": "PK",
-                        "X-Country": "PK"
                     });
                 }
             }
 
-            // Filter to only StreamTape/StreamWish/HubCloud if any exist (user requirement)
-            let filtered = streams.filter(st => {
-                try {
-                    const u = (st && (st.url || st.streamUrl || st.file || "")) || "";
-                    const name = (st && (st.source || st.name || "")) || "";
-                    const hay = name + " " + u;
-                    if (BLOCKED_HOST_RE.test(hay)) return false;
-                    if (ALLOWED_HOST_RE.test(hay)) return true;
-                    return false;
-                } catch (e) { return false; }
-            });
-            // If we have allowed hosts, use them; otherwise fallback to all non-blocked (to avoid empty)
-            let finalStreams = filtered.length ? filtered : streams.filter(st => {
-                try {
-                    const u = (st && (st.url || st.streamUrl || "")) || "";
-                    const name = (st && (st.source || "")) || "";
-                    return !BLOCKED_HOST_RE.test(name + " " + u);
-                } catch (e) { return true; }
-            });
-
-            // Deduplicate final and prioritize HubCloud > StreamWish > StreamTape
-            finalStreams.sort((a,b) => {
-                const getScore = (st) => {
-                    const hay = String((st.source||"") + " " + (st.url||"")).toLowerCase();
-                    if (hay.includes("hubcloud") || hay.includes("hubdrive")) return 0;
-                    if (hay.includes("streamwish") || hay.includes("wish")) return 1;
-                    if (hay.includes("streamtape") || hay.includes("stape")) return 2;
-                    return 3;
-                };
-                return getScore(a) - getScore(b);
-            });
+            // Host preference: HubCloud > StreamWish > StreamTape first, then every other
+            // working server. (Blocked hosts were already skipped in addStream.)
+            const hostScore = function (st) {
+                const hay = String((st.source || "") + " " + (st.url || "")).toLowerCase();
+                if (/hubcloud|hubdrive/.test(hay)) return 0;
+                if (/streamwish/.test(hay)) return 1;
+                if (/streamtape|strtape|stape/.test(hay)) return 2;
+                return 3;
+            };
+            const ordered = streams.map(function (st, i) { return { st: st, i: i }; })
+                .sort(function (a, b) { return hostScore(a.st) - hostScore(b.st) || a.i - b.i; })
+                .map(function (x) { return x.st; });
+            const finalStreams = ordered.length ? await verifyStreams(ordered, 4) : [];
 
             if (!finalStreams.length) {
                 return cb({
                     success: false,
                     errorCode: "NO_STREAMS",
-                    message: "No streams found for this title. Wing servers " + wingServers.join(", ") + " are online but require WASM GC decryption. Backup APIs returned nothing - try another title. Allowed hosts filter: StreamTape/StreamWish/HubCloud."
+                    message: "No working stream for this title right now (all CineJoy servers came back empty or offline). Try another title or episode."
                 });
             }
 
