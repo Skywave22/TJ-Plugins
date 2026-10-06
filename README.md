@@ -15,7 +15,8 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 4. Tap **Add**, wait for the list to populate, and **install** the plugins you want.
 5. On the Home screen, switch the **Provider** (bottom-right button) to your new plugins.
 
-Already installed? Open Extensions and tap **Update**: every plugin got a new version in this rebuild.
+Already installed? Open Extensions and tap **Update**: every plugin got a new version in this rebuild,
+and four new plugins were added (see below).
 
 ## 📦 Plugins
 
@@ -25,12 +26,16 @@ Already installed? Open Extensions and tap **Update**: every plugin got a new ve
 | **CineFreak** | v6 | TJ-Plugins | cinefreak.net | Movie, TvSeries | hi, en, mal | — |
 | **CineHD** | v9 | TJ-Plugins | cinehd.vc | Movie, TvSeries | en | — |
 | **CineJoy** | v4 | TJ-Plugins | cinejoy.pk | Movie, TvSeries | en | — |
+| **DesiDubAnime** | v1 | TJ-Plugins | desidubanime.me | Anime, Movie, TvSeries | hi, ta, te | — |
+| **DesiSerialOnline** | v1 | TJ-Plugins | desiserialonline.su | TvSeries | hi | — |
+| **DesiSerials** | v1 | TJ-Plugins | desi-serials.to | TvSeries | hi | — |
 | **FMoviess** | v5 | TJ-Plugins | fmoviess.tv | Movies, Series, Anime | en | ✅ |
 | **HiCine** | v8 | TJ-Plugins | api.hicine.sbs | Movies, Series, Anime | hi, en | ✅ |
 | **Hindi Dubbed** | v3 | TJ-Plugins | youtube.com | Movie, TvSeries | hi, en | — |
 | **KatMovieHD** | v11 | TJ-Plugins | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
 | **KDramaMaza** | v6 | TJ-Plugins | kdramasmaza.net | TvSeries | en, hi, ur | — |
 | **NetMirror** | v7 | TJ-Plugins | netmirror.center | Movie, TvSeries | en, hi | — |
+| **RareAnimes** | v1 | TJ-Plugins | rareanimes.mov | Anime, TvSeries, Movie | hi, ta, te, ml | — |
 | **RiveStream** | v4 | TJ-Plugins | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
 | **SSR Movies** | v6 | TJ-Plugins | ssrmovies.name | Movies, Series | hi, en | ✅ |
 | **SubDubAnime** | v4 | TJ-Plugins | subdubanime.site | TvSeries, Movie | en, hi | — |
@@ -38,6 +43,20 @@ Already installed? Open Extensions and tap **Update**: every plugin got a new ve
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🆕 New plugins — 2026-10-06
+
+Built from scratch for this repo with the same test process (harness + `skystream-cli`, every link checked):
+
+| Plugin | Site | What you get | Players |
+|---|---|---|---|
+| **RareAnimes** | rareanimes.mov | Hindi / Tamil / Telugu dubbed anime series and movies, by season | StreamBeta |
+| **DesiDubAnime** | desidubanime.me | Hindi / Tamil / Telugu dubbed anime, with the site's own search | p2pplay HLS, VidMoly |
+| **DesiSerialOnline** | desiserialonline.su | Daily Hindi serials and reality shows, full episode history by air date | VKSpeed MP4, Blogger 720p/360p (multi-part episodes) |
+| **DesiSerials** | desi-serials.to | Daily Hindi serials by channel (Star Plus, Colors, Zee, Sony, Sab, Star Bharat, & TV) plus hundreds of completed shows; search understands short names like `kbc`, `yrkkh`, `tmkoc` | TVLogy HLS 480p, VKSpeed / VkPrime MP4 |
+
+**DesiSerials** was requested as `desiserials.us`, but that domain is now only a page saying
+*"DesiSerials is now Desi-Serials.to!"*, so the plugin uses **desi-serials.to**.
 
 ## 🔧 Rebuild — 2026-10-06
 
@@ -85,6 +104,13 @@ passed. Changes that apply to all plugins:
   and curl get through, and the harness tests it with `--curl gdflix`.
 - **nxsha.space** (CineHD, CineJoy, RiveStream, Vidbox) rotates its key from time to time. When
   those four lose their servers at the same moment, the key needs updating again.
+- **RareAnimes:** some older posts only have Mega links, which can't be streamed, so those show no players.
+- **DesiDubAnime:** the Mirrordub and Abyss servers can't be played; a few shows only have VidMoly.
+- **DesiSerialOnline:** VKSpeed is at most 360p (Blogger parts give 720p where the site has them);
+  shows with only a single "guide" post are hidden because they have no video.
+- **DesiSerials:** each show lists its **latest 180 episodes** (about six months of a daily show).
+  The video hosts delete old files after roughly a year, so episodes of shows that ended before
+  2025 usually won't play; the plugin says so instead of showing an empty list.
 - Some titles simply have no working hoster at the moment; the plugin says so instead of
   showing an empty list.
 
