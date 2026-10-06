@@ -75,6 +75,28 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.cinejoy.skystream.sky"
   },
   {
+    "packageName": "com.desidubanime.skystream",
+    "name": "DesiDubAnime",
+    "version": 1,
+    "baseUrl": "https://www.desidubanime.me",
+    "description": "DesiDubAnime (desidubanime.me) - Hindi, Tamil, Telugu and multi-audio dubbed anime series and movies. Full episode lists with titles, played as HLS from the site's own P2PPlay (Cloudflare and direct) and VidMoly servers with English subtitles; each link is checked before it is shown.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "hi",
+      "ta",
+      "te"
+    ],
+    "categories": [
+      "Anime",
+      "Movie",
+      "TvSeries"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.desidubanime.skystream.sky"
+  },
+  {
     "packageName": "com.fmoviess.skystream",
     "name": "FMoviess",
     "version": 5,
