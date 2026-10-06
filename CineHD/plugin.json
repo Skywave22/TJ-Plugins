@@ -1,11 +1,11 @@
 {
   "packageName": "com.cinehd.skystream",
   "name": "CineHD",
-  "version": 7,
+  "version": 8,
   "baseUrl": "https://cinehd.vc",
-  "description": "CineHD (cinehd.vc) - Movies & series with 8+ servers per title (MovieBox Hindi family, Rock HLS/MP4, VidAPI and more, up to 1080p). TMDB catalog, AES-decrypted Rock servers. v7: the site domain now follows the domain selected in the plugin's settings (manifest.baseUrl); v6: all provider families fetched in parallel (2-3x faster play).",
+  "description": "CineHD (cinehd.vc) — movies & series from a TMDB catalog with many servers per title (MhPly/AwsPly Hindi, Nitro multi-audio, HDHub, Rock HLS, MovieBox, VidAPI…). Every link is checked before it is shown; Hindi first.",
   "authors": [
-    "TJ Plugins"
+    "TJ-Plugins"
   ],
   "languages": [
     "en"

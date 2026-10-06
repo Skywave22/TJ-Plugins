@@ -34,47 +34,9 @@
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
+    function mergeGeoHeaders(base) { return Object.assign({}, base || {}); }
 
     const STREAM_HEADERS = mergeGeoHeaders({
         "User-Agent": UA,
@@ -285,6 +247,47 @@
         });
     }
 
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(String(r.error || "")) ? "dead" : "unknown";
+        if (st === 401 || st === 403 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        return ok.concat(keep);
+    }
+
     function qualityFromManifest(manifest) {
         const resolutions = String(manifest || "").match(/RESOLUTION=(\d+)x(\d+)/g) || [];
         let maxH = 0;
@@ -411,7 +414,8 @@
     // query in-plugin (pure-JS MD5 + AES) and decrypt responses via the
     // app's crypto.decryptAES.
     const NX_BASE = "https://nxsha.space";
-    const NX_PASS = "S8x!Jk4ZP1uG8$my";
+    // AES passphrase from nxsha.space front-end bundle (rotated 2026-10; was "S8x!Jk4ZP1uG8$my").
+    const NX_PASS = "f4488ab4da401203d23baa129fc546153898162524635d6776826d0c867ccaa3";
 
     function nxMd5(str, raw) {
         const msg = raw ? str : unescape(encodeURIComponent(str));
@@ -752,14 +756,15 @@
                 if (v.src) addStream(v.label + " - " + v.src.quality, v.src.url, STREAM_HEADERS);
             }
 
-            if (!streams.length) {
+            const verified = streams.length ? await verifyStreams(streams, 4) : [];
+            if (!verified.length) {
                 return cb({
                     success: false,
                     errorCode: "NO_STREAMS",
                     message: "No stream source available for this title right now - both CineHD player APIs returned nothing for it. Try another title."
                 });
             }
-            cb({ success: true, data: streams });
+            cb({ success: true, data: verified });
         } catch (e) {
             cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
         }
