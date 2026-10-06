@@ -25,59 +25,17 @@
     //      &r_type=application%2Fvnd.apple.mpegurl
     //      &r_range=<start-end of the quality's range>
     //    codes: oaa=240p baa=360p caa=480p gaa=720p haa=1080p
-    //    NOTE: only the episode's DEFAULT quality object exists on the
-    //    CDN — every other code 403s (verified 2026-09). So we expose
-    //    the default-quality playlist as the primary stream.
-    //  Verified live: Kaiju No.8 S02E01 480p HLS, 200 + VOD playlist.
+    //    `quality` is only the player's default (usually 480p). For HLS the
+    //    `ranges` field lists every rendition ("<start>-<end> (1080p)"),
+    //    and for MP4 `qid` is the highest code available (5 = 1080p);
+    //    all of those are served (checked 2026-10: 240p..1080p, 206/200).
     // ═══════════════════════════════════════════════════════════
 
     const API = "https://blakiteapi.xyz";
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    // For PK-specific sites (CineJoy), also include PK bypass
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        // Always ensure bypass IP present if not already set
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
 
     const QCODES = { "240p": "oaa", "360p": "baa", "480p": "caa", "720p": "gaa", "1080p": "haa" };
 
@@ -98,7 +56,7 @@
     async function catalog() {
         const now = Date.now();
         if (catalogCache && now - catalogTs < 1800000) return catalogCache; // 30 min
-        const r = await withTimeout(http_get(API + "/api/getAllAnime.php", mergeGeoHeaders({ "User-Agent": UA }, false)), 25000);
+        const r = await withTimeout(http_get(API + "/api/getAllAnime.php", { "User-Agent": UA }), 25000);
         const j = JSON.parse((r && r.body) || "{}");
         const d = (j && j.data) || {};
         catalogCache = {
@@ -294,25 +252,88 @@
 
     // ─────────────────────────── streams ───────────────────────────
 
-    function buildStreamUrl(data) {
-        // pick the range for the episode's default quality
-        let range = "", code = QCODES[String(data.quality || "").toLowerCase()];
-        if (!code) {
-            // qid fallback: 1..5 -> first..fifth code
-            const order = ["oaa", "baa", "caa", "gaa", "haa"];
-            code = order[Math.max(0, Math.min(4, (parseInt(data.qid, 10) || 1) - 1))];
-        }
-        const ranges = String(data.ranges || "").split("\n");
-        for (let i = 0; i < ranges.length; i++) {
-            const m = ranges[i].match(/^(\d+)-(\d+)\s*\(([^)]+)\)/);
-            if (m && m[3].toLowerCase() === String(data.quality || "").toLowerCase()) { range = m[1] + "-" + m[2]; break; }
-        }
+    const QORDER = ["240p", "360p", "480p", "720p", "1080p"];
+    const CDN = "https://hugh.cdn.rumble.cloud/video/";
+
+    // Every rendition the episode has, highest first: [{q, url, hls}]
+    function allRenditions(data) {
+        const out = [];
+        const id = String(data.dataId);
         if (String(data.format || "").toUpperCase() === "M3U8") {
-            return "https://hugh.cdn.rumble.cloud/video/" + data.dataId + "." + code +
-                   ".tar?r_file=chunklist.m3u8&r_type=application%2Fvnd.apple.mpegurl" +
-                   (range ? "&r_range=" + range : "");
+            const lines = String(data.ranges || "").split("\n");
+            for (let i = 0; i < lines.length; i++) {
+                const m = lines[i].match(/^(\d+)-(\d+)\s*\(([^)]+)\)/);
+                if (!m) continue;
+                const q = m[3].toLowerCase(), code = QCODES[q];
+                if (!code) continue;
+                out.push({ q: q, hls: true, url: CDN + id + "." + code +
+                    ".tar?r_file=chunklist.m3u8&r_type=application%2Fvnd.apple.mpegurl&r_range=" + m[1] + "-" + m[2] });
+            }
+        } else {
+            const top = Math.max(1, Math.min(5, parseInt(data.qid, 10) || 0)) ||
+                        (QORDER.indexOf(String(data.quality || "").toLowerCase()) + 1) || 3;
+            for (let k = 0; k < top; k++) {
+                out.push({ q: QORDER[k], hls: false, url: CDN + id + "." + QCODES[QORDER[k]] + ".mp4" });
+            }
         }
-        return "https://hugh.cdn.rumble.cloud/video/" + data.dataId + "." + code + ".mp4";
+        out.sort(function (x, y) { return QORDER.indexOf(y.q) - QORDER.indexOf(x.q); });
+        return out;
+    }
+
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/426/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        // Freshly minted Google download links ignore Range and stream the whole
+        // file; probing them only burns data (and crashes the CLI, which buffers it).
+        if (/^https:\/\/video-downloads\.googleusercontent\.com\//i.test(u)) return "ok";
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) {
+            const err = String(r.error || "");
+            // The app refuses bodies over 8 MB (it hangs up on the Content-Length):
+            // a server that ignores Range and sends a huge body is serving the file.
+            if (/too ?large|exceed/i.test(err)) return "ok";
+            return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(err) ? "dead" : "unknown";
+        }
+        if (st === 401 || st === 403 || st === 426 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        const out = ok.concat(keep), count = {}, idx = {};
+        out.forEach(function (s) { const k = String(s.source || "Stream"); count[k] = (count[k] || 0) + 1; });
+        out.forEach(function (s) {
+            const k = String(s.source || "Stream");
+            if (count[k] > 1) { idx[k] = (idx[k] || 0) + 1; s.source = k + " #" + idx[k]; }
+        });
+        return out;
     }
 
     async function loadStreams(url, cb) {
@@ -328,7 +349,7 @@
                 apiUrl = API + "/api/get.php?id=" + encodeURIComponent((p.s || 1) + "-" + (p.e || 1)) +
                          "&tmdbId=" + encodeURIComponent(String(p.id));
             }
-            const r = await withTimeout(http_get(apiUrl, mergeGeoHeaders({ "User-Agent": UA, "Referer": API + "/" }, false)), 20000);
+            const r = await withTimeout(http_get(apiUrl, { "User-Agent": UA, "Referer": API + "/" }), 20000);
             let j;
             try { j = JSON.parse((r && r.body) || "{}"); } catch (e) { j = {}; }
             const data = j && j.data;
@@ -336,14 +357,28 @@
                 return cb({ success: false, errorCode: "NO_STREAMS", message: "This episode is not uploaded yet — try the previous episode or another anime." });
             }
 
-            const q = String(data.quality || "auto").toLowerCase();
-            const streams = [mkStream({
-                url: buildStreamUrl(data),
-                source: "SubDub - " + q + (String(data.format || "").toUpperCase() === "M3U8" ? " - HLS" : ""),
-                quality: q,
-                headers: { "User-Agent": UA },
-                isDirect: true
-            })];
+            // 240p only if nothing better exists
+            let rends = allRenditions(data);
+            if (rends.length > 1) rends = rends.filter(function (x) { return x.q !== "240p"; });
+            const candidates = rends.slice(0, 4).map(function (x) {
+                return mkStream({
+                    url: x.url,
+                    source: "SubDub - " + x.q + (x.hls ? " - HLS" : ""),
+                    headers: { "User-Agent": UA }
+                });
+            });
+            // Higher renditions exist for many episodes but not all (the CDN 403s
+            // the missing ones), so list only verified extras; the API's default
+            // quality is always kept as the fallback.
+            const defQ = String(data.quality || "").toLowerCase();
+            const streams = candidates.length ? await verifyStreams(candidates, 0) : [];
+            if (!streams.some(function (st) { return String(st.source).indexOf(" " + defQ) >= 0; })) {
+                const d = rends.filter(function (x) { return x.q === defQ; })[0];
+                if (d) streams.push(mkStream({ url: d.url, source: "SubDub - " + d.q + (d.hls ? " - HLS" : ""), headers: { "User-Agent": UA } }));
+            }
+            if (!streams.length) {
+                return cb({ success: false, errorCode: "NO_STREAMS", message: "This episode's video is not available on the server right now — try another episode." });
+            }
 
             cb({ success: true, data: streams });
         } catch (e) {
