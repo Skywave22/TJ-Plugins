@@ -307,11 +307,11 @@
   {
     "packageName": "com.vidbox.plugin",
     "name": "Vidbox",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://vidbox.vc",
-    "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies & TV using vidbox's own TMDB id space. Streams resolve through the Nxsha multi-language server. Hindi audio is ranked first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali; every HLS/DASH manifest is verified before it is offered. v2: removed a dead duplicate stream function and fixed episode items (name/airDate) plus genre tags so they render in the app.",
+    "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies and TV shows (vidbox uses TMDB ids, so titles match 1:1). Streams come from the Nxsha multi-language servers. Hindi audio is listed first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every link is checked before it is shown; working links come first.",
     "authors": [
-      "TJ Plugins"
+      "TJ-Plugins"
     ],
     "languages": [
       "hi",
