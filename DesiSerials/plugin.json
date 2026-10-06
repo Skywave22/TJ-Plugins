@@ -1,0 +1,17 @@
+{
+  "packageName": "com.desiserials.skystream",
+  "name": "DesiSerials",
+  "version": 1,
+  "baseUrl": "https://www.desi-serials.to",
+  "description": "DesiSerials (desi-serials.to, formerly desiserials.us) - daily Hindi TV serials and reality shows from Star Plus, Zee TV, Sony TV, Colors, Star Bharat, Sab TV and & TV, plus hundreds of completed shows. Episodes listed by air date; plays TVLogy HLS and VKSpeed / VkPrime MP4. Each link is checked before it is shown.",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "hi"
+  ],
+  "categories": [
+    "TvSeries"
+  ],
+  "isAdult": false
+}
