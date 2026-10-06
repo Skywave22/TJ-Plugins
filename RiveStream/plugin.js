@@ -29,56 +29,15 @@
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
-
-
     // NB: NX_BASE ("https://nxsha.space") and NX_PASS are declared by the
     // AES bridge section further down. NX_HEADERS must therefore be built
     // lazily - see nxHeaders() below.
     function nxHeaders() {
-        return mergeGeoHeaders({
+        return {
             "User-Agent": UA,
             "Referer": NX_BASE + "/",
             "Accept": "application/json"
-        }, false);
+        };
     }
 
     // rivestream's own server backends, in the order they should be offered.
@@ -158,7 +117,7 @@
 
     async function tmdb(path) {
         const sep = path.indexOf("?") >= 0 ? "&" : "?";
-        const res = await http_get(TMDB + path + sep + "api_key=" + KEY, mergeGeoHeaders({ "User-Agent": UA }, false));
+        const res = await http_get(TMDB + path + sep + "api_key=" + KEY, { "User-Agent": UA });
         if (!res || !res.body) return null;
         try { return JSON.parse(res.body); } catch (e) { return null; }
     }
@@ -204,7 +163,7 @@
     }
 
     const NX_BASE = "https://nxsha.space";
-    const NX_PASS = "S8x!Jk4ZP1uG8$my";
+    const NX_PASS = "f4488ab4da401203d23baa129fc546153898162524635d6776826d0c867ccaa3";
 
     function nxMd5(str, raw) {
         const msg = raw ? str : unescape(encodeURIComponent(str));
@@ -632,6 +591,79 @@
         return parts.join(" - ");
     }
 
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) {
+            const err = String(r.error || "");
+            // The app refuses bodies over 8 MB (it hangs up on the Content-Length):
+            // a server that ignores Range and sends a huge body is serving the file.
+            if (/too ?large|exceed/i.test(err)) return "ok";
+            return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(err) ? "dead" : "unknown";
+        }
+        if (st === 401 || st === 403 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        const out = ok.concat(keep), count = {}, idx = {};
+        out.forEach(function (s) { const k = String(s.source || "Stream"); count[k] = (count[k] || 0) + 1; });
+        out.forEach(function (s) {
+            const k = String(s.source || "Stream");
+            if (count[k] > 1) { idx[k] = (idx[k] || 0) + 1; s.source = k + " #" + idx[k]; }
+        });
+        return out;
+    }
+
+    // nxsha serves cached source lists; signed CDN links in them can already be
+    // past their expiry, which the CDN answers with
+    // 403 "Sign expired". Drop those before probing.
+    function isExpired(u) {
+        // Citadel "?expire=<ms>", Vidstack Hubstream "/v4/<token>/<unix>/…"
+        const m = /[?&]expire=(\d{10,13})/.exec(String(u)) || /\/v\d\/[^\/]+\/(\d{10})\//.exec(String(u));
+        if (!m) return false;
+        let t = Number(m[1]);
+        if (t < 1e12) t *= 1000;
+        return t < Date.now() + 60000;
+    }
+
+    // Player headers: whatever the source asks for, on top of a browser UA.
+    function streamHeaders(src) {
+        const h = { "User-Agent": UA, "Referer": NX_BASE + "/" };
+        const extra = (src && src.headers && typeof src.headers === "object") ? src.headers : {};
+        for (const k in extra) { if (extra[k] != null && extra[k] !== "") h[k] = String(extra[k]); }
+        return h;
+    }
+
     async function loadStreams(url, cb) {
         try {
             const p = parseUrl(url);
@@ -674,6 +706,9 @@
                         const u = pickUrl(item.src);
                         if (!u) continue;
                         if (item.src.isEmbed === true) continue;
+                        if (isExpired(u)) continue;
+                        // file-host landing pages (e.g. hdstream4u.com/file/<id>) are HTML, not video
+                        if (/\/file\/[A-Za-z0-9]+\/?$/.test(String(u).split("?")[0])) continue;
                         if (/embed/i.test(String(item.src.type || ""))) continue;
                         // Skip subtitle-only variants.
                         if (/\bsub\b/i.test(String(item.src.label || ""))) continue;
@@ -706,21 +741,13 @@
                 return (a.rank - b.rank) || (a.idx - b.idx);
             }).map(function (x) { return x.s; });
 
-            // Phase 3: cap the list.
-            const streams = [];
-            for (const s of ranked) {
-                if (streams.length >= MAX_STREAMS) break;
-                // NOTE: StreamResult has no `quality` field - the runtime class
-                // only takes url, source, headers, subtitles, drmKid, drmKey
-                // and licenseUrl (the schema in DEVELOPER.md lists quality, but
-                // the injected class drops it). Quality therefore has to ride
-                // along inside `source`, which sourceLabel() already does.
-                streams.push(mkStream({
-                    url: s.url,
-                    source: sourceLabel(s.item),
-                    headers: nxHeaders()
-                }));
-            }
+            // Phase 3: build candidates, probe them, cap the list. verifyStreams
+            // keeps the order inside each verdict, so language ranking survives.
+            const candidates = ranked.slice(0, MAX_STREAMS + 8).map(function (s) {
+                // StreamResult has no quality field; quality rides in `source`.
+                return mkStream({ url: s.url, source: sourceLabel(s.item), headers: streamHeaders(s.item.src) });
+            });
+            const streams = (await verifyStreams(candidates, 4)).slice(0, MAX_STREAMS);
 
             if (!streams.length) {
                 return cb({
