@@ -1,6 +1,6 @@
 # 🌌 TJ-Plugins — SkyStream Plugin Repository
 
-Plugins for [SkyStream](https://github.com/akashdh11/skystream) — movies, TV series, anime & dramas.
+Plugins for [SkyStream](https://github.com/akashdh11/skystream): movies, TV series, anime and dramas.
 
 ## 📲 Installation
 
@@ -15,80 +15,77 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 4. Tap **Add**, wait for the list to populate, and **install** the plugins you want.
 5. On the Home screen, switch the **Provider** (bottom-right button) to your new plugins.
 
+Already installed? Open Extensions and tap **Update**: every plugin got a new version in this rebuild.
+
 ## 📦 Plugins
 
-14 plugins. Categories and languages below are read from each plugin's own `plugin.json`.
+| Plugin | Version | Author | Source | Categories | Languages | Mirrors |
+|---|---|---|---|---|---|---|
+| **321Movies UK** | v3 | TJ-Plugins | 321movies.co.uk | Movie, TvSeries | en, hi | — |
+| **CineFreak** | v6 | TJ-Plugins | cinefreak.net | Movie, TvSeries | hi, en, mal | — |
+| **CineHD** | v9 | TJ-Plugins | cinehd.vc | Movie, TvSeries | en | — |
+| **CineJoy** | v4 | TJ-Plugins | cinejoy.pk | Movie, TvSeries | en | — |
+| **FMoviess** | v5 | TJ-Plugins | fmoviess.tv | Movies, Series, Anime | en | ✅ |
+| **HiCine** | v8 | TJ-Plugins | api.hicine.sbs | Movies, Series, Anime | hi, en | ✅ |
+| **Hindi Dubbed** | v3 | TJ-Plugins | youtube.com | Movie, TvSeries | hi, en | — |
+| **KatMovieHD** | v11 | TJ-Plugins | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
+| **KDramaMaza** | v6 | TJ-Plugins | kdramasmaza.net | TvSeries | en, hi, ur | — |
+| **NetMirror** | v7 | TJ-Plugins | netmirror.center | Movie, TvSeries | en, hi | — |
+| **RiveStream** | v4 | TJ-Plugins | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
+| **SSR Movies** | v6 | TJ-Plugins | ssrmovies.name | Movies, Series | hi, en | ✅ |
+| **SubDubAnime** | v4 | TJ-Plugins | subdubanime.site | TvSeries, Movie | en, hi | — |
+| **Vidbox** | v3 | TJ-Plugins | vidbox.vc | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
 
-| Plugin | Source | Categories | Languages | Mirrors |
-|---|---|---|---|---|
-| **321Movies UK** | 321movies.co.uk | Movie, TvSeries | en, hi | — |
-| **CineFreak** | cinefreak.net | Movie, TvSeries | hi, en, mal | — |
-| **CineHD** | cinehd.vc | Movie, TvSeries | en | — |
-| **CineJoy** | cinejoy.pk | Movie, TvSeries | en | — |
-| **FMoviess** | fmoviess.tv | Movies, Series, Anime | en | ✅ |
-| **HiCine** | api.hicine.sbs | Movies, Series, Anime | hi, en | ✅ |
-| **Hindi Dubbed** | www.youtube.com | Movie, TvSeries | hi, en | — |
-| **KDramaMaza** | kdramasmaza.net | TvSeries | en, hi, ur | — |
-| **KatMovieHD** | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
-| **NetMirror** | netmirror.center | Movie, TvSeries | en, hi | — |
-| **RiveStream** | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
-| **SSR Movies** | ssrmovies.blue | Movies, Series | hi, en | ✅ |
-| **SubDubAnime** | www.subdubanime.site | TvSeries, Movie | en, hi | — |
-| **Vidbox** | vidbox.vc | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
+**Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
+from the plugin's settings gear if the primary domain is blocked.
 
-**Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working
-mirror from the plugin's settings gear if the primary domain is blocked.
-Every other plugin reads the host from `manifest.baseUrl` (so a mirror picker would be
-honoured if one is added) but ships with its primary host only.
+## 🔧 Rebuild — 2026-10-06
 
-All 14 plugins pass `skystream validate` (manifest schema + exported functions).
+Every plugin was checked against its live site, rebuilt, tested with `skystream-cli` and an
+app-accurate runtime harness (`tools/app-harness.mjs`, which mirrors the SkyStream app's JS
+runtime: 15 s HTTP timeout, 8 MB body cap, the same helper classes), and only pushed once it
+passed. Changes that apply to all plugins:
 
-## 🛠 Fixes — 2026-10-05
+- **Author is `TJ-Plugins`** on every plugin.
+- **Spoofed "geo bypass" headers removed.** Fake `X-Forwarded-For` / `CF-Connecting-IP` /
+  `CF-IPCountry` headers don't change where a request comes from. Cloudflare answers them with
+  **HTTP 403**, which silently broke catalogs and players across the repo, and in KDMaza,
+  KatMovieHD and NetMirror a leftover reference crashed the plugin outright.
+- **Every link is checked before it is shown** (`tools/snippets/verify-streams.js`): working links
+  first, links that answer 401/403/426/429 or time out are kept but marked *(may not play)*
+  (often a region block that works on your network), dead ones (404, HTML pages) are removed.
 
-Every plugin is now published under the **TJ Plugins** author (versions bumped so the
-app offers the update). What was actually broken and repaired:
-
-| Plugin | Problem | Fix |
+| Plugin | What was broken | Fix |
 |---|---|---|
-| **NetMirror** | The plugin **crashed on install** with `ReferenceError: Cannot access 'GEO_BYPASS_HEADERS' before initialization` — a top-level header constant called the geo helper before the constants it reads existed. Nothing loaded, so the whole provider was dead. | The header is now built after the constants. Verified with `skystream test -f getHome` and an app-accurate runtime harness (dashboard, search, details and streams all resolve). |
-| **Vidbox** | A leftover copy of RiveStream's `loadStreams` was still in the file (referencing undefined `riveServers`/`RIVE_PROVIDERS`). Episode items used `title`/`date`, which the app ignores (episodes rendered with blank names), and genres were filed under `genres` instead of `tags`. | Dead duplicate removed; episodes now use `name`/`airDate`; genres map to `tags`. |
-| **Hindi Dubbed** | When YouTube returned nothing for all 20 channels, the dashboard loaded **empty with no explanation**. | It now reports an error so the app can show a message. |
-| **CineFreak, CineHD, KDMaza, NetMirror, FMoviess, HiCine, KatMovieHD, SSR Movies** | The site host was hardcoded, so the domain/mirror picker in the plugin settings had no effect. | All read `manifest.baseUrl` with the old host as fallback. |
-| **SubDubAnime** | The API embeds a TMDB snapshot; its genre list fed straight into the app's tag parser, which rejects non-strings — a single malformed value would have failed the entire dashboard. | description/genre/score values are normalised before they are emitted. |
-| **All plugins** | Author field was mixed (`Skywave22`, `Arena Agent`, `Happy`, …); `dist/codes/*` shortcode lists were stale (missing CineJoy, still listing removed plugins). | Author set to **TJ Plugins**, versions bumped, `dist/` rebuilt, stale bundles (`com.netflixmirror.plugin`, `com.tamilblasters.skystream`) deleted, shortcode lists regenerated. |
+| **321Movies UK** | Spoof headers made the player API fail, so the plugin fell back to iframe embed pages no player can play | Real HLS sources; slow first API call retried; movies get a playable episode |
+| **CineFreak** | Cloudflare 403 on every page (dashboard/search dead); site changed its `dataset` format, so playback failed | Parser updated; new stream-prepare handshake like the web player |
+| **CineHD** | nxsha.space rotated its key: every MhPly/AwsPly/Nitro/HDHub server decoded to nothing | New key; dead links filtered |
+| **CineJoy** | Same nxsha key change; a host filter threw away every non-HubCloud server | New key; HubCloud › StreamWish › StreamTape first, other verified servers follow; subtitles fixed |
+| **FMoviess** | About half of popular titles (Inception, Breaking Bad…) returned nothing; the "CF" server 404s for everything | vidlove backup server with subtitles; dead server removed |
+| **HiCine** | PixelDrain links opened an HTML page; no plot or rating | Resolved to the direct file; plot/score/backdrop from TMDB |
+| **Hindi Dubbed** | First option (YouTube "1080p fMP4") 403s every time; search returned songs/trailers | Playable HLS/MP4 first; search biased to full Hindi-dubbed movies; much faster |
+| **KDramaMaza** | Every drama crashed on open (`GEO_BYPASS_HEADERS is not defined`); messy titles | Fixed; clean titles + plot |
+| **KatMovieHD** | Search found nothing for multi-word queries; series showed 1 episode and no streams; GDFlix returned a Drive page | Search, per-episode links (all qualities via HubCloud/GDFlix/StreamTape) and GDFlix fixed; plot + IMDb score |
+| **NetMirror** | Every API call 403'd (catalog dead); "Hub" files had no CDN referer (429); "1080p" label was really 360p | Catalog back; Hub files send the referer NetMirror's own extension uses; labels fixed; subtitles added |
+| **RiveStream** | nxsha key change: every title failed with "no servers" | New key; source headers; expired cached links dropped |
+| **SSR Movies** | Daily shows (Bigg Boss…) showed as one episode; newest episodes (Direct-Cloud links) couldn't play; off-by-one episode mapping; site moved | Episodes from the post headings with dates; Direct-Cloud resolved to the direct file; now on `ssrmovies.name` |
+| **SubDubAnime** | Always played 480p | Every available rendition offered, up to 1080p |
+| **Vidbox** | nxsha key change; **movies had no episode, so Play crashed in the app** | New key; movies playable; faster |
 
-## ✅ Verification status
+### Known limitations
 
-Verified on **2026-09-22** with `skystream test`: the dashboard (`getHome`) had to load, then
-`loadStreams` had to return at least one playable link.
+- **StreamWish was dropped** (KatMovieHD): its player is obfuscated and only hands back an HTML
+  page, so it can't be played.
+- **NetMirror "NM Hub" files** come from the MovieBox CDN, which refuses cloud/datacenter IPs.
+  They were configured exactly like NetMirror's own extension but could only be tested up to
+  the CDN from the test server; on a home/mobile connection they should play. "NM Direct" files
+  were verified end to end.
+- **GDFlix** (KDramaMaza, KatMovieHD, SSR Movies) is behind a Cloudflare rule that challenges
+  Node.js clients. In `skystream test` only the other hosters appear for those titles; the app
+  and curl get through, and the harness tests it with `--curl gdflix`.
+- **nxsha.space** (CineHD, CineJoy, RiveStream, Vidbox) rotates its key from time to time. When
+  those four lose their servers at the same moment, the key needs updating again.
+- Some titles simply have no working hoster at the moment; the plugin says so instead of
+  showing an empty list.
 
-| Plugin | Dashboard | Streams | Notes |
-|---|---|---|---|
-| **RiveStream** | ✅ | ✅ | **Hindi audio by default** — Hindi-dubbed tracks ranked first, then English, Tamil, Telugu, Urdu, Malayalam, Bengali |
-| **Vidbox** | ✅ | ✅ | **Hindi audio by default**; catalog is TMDB (same ids vidbox.vc uses), streams resolve through Nxsha; every HLS/DASH manifest is probed before it is offered |
-| **CineHD** | ✅ | ✅ | Most streams per title. Netflix/Prime/Hotstar catalog paths verified end to end; catalog endpoints need a `t_hash_t` cookie from `verify.php` (Cloudflare-challenged in the Node harness, solved by the app) |
-| **CineFreak** | ✅ | ✅ | |
-| **FMoviess** | ✅ | ✅ | |
-| **HiCine** | ✅ | ✅ | |
-| **Hindi Dubbed** | ✅ | ✅ | |
-| **KatMovieHD** | ✅ | ✅ | |
-| **NetMirror** | ✅ | ✅ | **Repaired 2026-10-05** — install-time crash fixed; playback path re-validated in the runtime harness |
-| **SubDubAnime** | ✅ | ✅ | |
-| **SSR Movies** | ✅ | ✅ | **Fixed 2026-09-22** — moved to `ssrmovies.blue`; resolves HubCloud, GDFlix and Watch-Online mirrors |
-| **KDramaMaza** | ✅ | ✅ | **Fixed 2026-09-22** — hoster hosts updated. Episodes typically resolve one 720p file |
-| **321Movies UK** | ✅ (CLI) | ✅ (CLI) | CLI tested; blocked sources may appear as unverified, on-device playback not yet verified |
-| **CineJoy** | ✅ | ✅ | |
-
-### Known upstream limitations
-
-- **Some titles have no working hoster at all.** Long-running anime (One Piece, Naruto
-  Shippuden) returned no playable file for the episode tested; the plugin says so rather
-  than showing an empty list.
-- **An episode or post whose HubCloud and GDFlix links are both expired returns nothing**;
-  picking another episode usually works.
-- **`new4.gdflix.io` sits behind a Cloudflare rule that rejects HTTP/1.1.** GDFlix links
-  therefore can't be exercised from the Node test harness, but they work in the SkyStream
-  app, which speaks HTTP/2. HubCloud (plain GET) works everywhere.
-- **`watch-online.mom` only serves a real player on some of its links.** The rest are ad
-  interstitials. The plugin tries each one and keeps whatever resolves.
 **MovieBlast** and **SkyFlixer** were removed at the maintainer's request.
