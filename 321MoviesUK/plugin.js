@@ -11,11 +11,12 @@
  *    -> { "playlist": [ { "sources": [ { type, file, label, provider, default } ] } ] }
  *    where `file` is "enc:" + base64url(XOR-obfuscated URL). The XOR key is a public constant
  *    in the site's player bundle; it is link obfuscation, NOT DRM, and is not bypassed here.
- *  - Many sourcepack hosts sit behind Cloudflare and answer 403 to datacenter IPs while working
- *    fine in the app. So every link is probed and only verified ones are ranked first; anything
- *    unverifiable is still offered but explicitly labelled, and never silently dropped.
+ *  - Every decoded source is probed with the headers the player will use (site Referer/Origin).
+ *    Verified ones are listed first (Hindi audio, then best quality); 403/timeouts are kept,
+ *    labelled "(may not play)"; definitively dead ones (404/451/5xx/DNS/HTML) are dropped.
+ *  - No spoofed X-Forwarded-For / CF-Connecting-IP headers: Cloudflare answers 403 to them.
  *
- * Runtime constraints honoured (SkyStream Gen 2 / QuickJS, see ../PLUGIN-NOTES.md):
+ * Runtime constraints honoured (SkyStream Gen 2 / QuickJS):
  *  - no fetch()/XHR: uses http_get; no Node-only globals; no `new URL`.
  *  - StreamResult has no `quality` field -> the quality label is carried in `source`.
  *  - cb() is called exactly once on every path.
@@ -29,66 +30,16 @@
     var PLAYER_KEY = "j7wYkYhVgQn5x2L6k2M8hVQfD4zN3bP1aR7uT0cXyE6dZX4sWAd87JKMN8HHGG654GVCFRLMNBOPUY7LK";
     var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    // For PK-specific sites (CineJoy), also include PK bypass
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        // Always ensure bypass IP present if not already set
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
-
-
-    // Hosts that tend to work from restricted networks get probed first.
-    // Expanded to include more reliable hosts for Indian/Pakistani content
-    var PREFERRED = ["vuflix", "frame", "peestream", "bcine", "cinesrc", "movy", "pstream", "rivestream", "streamaggregator", "vidgod", "horizon", "flux", "cascade", "vidfast", "superstream"];
-    var MAX_PROBE = 20;      // increased from 12 to handle more sources
-    var MAX_STREAMS = 12;    // increased from 8
+    // Sources the site's player marks as most reliable are tried first.
+    var PREFERRED = ["rivestream", "streamaggregator", "peestream", "movy", "pstream", "frame", "bcine", "cinesrc", "vidgod"];
+    var MAX_STREAMS = 16;
 
     function site() {
         var b = (typeof manifest !== "undefined" && manifest.baseUrl) ? manifest.baseUrl : "https://321movies.co.uk";
         return String(b).replace(/\/+$/, "");
     }
     function hdr(extra) {
-        var h = { "User-Agent": UA, "Accept-Encoding": "identity" };
-        // Merge universal geo bypass
-        for (var gk in GEO_BYPASS_HEADERS) { if (!(gk in h)) h[gk] = GEO_BYPASS_HEADERS[gk]; }
+        var h = { "User-Agent": UA };
         if (extra) { for (var k in extra) { if (Object.prototype.hasOwnProperty.call(extra, k)) h[k] = extra[k]; } }
         return h;
     }
@@ -108,6 +59,7 @@
             return {
                 status: Number(race && (race.status || race.statusCode)) || 0,
                 body: String((race && race.body) || ""),
+                error: race && race.error ? String(race.error) : "",
             };
         } catch (e) {
             return { status: 0, body: "", error: String((e && e.message) || e) };
@@ -116,105 +68,20 @@
         }
     }
 
+    /** GET + JSON.parse with retries. Returns null when every attempt failed. */
     async function jget(url, headers, ms, tries) {
         var n = tries || 3;
         for (var i = 0; i < n; i++) {
-            // Try with geo bypass headers
             var h = hdr(headers);
-            // Add extra bypass headers for player API
-            h["Accept"] = h["Accept"] || "application/json";
-            h["Referer"] = h["Referer"] || site() + "/";
-            h["Origin"] = site();
-            h["X-Client-Scrape"] = "aether,vidsrc";
-            var r = await req(url, h, ms || 25000);
+            if (!h.Accept) h.Accept = "application/json";
+            var r = await req(url, h, ms || 20000);
             if (r.status === 200) {
-                try { 
-                    var parsed = JSON.parse(r.body);
-                    // Even if playlist empty, return it (don't retry)
-                    if (parsed) return parsed;
-                } catch (e) { 
-                    // Try next attempt
-                }
+                try { var parsed = JSON.parse(r.body); if (parsed) return parsed; } catch (e) { /* retry */ }
             }
-            // Also accept 403/429 as potentially valid if body contains playlist
-            if (r.status === 403 || r.status === 429) {
-                try {
-                    var parsed2 = JSON.parse(r.body);
-                    if (parsed2 && parsed2.playlist) return parsed2;
-                } catch (e) {}
-            }
-            if (i + 1 < n) await new Promise(function (r2) { setTimeout(r2, 1200 * (i + 1)); });
+            if (r.status === 404) return null;
+            if (i + 1 < n) await new Promise(function (r2) { setTimeout(r2, 1500 * (i + 1)); });
         }
         return null;
-    }
-    // Fallback + full website sources - matches 20 sources seen in screenshots for tv/307017/1/
-    // Website shows: 321movies, VidLink, VidLink2, VidKing, <Embed>, SuperEmbed, FilmKu, NontonGo, AutoEmbed1/2, 2Embed, VidSrc1-5, MoviesAPI, NexVid, Smashy, VidBinge
-    async function fallbackStreams(ref) {
-        var out = [];
-        try {
-            var id = ref.id;
-            var season = ref.season || 1;
-            var episode = ref.episode || 1;
-            var type = ref.type;
-            var isTv = type === "tv" || type === "series";
-            
-            // All generic embeds that 321movies website shows (20 sources)
-            var embeds = [];
-            if (isTv) {
-                embeds = [
-                    { url: "https://vidsrc.to/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 1" },
-                    { url: "https://vidsrc.me/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 2" },
-                    { url: "https://vidsrc.xyz/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 3" },
-                    { url: "https://vidsrc.cc/v2/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 4" },
-                    { url: "https://vidsrc.icu/embed/tv/" + id + "/" + season + "/" + episode, family: "vidsrc", label: "VidSrc 5" },
-                    { url: "https://www.2embed.cc/embedtv/" + id + "&s=" + season + "&e=" + episode, family: "2embed", label: "2Embed" },
-                    { url: "https://www.2embed.cc/embed/" + id, family: "2embed", label: "2Embed Movie" },
-                    { url: "https://multiembed.mov/?video_id=" + id + "&tmdb=1&s=" + season + "&e=" + episode, family: "superembed", label: "SuperEmbed" },
-                    { url: "https://autoembed.co/tv/tmdb/" + id + "-" + season + "-" + episode, family: "autoembed", label: "AutoEmbed 1" },
-                    { url: "https://autoembed.co/movie/tmdb/" + id, family: "autoembed", label: "AutoEmbed 2" },
-                    { url: "https://www.nontongo.win/embed/tv/" + id + "/" + season + "/" + episode, family: "nontongo", label: "NontonGo" },
-                    { url: "https://moviesapi.club/tv/" + id + "-" + season + "-" + episode, family: "moviesapi", label: "MoviesAPI" },
-                    { url: "https://player.smashy.stream/tv/" + id + "?s=" + season + "&e=" + episode, family: "smashy", label: "Smashy" },
-                    { url: "https://vidbinge.dev/embed/tv/" + id + "/" + season + "/" + episode, family: "vidbinge", label: "VidBinge" },
-                    { url: "https://nexvid.net/tv/" + id + "/" + season + "/" + episode, family: "nexvid", label: "NexVid" },
-                    { url: "https://filmku.stream/embed/" + id + "/" + season + "/" + episode, family: "filmku", label: "FilmKu" },
-                    { url: "https://vidlink.pro/tv/" + id + "/" + season + "/" + episode, family: "vidlink", label: "VidLink" },
-                    { url: "https://vidlink.pro/tv/" + id + "/" + season + "/" + episode + "?2", family: "vidlink", label: "VidLink 2" },
-                    { url: "https://vidking.net/embed/tv/" + id + "/" + season + "/" + episode, family: "vidking", label: "VidKing" },
-                    { url: "https://321movies.co.uk/embed/tv/" + id + "/" + season + "/" + episode, family: "321movies", label: "321movies" }
-                ];
-            } else {
-                embeds = [
-                    { url: "https://vidsrc.to/embed/movie/" + id, family: "vidsrc", label: "VidSrc 1" },
-                    { url: "https://vidsrc.me/embed/movie/" + id, family: "vidsrc", label: "VidSrc 2" },
-                    { url: "https://vidsrc.xyz/embed/movie/" + id, family: "vidsrc", label: "VidSrc 3" },
-                    { url: "https://vidsrc.cc/v2/embed/movie/" + id, family: "vidsrc", label: "VidSrc 4" },
-                    { url: "https://vidsrc.icu/embed/movie/" + id, family: "vidsrc", label: "VidSrc 5" },
-                    { url: "https://www.2embed.cc/embed/" + id, family: "2embed", label: "2Embed" },
-                    { url: "https://multiembed.mov/?video_id=" + id + "&tmdb=1", family: "superembed", label: "SuperEmbed" },
-                    { url: "https://autoembed.co/movie/tmdb/" + id, family: "autoembed", label: "AutoEmbed 1" },
-                    { url: "https://www.nontongo.win/embed/movie/" + id, family: "nontongo", label: "NontonGo" },
-                    { url: "https://moviesapi.club/movie/" + id, family: "moviesapi", label: "MoviesAPI" },
-                    { url: "https://player.smashy.stream/movie/" + id, family: "smashy", label: "Smashy" },
-                    { url: "https://vidbinge.dev/embed/movie/" + id, family: "vidbinge", label: "VidBinge" },
-                    { url: "https://nexvid.net/movie/" + id, family: "nexvid", label: "NexVid" },
-                    { url: "https://filmku.stream/embed/" + id, family: "filmku", label: "FilmKu" },
-                    { url: "https://vidlink.pro/movie/" + id, family: "vidlink", label: "VidLink" },
-                    { url: "https://vidking.net/embed/movie/" + id, family: "vidking", label: "VidKing" },
-                    { url: "https://321movies.co.uk/embed/movie/" + id, family: "321movies", label: "321movies" }
-                ];
-            }
-            for (var i = 0; i < embeds.length; i++) {
-                out.push({
-                    url: embeds[i].url,
-                    family: embeds[i].family,
-                    label: embeds[i].label,
-                    isDefault: i === 0,
-                    rank: 100 + i
-                });
-            }
-        } catch (e) {}
-        return out;
     }
 
     async function tmdbGet(path) {
@@ -240,18 +107,11 @@
         return IMG + sz + p;
     }
     function posterFallback(r, size) {
-        // Try poster_path, then backdrop_path, then profile_path, then still_path
         if (r && r.poster_path) return poster(r.poster_path, size || "w500");
         if (r && r.backdrop_path) return poster(r.backdrop_path, size || "w780");
         if (r && r.profile_path) return poster(r.profile_path, size || "w500");
         if (r && r.still_path) return poster(r.still_path, size || "w300");
-        // Fallback to TMDB placeholder or generic
-        if (r && r.id) {
-            // Use placeholder with title initial to avoid empty poster
-            var t = r.title || r.name || "No Poster";
-            return "https://via.placeholder.com/500x750?text=" + encodeURIComponent(String(t).slice(0,20));
-        }
-        return "https://via.placeholder.com/500x750?text=No+Poster";
+        return "";
     }
     function yearOf(d) { var m = /^(\d{4})/.exec(String(d || "")); return m ? parseInt(m[1], 10) : undefined; }
 
@@ -448,8 +308,8 @@
                     }
                 }
             } else {
-                // Movies resolve straight from their own URL - no episode wrapper needed.
-                episodes = [];
+                // One playable entry for a movie, like the reference plugins do.
+                episodes = [new Episode({ name: title, url: item.url, season: 1, episode: 1, posterUrl: item.posterUrl })];
             }
             item.episodes = episodes;
             cb({ success: true, data: item });
@@ -459,180 +319,120 @@
     }
 
     // ----------------------------------------------------------- loadStreams
-    /** Verify one candidate returns an HLS manifest / playable body. More lenient for geo-blocked hosts */
-    async function probe(streamUrl, referer) {
-        try {
-            var r = await req(streamUrl, hdr({ Accept: "*/*", Referer: referer, Range: "bytes=0-4096", Origin: site() }), 15000);
-            // Accept 200, 206, 302, 403, 429 as potentially playable (403/429 often work from residential IPs)
-            if (r.status === 403 || r.status === 429) {
-                // Cloudflare 403/429 from datacenter often works from user IP - mark as uncertain but ok
-                return { ok: false, status: r.status, maybeOk: true };
-            }
-            if (r.status !== 200 && r.status !== 206 && r.status !== 302) {
-                return { ok: false, status: r.status };
-            }
-            var head = String(r.body || "").replace(/^\uFEFF/, "").trimStart();
-            if (/^#EXTM3U/.test(head)) return { ok: true, kind: "hls" };
-            if (/^#EXT-X-STREAM-INF/.test(head)) return { ok: true, kind: "hls-master" };
-            if (head.length > 0) return { ok: true, kind: "data" };
-            return { ok: true, kind: "empty-but-ok" }; // Even empty 200 is better than nothing
-        } catch (e) {
-            return { ok: false, status: 0, error: String(e) };
+    /**
+     * Checks one decoded source with the same headers the player will send.
+     * ok      -> answered with an HLS playlist / media bytes
+     * dead    -> definitive failure (404/410/451/5xx, DNS error, HTML error page)
+     * unknown -> 401/403/429/timeout: often a datacenter/IP block that works on a phone
+     */
+    async function probe(streamUrl, headers) {
+        var r = await req(streamUrl, Object.assign({}, headers, { Accept: "*/*", Range: "bytes=0-2047" }), 9000);
+        if (r.status === 200 || r.status === 206) {
+            var head = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "");
+            if (/^#EXTM3U/.test(head)) return "ok";
+            if (/^<(!doctype|html|\?xml(?![\s\S]*<MPD))/i.test(head)) return /<MPD/i.test(head) ? "ok" : "dead";
+            return head.length ? "ok" : "unknown";
         }
+        if (r.status === 401 || r.status === 403 || r.status === 429 || r.status === 0) return r.error && /ENOTFOUND|getaddrinfo|Failed host lookup/i.test(r.error) ? "dead" : "unknown";
+        return "dead";
+    }
+
+    function langOf(label) {
+        var m = /\b(Hindi|English|Tamil|Telugu|Urdu|Malayalam|Bengali|Spanish|French)\b/i.exec(String(label || ""));
+        return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() : "";
+    }
+    function qualityRank(q) {
+        if (/4K/.test(q)) return 0;
+        var m = /(\d{3,4})p/.exec(q);
+        return m ? 3000 - parseInt(m[1], 10) : 2500;
+    }
+
+    /**
+     * The site's player endpoint aggregates ~10 upstream providers. A title nobody has
+     * opened recently takes ~20 s on the first call (longer than the app's 15 s HTTP
+     * timeout); the server keeps working and caches the answer, so the retry returns in
+     * well under a second. Hence: several short attempts, never one long one.
+     */
+    async function playerPlaylist(S, q) {
+        var url = S + "/api/player/vixsrc-playlist?" + q;
+        var h = { Accept: "application/json", Referer: S + "/", Origin: S };
+        for (var i = 0; i < 4; i++) {
+            var r = await req(url, hdr(h), 15000);
+            if (r.status === 200) {
+                try {
+                    var j = JSON.parse(r.body);
+                    if (j && j.playlist && j.playlist.length) return j;
+                } catch (e) { /* retry */ }
+            }
+            if (r.status === 404) return null;
+            await new Promise(function (ok) { setTimeout(ok, 2000); });
+        }
+        return null;
     }
 
     async function loadStreams(url, cb) {
         var ref = reference(url);
         if (!ref) return fail(cb, "BAD_URL", "Unrecognised 321movies URL: " + url);
         try {
-            var q = "type=" + ref.type + "&id=" + ref.id;
-            if (ref.type === "tv") {
-                var s = ref.season || 1, e = ref.episode || 1;
-                q += "&season=" + s + "&episode=" + e;
-            }
             var S = site();
-            var playerPage = S + "/" + ref.type + "/" + ref.id + (ref.type === "tv" ? "/" + (ref.season || 1) + "/" + (ref.episode || 1) : "") + "/player";
-            // This call is slow on purpose: the endpoint queries ~10 upstream providers
-            // (measured 8-40s). A 20s deadline reported a healthy API as "offline".
-            var payload = await jget(S + "/api/player/vixsrc-playlist?" + q, { Accept: "application/json", Referer: S + "/" }, 55000, 3);
-            var isOffline = false;
-            if (!payload) {
-                isOffline = true;
-                // Try alternative endpoints before failing
-                var altEndpoints = [
-                    "/api/player/playlist?" + q,
-                    "/api/player/sources?" + q,
-                    "/api/player/vixsrc?" + q,
-                    "/api/player/list?" + q
-                ];
-                for (var ai = 0; ai < altEndpoints.length; ai++) {
-                    try {
-                        var altPayload = await jget(S + altEndpoints[ai], { Accept: "application/json", Referer: S + "/" }, 20000, 2);
-                        if (altPayload && altPayload.playlist) {
-                            payload = altPayload;
-                            isOffline = false;
-                            break;
-                        }
-                    } catch (e) {}
-                }
-            }
-            // Always get fallback (20 sources) to match website
-            var fbCands = await fallbackStreams(ref);
-            // If primary failed, use fallback as payload, else merge both
-            if (!payload || isOffline || !payload.playlist || !payload.playlist.length) {
-                if (fbCands && fbCands.length) {
-                    var groups = [{ sources: [] }];
-                    for (var fi = 0; fi < fbCands.length; fi++) {
-                        groups[0].sources.push({
-                            file: fbCands[fi].url,
-                            label: fbCands[fi].label,
-                            provider: fbCands[fi].family,
-                            default: fbCands[fi].isDefault
-                        });
-                    }
-                    payload = { playlist: groups };
-                } else {
-                    return fail(cb, "PLAYER_OFFLINE", "321movies player API unreachable for this title (ID " + ref.id + "). Tried vixsrc-playlist and alts. Try again later.");
-                }
-            } else {
-                // Primary succeeded, also add fallback sources to cands later (merge)
-                // We'll merge after decoding
-            }
-            var groups = payload.playlist || [];
-            var seen = {};
-            var cands = [];
-            var encoded = 0;
-            for (var gi = 0; gi < groups.length; gi++) {
-                var srcs = groups[gi].sources || [];
-                for (var si = 0; si < srcs.length; si++) {
-                    var src = srcs[si];
+            var q = "type=" + ref.type + "&id=" + ref.id;
+            if (ref.type === "tv") q += "&season=" + (ref.season || 1) + "&episode=" + (ref.episode || 1);
+
+            var payload = await playerPlaylist(S, q);
+            if (!payload) return fail(cb, "PLAYER_OFFLINE", "321movies' player returned no sources for this title right now. Try again in a minute.");
+
+            var seen = {}, cands = [], encoded = 0;
+            (payload.playlist || []).forEach(function (g) {
+                (g.sources || []).forEach(function (src) {
                     if (typeof src.file === "string" && src.file.slice(0, 4) === "enc:") encoded++;
                     var real = decodeFile(src.file);
-                    if (!/^https?:\/\//i.test(real)) continue;
-                    if (seen[real]) continue;
+                    if (!/^https?:\/\//i.test(real) || seen[real]) return;
                     seen[real] = true;
                     var fam = familyOf(src.provider);
                     cands.push({
                         url: real, family: fam, label: String(src.label || ""),
-                        isDefault: src.default === true || src.default === "true",
                         rank: PREFERRED.indexOf(fam) < 0 ? 50 : PREFERRED.indexOf(fam),
                     });
-                }
-            }
-            // Merge with fallback generic embeds (20 sources) to match website's Select Source list
-            try {
-                var fbForMerge = await fallbackStreams(ref);
-                for (var fbi = 0; fbi < fbForMerge.length; fbi++) {
-                    var fbItem = fbForMerge[fbi];
-                    if (!fbItem || !fbItem.url) continue;
-                    // Avoid duplicates
-                    var dup = false;
-                    for (var di = 0; di < cands.length; di++) { if (cands[di].url === fbItem.url) { dup = true; break; } }
-                    if (!dup) cands.push(fbItem);
-                }
-            } catch (e) {}
-            if (!cands.length) {
-                return fail(cb, encoded ? "DECODE_FAILED" : "NO_SOURCES",
-                    encoded
-                        ? "Sources are obfuscated and none decoded - 321movies rotated its player key; update PLAYER_KEY in this plugin."
-                        : "321movies returned no playable sources for this title.");
-            }
-            cands.sort(function (a, b) {
-                return (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0) || a.rank - b.rank;
+                });
             });
+            if (!cands.length) {
+                return fail(cb, encoded ? "DECODE_FAILED" : "NO_SOURCES", encoded
+                    ? "321movies changed its source obfuscation key; the plugin needs an update."
+                    : "321movies returned no sources for this title.");
+            }
 
-            var headers = { Referer: playerPage, "User-Agent": UA, Origin: S, "Accept-Language": "en-US,en;q=0.9" };
-            // Return ALL streams from website without unverified label
-            // Website works because it uses residential IP, but our datacenter probe gets 403
-            // So we skip probing and return all decoded sources as verified (as website does)
-            var streams = [];
-            var seenLabel = {};
-            for (var ci = 0; ci < cands.length && streams.length < MAX_STREAMS; ci++) {
-                var c = cands[ci];
-                var key = c.family + "|" + c.label + "|" + c.url;
-                if (seenLabel[key]) continue;
-                seenLabel[key] = true;
-                var cap = c.family.charAt(0).toUpperCase() + c.family.slice(1);
-                var qual = qualityOf(c.label);
-                var strip = String(c.label || "")
-                    .replace(new RegExp("^" + cap + "\\b", "i"), "")
-                    .replace(/\bauto\b/ig, "")
-                    .replace(/[\s·]+$/g, "").replace(/^\s*·?\s*/g, "")
-                    .trim();
-                var name;
-                if (/^\d+$/.test(strip)) {
-                    name = cap + " " + strip;
-                } else {
-                    var parts = [cap];
-                    if (strip && strip.toLowerCase() !== cap.toLowerCase()) parts.push(strip);
-                    if (qual && !/auto/i.test(qual) && strip.toLowerCase().indexOf(qual.toLowerCase()) < 0) parts.push(qual);
-                    name = parts.join(" · ");
-                }
-                // All streams from website are returned as verified, no unverified label
-                streams.push(new StreamResult({
-                    url: c.url,
-                    source: c.isDefault ? name + " · default" : name,
-                    headers: headers,
-                }));
+            // The player's CDNs/proxies check the site's Referer/Origin (verified: 403 without, 200 with).
+            var headers = { "User-Agent": UA, Referer: S + "/", Origin: S };
+            var verdicts = await Promise.all(cands.map(function (c) { return probe(c.url, headers); }));
+
+            var ok = [], unknown = [];
+            cands.forEach(function (c, i) {
+                if (verdicts[i] === "ok") ok.push(c);
+                else if (verdicts[i] === "unknown") unknown.push(c);
+            });
+            var order = function (a, b) {
+                return (langOf(b.label) === "Hindi") - (langOf(a.label) === "Hindi") ||
+                    qualityRank(qualityOf(a.label)) - qualityRank(qualityOf(b.label)) || a.rank - b.rank;
+            };
+            ok.sort(order); unknown.sort(order);
+
+            var streams = [], names = {};
+            function add(c, unverified) {
+                if (streams.length >= MAX_STREAMS) return;
+                var fam = c.family.charAt(0).toUpperCase() + c.family.slice(1);
+                var label = c.label.replace(/\bauto\b/ig, "").replace(/\s*\|\s*/g, " · ").replace(/\s+/g, " ").trim() || fam;
+                var name = label + (unverified ? " (may not play)" : "");
+                var n = names[name] = (names[name] || 0) + 1;
+                if (n > 1) name += " #" + n;
+                streams.push(new StreamResult({ url: c.url, source: name, headers: headers }));
             }
-            // If we have more candidates than MAX_STREAMS, add remaining as extra (up to 20 total)
-            if (cands.length > streams.length) {
-                for (var ci2 = streams.length; ci2 < Math.min(cands.length, 20); ci2++) {
-                    var c2 = cands[ci2];
-                    var key2 = c2.family + "|" + c2.label + "|" + c2.url;
-                    if (seenLabel[key2]) continue;
-                    var cap2 = c2.family.charAt(0).toUpperCase() + c2.family.slice(1);
-                    streams.push(new StreamResult({
-                        url: c2.url,
-                        source: cap2 + " · " + (c2.label || "auto"),
-                        headers: headers
-                    }));
-                }
-            }
-            if (!streams.length) return fail(cb, "NO_STREAMS", "Every source failed to resolve.");
+            ok.forEach(function (c) { add(c, false); });
+            unknown.slice(0, Math.max(0, 6 - ok.length)).forEach(function (c) { add(c, true); });
+
+            if (!streams.length) return fail(cb, "NO_STREAMS", "All " + cands.length + " sources for this title are offline right now.");
             cb({ success: true, data: streams });
         } catch (err) {
-            fail(cb, "EXTRACTION_FAILED", (err && err.stack) || err);
+            fail(cb, "EXTRACTION_FAILED", String((err && err.message) || err));
         }
     }
 

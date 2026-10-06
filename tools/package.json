@@ -1,0 +1,12 @@
+{
+  "name": "tj-plugins-tools",
+  "private": true,
+  "type": "module",
+  "description": "App-accurate SkyStream test harness for TJ-Plugins",
+  "dependencies": {
+    "axios": "^1.13.6",
+    "esbuild": "^0.27.3",
+    "jsdom": "^25.0.1",
+    "unpacker": "^1.0.1"
+  }
+}
