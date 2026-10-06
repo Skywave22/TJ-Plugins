@@ -44,56 +44,10 @@
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    // For PK-specific sites (CineJoy), also include PK bypass
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        // Always ensure bypass IP present if not already set
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
 
-    // Built after mergeGeoHeaders/GEO_BYPASS_HEADERS exist: a top-level
-    // initializer that calls the helper before the consts are initialized
-    // throws "Cannot access 'GEO_BYPASS_HEADERS' before initialization" and
-    // kills the whole plugin at install time.
-    const JSON_HDR = mergeGeoHeaders({ "Content-Type": "application/json" }, false);
+    const JSON_HDR = { "Content-Type": "application/json" };
 
 
     // ────────────────── sha256 + hmac (pure JS) ──────────────────
@@ -186,7 +140,7 @@
     }
 
     async function apiGet(path) {
-        const r = await withTimeout(http_get(path.indexOf("http") === 0 ? path : API + path, Object.assign(mergeGeoHeaders({ "User-Agent": UA }, false), JSON_HDR)), 25000);
+        const r = await withTimeout(http_get(path.indexOf("http") === 0 ? path : API + path, Object.assign({ "User-Agent": UA }, JSON_HDR)), 25000);
         try { return JSON.parse((r && r.body) || "{}"); } catch (e) { return {}; }
     }
 
@@ -268,7 +222,7 @@
         try {
             if (!query || !String(query).trim()) return cb({ success: true, data: [] });
             const q = encodeURIComponent(String(query).trim()).replace(/%20/g, "+").replace(/%2F/g, "--slash--");
-            const r = await withTimeout(http_get(SEARCH + "/" + q + "?page=0", Object.assign(mergeGeoHeaders({ "User-Agent": UA }, false), JSON_HDR)), 25000);
+            const r = await withTimeout(http_get(SEARCH + "/" + q + "?page=0", Object.assign({ "User-Agent": UA }, JSON_HDR)), 25000);
             let j = {};
             try { j = JSON.parse((r && r.body) || "{}"); } catch (e) {}
             const results = (j && j.results) || [];
@@ -355,16 +309,22 @@
 
     // ─────────────────────────── streams ───────────────────────────
 
-    function pushStream(list, seen, label, u) {
+    // The MovieBox file CDN (*.hakunaymatata.com) only serves requests with a
+    // whitelisted Referer (anything else gets 429) - NetMirror's own browser
+    // extension does exactly this: Referer: https://movieboxonline.net/ for
+    // every hakunaymatata URL. Cloud/datacenter IPs get 426 regardless.
+    function streamHeaders(u) {
+        if (/hakunaymatata\.com|aoneroom\.com/i.test(u)) return { "User-Agent": UA, "Referer": "https://movieboxonline.net/" };
+        return { "User-Agent": UA };
+    }
+
+    function pushStream(list, seen, label, u, subs) {
         if (!u || seen[u]) return;
         seen[u] = 1;
         if (list.length >= 8) return;
-        list.push(mkStream({
-            url: u,
-            source: label,
-            headers: { "User-Agent": UA },
-            isDirect: true
-        }));
+        const o = { url: u, source: label, headers: streamHeaders(u) };
+        if (subs && subs.length) o.subtitles = subs;
+        list.push(mkStream(o));
     }
 
     // pull direct links out of a player page
@@ -372,7 +332,9 @@
         const out = [];
         const seen = {};
         // labeled qualities: html:'480P', url:'https://...'
-        const qr = /html\s*:\s*['"]([^'"]{2,12})['"][^}]{0,120}?url\s*:\s*['"](https?:\/\/[^'"]+)['"]/g;
+        // [^{}] keeps label and url inside the same { … } entry (the menu header
+        // "html:'1080p', selector:[{ html:'360P', url:… }]" must not pair up).
+        const qr = /html\s*:\s*['"]([^'"]{2,12})['"][^{}]{0,120}?url\s*:\s*['"](https?:\/\/[^'"]+)['"]/g;
         let m;
         while ((m = qr.exec(html))) {
             const label = m[1];
@@ -392,7 +354,25 @@
                 out.push({ label: "Stream", url: u });
             }
         }
+        out.subs = parseSubtitles(html);
         return out;
+    }
+
+    // Artplayer subtitle selector: { html: 'English', url: ('https://cacdn…srt?…') }
+    const SUB_LANGS = { english: "en", hindi: "hi", arabic: "ar", french: "fr", spanish: "es", indonesian: "id",
+        portuguese: "pt", russian: "ru", turkish: "tr", urdu: "ur", tamil: "ta", telugu: "te", bengali: "bn",
+        malay: "ms", chinese: "zh", korean: "ko", japanese: "ja", german: "de", italian: "it", thai: "th", vietnamese: "vi" };
+    function parseSubtitles(html) {
+        const subs = [], seen = {};
+        const re = /html\s*:\s*['"]([^'"]{2,30})['"]\s*,\s*url\s*:\s*\(?\s*['"](https?:\/\/[^'"]+?\.(?:srt|vtt)(?:\?[^'"]*)?)['"]/g;
+        let m;
+        while ((m = re.exec(html))) {
+            if (seen[m[2]]) continue;
+            seen[m[2]] = 1;
+            const label = m[1].trim();
+            subs.push({ url: m[2], label: label, lang: SUB_LANGS[label.toLowerCase().split(/[\s(]/)[0]] || label.slice(0, 2).toLowerCase() });
+        }
+        return subs;
     }
 
     // All play-page mirrors (the app's "Server 1..6"): same backends, try
@@ -424,6 +404,59 @@
             } catch (e) {}
         }
         return [];
+    }
+
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/426/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) {
+            const err = String(r.error || "");
+            // The app refuses bodies over 8 MB (it hangs up on the Content-Length):
+            // a server that ignores Range and sends a huge body is serving the file.
+            if (/too ?large|exceed/i.test(err)) return "ok";
+            return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(err) ? "dead" : "unknown";
+        }
+        if (st === 401 || st === 403 || st === 426 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        const out = ok.concat(keep), count = {}, idx = {};
+        out.forEach(function (s) { const k = String(s.source || "Stream"); count[k] = (count[k] || 0) + 1; });
+        out.forEach(function (s) {
+            const k = String(s.source || "Stream");
+            if (count[k] > 1) { idx[k] = (idx[k] || 0) + 1; s.source = k + " #" + idx[k]; }
+        });
+        return out;
     }
 
     async function loadStreams(url, cb) {
@@ -490,18 +523,26 @@
             // rate-limits PER IP — fewer listed links = fewer client probes =
             // far less likely to trip the 429 window. Same host anyway.
             const top0 = both[0].slice(0, 3), top1 = both[1].slice(0, 3);
+            const subs = [].concat(both[0].subs || [], both[1].subs || []).filter(function (x, i, a) {
+                return a.findIndex(function (y) { return y.url === x.url; }) === i;
+            });
+            const candidates = [];
             for (let i = 0; i < top0.length; i++) {
-                pushStream(streams, seen, "NM Direct - " + normLabel(top0[i].label), top0[i].url);
+                pushStream(candidates, seen, "NM Direct - " + normLabel(top0[i].label), top0[i].url, subs);
             }
             for (let i = 0; i < top1.length; i++) {
-                pushStream(streams, seen, "NM Hub - " + normLabel(top1[i].label), top1[i].url);
+                pushStream(candidates, seen, "NM Hub - " + normLabel(top1[i].label), top1[i].url, subs);
             }
+            // Probe before listing: expired/removed files (404) are dropped,
+            // blocked ones are kept but marked.
+            const verified = candidates.length ? await verifyStreams(candidates, 4) : [];
+            for (let i = 0; i < verified.length; i++) streams.push(verified[i]);
 
             if (!streams.length) {
                 return cb({
                     success: false,
                     errorCode: "NO_STREAMS",
-                    message: "No playable source right now — the player link may have expired. Try again."
+                    message: "NetMirror has no working file for this title right now (its file was removed or every server refused it). Try another title or episode."
                 });
             }
             cb({ success: true, data: streams });

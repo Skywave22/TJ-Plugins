@@ -1,11 +1,11 @@
 {
   "packageName": "com.netmirror.skystream",
   "name": "NetMirror",
-  "version": 6,
+  "version": 7,
   "baseUrl": "https://netmirror.center",
-  "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime & Reality TV, heavy on Hindi content. Signed direct-file servers per title/episode (R2 + quality-labeled MP4s, up to 1080p). v6: fixed the install-time crash (a header constant called the geo helper before its constants existed) and the site domain now follows the selected mirror. v5: rate-limit friendly (top-3 links per server).",
+  "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime and Reality TV, heavy on Hindi content. Direct files per title/episode (up to 1080p) with English subtitles where available. Every link is checked before it is shown; working links come first.",
   "authors": [
-    "TJ Plugins"
+    "TJ-Plugins"
   ],
   "languages": [
     "en",

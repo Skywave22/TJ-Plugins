@@ -1,7 +1,7 @@
     // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
     // Each candidate is requested once, with the exact headers the player will send.
     //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
-    //   unknown -> 401/403/429/timeout (often an IP/region block that works on a phone)
+    //   unknown -> 401/403/426/429/timeout (often an IP/region block that works on a phone)
     //              -> kept after the verified ones, labelled "(may not play)"
     //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
     function __tjDeadline(promise, ms) {
@@ -30,7 +30,7 @@
             if (/too ?large|exceed/i.test(err)) return "ok";
             return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(err) ? "dead" : "unknown";
         }
-        if (st === 401 || st === 403 || st === 429) return "unknown";
+        if (st === 401 || st === 403 || st === 426 || st === 429) return "unknown";
         return "dead";
     }
     async function verifyStreams(list, maxUnverified) {
