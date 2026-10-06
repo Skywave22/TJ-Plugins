@@ -29,47 +29,9 @@
 
     var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
+    function mergeGeoHeaders(base) { return Object.assign({}, base || {}); }
 
     var PLACEHOLDER = 'https://placehold.co/400x600.png?text=FMoviess';
 
@@ -427,25 +389,6 @@
         return std[h] ? std[h] : (h + 'p');
     }
 
-    function b64(str) {
-        try { return btoa(unescape(encodeURIComponent(str))); } catch (_) { return null; }
-    }
-
-    // netrocdn direct URLs geo-block some regions — the sparkvid Cloudflare
-    // worker proxies the same path as /cdn/{base64(path)}.js?query
-    function toProxyUrl(u) {
-        try {
-            var qi = u.indexOf('?');
-            if (qi < 0) return null;
-            var path = u.slice(0, qi), q = u.slice(qi + 1);
-            if (path.indexOf('workers.dev') >= 0) return null; // already the proxy
-            var noHost = path.replace(/^https?:\/\/[^/]+/, '');
-            if (!noHost || noHost.charAt(0) !== '/') noHost = '/' + noHost;
-            var enc = b64(noHost);
-            if (!enc) return null;
-            return 'https://cdn-proxy.sparkvid.workers.dev/cdn/' + enc + '.js?' + q;
-        } catch (_) { return null; }
-    }
 
     // ── Server A: moviesapi.to "vidora" (direct HLS + subtitles) ──
     async function vidoraStreams(kind, tmdbId, season, episode) {
@@ -485,7 +428,7 @@
             subtitles: subs.length ? subs : undefined
         })];
 
-        // split master into per-quality options, each in direct + CF-proxy form
+        // split master into per-quality options
         try {
             var body2 = await getText(master, { 'Referer': PLAYER_REFERER });
             var lines = body2.split('\n');
@@ -510,15 +453,6 @@
                         headers: headers,
                         subtitles: subs.length ? subs : undefined
                     }));
-                    var proxied = toProxyUrl(next);
-                    if (proxied) {
-                        streams.push(mkStream({
-                            url: proxied,
-                            quality: 'MoviesAPI • ' + q + ' • CF',
-                            headers: headers,
-                            subtitles: subs.length ? subs : undefined
-                        }));
-                    }
                 }
             }
         } catch (_) { /* master unreadable — Auto option above still stands */ }
@@ -585,6 +519,96 @@
         return streams;
     }
 
+    // ── Server C: api.vidlove.cc (backup for titles MoviesAPI has not encoded) ──
+    //  /{movie?id=|tv?id=&season=&episode=}&mode=json[&sources=x]
+    //    -> { source:{label,url,manifest}, subtitles:[{label,file}] }
+    var VLA = 'https://api.vidlove.cc';
+    var VL_REF = 'https://player.vidlove.cc/';
+    function vlQuality(manifest) {
+        var h = 0, m, re = /RESOLUTION=\d+x(\d+)/g;
+        while ((m = re.exec(String(manifest || '')))) h = Math.max(h, parseInt(m[1], 10));
+        return h >= 2160 ? '4K' : h >= 1080 ? '1080p' : h >= 720 ? '720p' : h >= 480 ? '480p' : h ? h + 'p' : 'Auto';
+    }
+    async function vidloveStreams(kind, tmdbId, season, episode) {
+        var base = kind === 'tv'
+            ? VLA + '/tv?id=' + tmdbId + '&season=' + season + '&episode=' + episode + '&mode=json'
+            : VLA + '/movie?id=' + tmdbId + '&mode=json';
+        var variants = ['', '&sources=moviebox', '&sources=warden'];
+        var results = await Promise.all(variants.map(function (v) {
+            return getJson(base + v, { 'Referer': VL_REF, 'Accept': 'application/json' }).then(
+                function (j) { return j; }, function () { return null; });
+        }));
+        var out = [], seen = {}, subs = null;
+        results.forEach(function (j) {
+            if (!j || !j.source || !/^https?:\/\//.test(String(j.source.url || ''))) return;
+            var u = String(j.source.url);
+            if (seen[u]) return;
+            seen[u] = 1;
+            if (!subs && Array.isArray(j.subtitles)) {
+                subs = j.subtitles.filter(function (t) { return t && t.file; })
+                    .map(function (t) { return { url: String(t.file), label: String(t.label || 'Subtitle'), lang: String(t.label || 'und') }; })
+                    .sort(function (a, b) { return (/^english/i.test(b.label) ? 1 : 0) - (/^english/i.test(a.label) ? 1 : 0); })
+                    .slice(0, 20);
+            }
+            out.push({ u: u, label: String(j.source.label || 'Backup'), q: vlQuality(j.source.manifest) });
+        });
+        return out.map(function (x) {
+            return mkStream({
+                url: x.u,
+                quality: 'Backup • ' + x.label + ' • ' + x.q,
+                headers: { 'Referer': VL_REF, 'Origin': VL_REF.slice(0, -1), 'User-Agent': UA },
+                subtitles: subs && subs.length ? subs : undefined
+            });
+        });
+    }
+
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(String(r.error || "")) ? "dead" : "unknown";
+        if (st === 401 || st === 403 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        const out = ok.concat(keep), count = {}, idx = {};
+        out.forEach(function (s) { const k = String(s.source || "Stream"); count[k] = (count[k] || 0) + 1; });
+        out.forEach(function (s) {
+            const k = String(s.source || "Stream");
+            if (count[k] > 1) { idx[k] = (idx[k] || 0) + 1; s.source = k + " #" + idx[k]; }
+        });
+        return out;
+    }
+
     async function loadStreams(url, cb) {
         try {
             var p = parseItemUrl(url);
@@ -604,10 +628,13 @@
                 vidoraStreams(kind, p.tmdbId, season, episode).then(
                     function (v) { return v; }, function () { return []; }),
                 vixsrcStreams(kind, p.tmdbId, season, episode).then(
+                    function (v) { return v; }, function () { return []; }),
+                vidloveStreams(kind, p.tmdbId, season, episode).then(
                     function (v) { return v; }, function () { return []; })
             ]);
 
-            var streams = both[0].concat(both[1]);
+            var streams = both[0].concat(both[1], both[2]);
+            if (streams.length) streams = await verifyStreams(streams, 4);
 
             if (!streams.length) {
                 return cb({ success: false, errorCode: 'NO_STREAMS',

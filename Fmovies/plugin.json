@@ -1,7 +1,7 @@
 {
   "packageName": "com.fmoviess.skystream",
   "name": "FMoviess",
-  "version": 3,
+  "version": 4,
   "baseUrl": "https://fmoviess.tv",
   "domains": [
     {
@@ -9,9 +9,9 @@
       "url": "https://fmoviess.tv"
     }
   ],
-  "description": "FMoviess - Watch HD Movies & TV Shows. Multi-server streams (MoviesAPI + VixSrc), multi-quality HLS with subtitles, Latest Updated section",
+  "description": "FMoviess (fmoviess.tv) — HD movies & TV shows with Trending / Latest rows. MoviesAPI multi-quality HLS with subtitles, plus a VidAPI/MovieBox backup for titles MoviesAPI lacks (and VixSrc where reachable). Every link is checked before it is shown.",
   "authors": [
-    "TJ Plugins"
+    "TJ-Plugins"
   ],
   "languages": [
     "en"
