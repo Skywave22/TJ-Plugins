@@ -47,50 +47,9 @@
 
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    // For PK-specific sites (CineJoy), also include PK bypass
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        // Always ensure bypass IP present if not already set
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
+    function mergeGeoHeaders(base) { return Object.assign({}, base || {}); }
 
 
     // ─────────────────────────── helpers ───────────────────────────
@@ -118,16 +77,37 @@
     }
 
     async function getText(url, headers) {
-        const r = await withTimeout(http_get(url, Object.assign({}, GEO_BYPASS_HEADERS, { "User-Agent": UA }, headers || {})), 20000);
+        const r = await withTimeout(http_get(url, Object.assign({ "User-Agent": UA }, headers || {})), 20000);
         return (r && r.body) || "";
     }
 
     function stripTags(s) {
-        return String(s || "").replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&#8211;|&ndash;/g, "–").replace(/&#038;|&amp;/g, "&").replace(/&#8220;|&ldquo;/g, '"').replace(/&#8221;|&rdquo;/g, '"').replace(/&#8217;|&rsquo;/g, "'").replace(/&quot;/g, '"').replace(/&#\d+;/g, "").trim();
+        return String(s || "").replace(/<[^>]*>/g, "")
+            .replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(parseInt(n, 10)); })
+            .replace(/&#x([0-9a-f]+);/gi, function (_, n) { return String.fromCharCode(parseInt(n, 16)); })
+            .replace(/&ndash;/g, "–").replace(/&ldquo;|&rdquo;|&quot;/g, '"').replace(/&rsquo;|&lsquo;/g, "'")
+            .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
     }
 
-    function cleanTitle(t) {
-        return stripTags(t).replace(/\s*[–-]\s*Complete All Episodes.*$/i, "").replace(/\s*\|\s*[^|]*$/i, "").replace(/\s*[–-]\s*KDramas Maza\s*$/i, "").trim();
+    // "City of Romance [Chinese Drama] in Urdu Hindi Dubbed – Episode 06 Added – KDramas Maza"
+    //   -> { name: "City of Romance", tag: "Chinese Drama", note: "Episode 06 Added" }
+    function parseTitle(t) {
+        let x = stripTags(t).replace(/(\s*[–|-]\s*KDramas? Maza)+\s*$/i, "");
+        let note = "";
+        const nm = x.match(/\s*[–-]\s*((?:Complete\s+)?(?:All\s+)?Episodes?\b[^–]*?Added|Episode[^–]*Added)\s*$/i);
+        if (nm) { note = nm[1].trim(); x = x.slice(0, nm.index); }
+        let tag = "";
+        const tm = x.match(/\[([^\]]+)\]/);
+        if (tm) { tag = tm[1].trim(); x = x.replace(tm[0], " "); }
+        x = x.replace(/\b(?:in\s+)?(?:urdu|hindi)(?:\s*[\/&-]?\s*(?:urdu|hindi))?\s*(?:dubbed|dub)?\b/gi, " ")
+             .replace(/\s+/g, " ").replace(/[\s–:-]+$/, "").trim();
+        return { name: x || stripTags(t), tag: tag, note: note };
+    }
+
+    function cleanTitle(t) { return parseTitle(t).name; }
+
+    function metaLine(pt) {
+        return [pt.tag, "Hindi/Urdu dubbed", pt.note].filter(Boolean).join(" · ");
     }
 
     function yearOf(d) {
@@ -147,7 +127,7 @@
             bannerUrl: thumb,
             type: "tv",
             year: yearOf(p.date),
-            description: stripTags(p.excerpt && p.excerpt.rendered).slice(0, 300)
+            description: [metaLine(parseTitle(p.title && p.title.rendered)), stripTags(p.excerpt && p.excerpt.rendered).slice(0, 300)].filter(Boolean).join("\n\n")
         });
     }
 
@@ -345,12 +325,14 @@
             const html = await getText(link, { "Referer": SITE + "/" });
             if (!html) return cb({ success: false, errorCode: "NOT_FOUND", message: "Drama page unavailable" });
 
-            const title = cleanTitle((html.match(/<title>([^<]*)<\/title>/) || [])[1] ||
-                                     (html.match(/property=["']og:title["']\s+content=["']([^"']+)["']/) || [])[1] || "Drama");
+            const pt = parseTitle((html.match(/<title>([^<]*)<\/title>/) || [])[1] ||
+                                  (html.match(/property=["']og:title["']\s+content=["']([^"']+)["']/) || [])[1] || "Drama");
+            const title = pt.name;
             const poster = ((html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/) || [])[1] || "").replace(/&amp;/g, "&");
             // description: first paragraphs of entry-content before the "Title:" infobox
-            let desc = "";
-            const ec = html.indexOf("entry-content");
+            let desc = stripTags((html.match(/property=["']og:description["']\s+content=["']([^"']*)["']/) ||
+                                  html.match(/name=["']description["']\s+content=["']([^"']*)["']/) || [])[1] || "");
+            const ec = desc ? -1 : html.indexOf("entry-content");
             if (ec > 0) {
                 const seg = html.slice(ec, ec + 6000);
                 const paras = seg.match(/<p>([\s\S]*?)<\/p>/g) || [];
@@ -385,7 +367,7 @@
                 bannerUrl: poster,
                 type: "tv",
                 year: yearOf((html.match(/datePublished["']?\s*[:=]\s*["'](\d{4})/) || [])[1]),
-                description: desc,
+                description: [desc, metaLine(pt)].filter(Boolean).join("\n\n"),
                 episodes: episodes
             });
             cb({ success: true, data: item });
@@ -395,6 +377,53 @@
     }
 
     // ─────────────────────── streams ───────────────────────────────
+
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(String(r.error || "")) ? "dead" : "unknown";
+        if (st === 401 || st === 403 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        const out = ok.concat(keep), count = {}, idx = {};
+        out.forEach(function (s) { const k = String(s.source || "Stream"); count[k] = (count[k] || 0) + 1; });
+        out.forEach(function (s) {
+            const k = String(s.source || "Stream");
+            if (count[k] > 1) { idx[k] = (idx[k] || 0) + 1; s.source = k + " #" + idx[k]; }
+        });
+        return out;
+    }
 
     async function loadStreams(url, cb) {
         try {
@@ -424,8 +453,7 @@
                     url: u,
                     source: label + (q ? " - " + q : ""),
                     quality: q || "auto",
-                    headers: { "User-Agent": UA },
-                    isDirect: true
+                    headers: { "User-Agent": UA }
                 }));
             }
             // order: HubCloud, GDFlix instant (fastest direct), GDFlix direct
@@ -452,7 +480,11 @@
                     message: "Could not resolve a direct file for this episode right now - try again or pick another episode."
                 });
             }
-            cb({ success: true, data: streams });
+            const verified = await verifyStreams(streams, 3);
+            if (!verified.length) {
+                return cb({ success: false, errorCode: "NO_STREAMS", message: "This episode's file servers are offline right now - try again later or pick another episode." });
+            }
+            cb({ success: true, data: verified });
         } catch (e) {
             cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
         }

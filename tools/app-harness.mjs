@@ -109,6 +109,42 @@ function normHeaders(h, url) {
 }
 const short = (u) => String(u).length > 90 ? String(u).slice(0, 87) + "..." : String(u);
 
+// --curl <regex|all>: send matching requests through curl instead of axios.
+// Cloudflare challenges Node's TLS fingerprint on some hosts (gdflix, vixsrc…)
+// that curl — and the app's Dart client — pass, so this keeps tests honest.
+const CURL_RE = (() => { const v = opt("--curl", ""); return v ? (v === "all" ? /./ : new RegExp(v, "i")) : null; })();
+async function curlHttp(method, url, headers, body) {
+  const { spawn } = await import("node:child_process");
+  const os = await import("node:os");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hc-"));
+  const hf = path.join(tmp, "h"), bf = path.join(tmp, "b");
+  const args = ["-s", "-L", "--max-redirs", "10", "-m", "15", "-X", method, "-D", hf, "-o", bf, "-w", "%{http_code} %{url_effective}", "--max-filesize", String(MAX_BODY)];
+  for (const [k, v] of Object.entries(headers)) args.push("-H", `${k}: ${v}`);
+  if (body != null) args.push("--data-binary", "@-");
+  args.push(url);
+  const out = await new Promise((resolve) => {
+    const p = spawn("curl", args); let o = "";
+    p.stdout.on("data", (d) => (o += d));
+    p.on("close", (code) => resolve({ code, o }));
+    if (body != null) p.stdin.end(String(body)); else p.stdin.end();
+  });
+  const [st, ...fu] = out.o.trim().split(" ");
+  const status = parseInt(st, 10) || 0;
+  const resBody = fs.existsSync(bf) ? fs.readFileSync(bf, "utf8") : "";
+  const rh = {};
+  if (fs.existsSync(hf)) {
+    const blocks = fs.readFileSync(hf, "utf8").trim().split(/\r?\n\r?\n/);
+    for (const line of (blocks[blocks.length - 1] || "").split(/\r?\n/).slice(1)) {
+      const i = line.indexOf(":"); if (i < 0) continue;
+      const k = line.slice(0, i).trim().toLowerCase(), v = line.slice(i + 1).trim();
+      if (k === "set-cookie") (rh[k] = rh[k] || []).push(v); else rh[k] = v;
+    }
+  }
+  fs.rmSync(tmp, { recursive: true, force: true });
+  if (!status) throw new Error("curl exit " + out.code);
+  return { status, body: resBody, headers: rh, finalUrl: fu.join(" ") || url };
+}
+
 async function doHttp(req) {
   const method = req.method || "GET";
   const url = req.url;
@@ -119,6 +155,12 @@ async function doHttp(req) {
   const t0 = Date.now();
   try {
     if (typeof url !== "string" || !/^https?:\/\//i.test(url)) throw new Error("Invalid URL: " + url);
+    if (CURL_RE && CURL_RE.test(url)) {
+      const r = await curlHttp(method, url, headers, req.body ?? null);
+      httpLog.push({ method, url, status: r.status, ms: Date.now() - t0, len: r.body.length });
+      if (!QUIET_HTTP) console.log(C.d(`  [HTTP] ${method} ${r.status} ${Date.now() - t0}ms (curl) ${short(url)}`));
+      return { code: r.status, statusCode: r.status, status: r.status, body: r.body, headers: r.headers, finalUrl: r.finalUrl };
+    }
     const res = await axios.request({
       url, method, headers, data: req.body ?? undefined, responseType: "arraybuffer", decompress: true,
       timeout: 15000, maxContentLength: MAX_BODY, maxRedirects: 10, validateStatus: () => true,
