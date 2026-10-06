@@ -1,7 +1,7 @@
 {
   "packageName": "com.katmoviehd.skystream",
   "name": "KatMovieHD",
-  "version": 10,
+  "version": 11,
   "baseUrl": "https://new.katmoviehd.top",
   "domains": [
     {
@@ -25,9 +25,9 @@
       "url": "https://katworld.net"
     }
   ],
-  "description": "KatMovieHD v9 - Fix Idiots 2026 + season merge: Idiots had 1xPlayer+GoFile not KMHD, now parsed. MobLand S1/S2 merged into 12 eps with Season tabs. All titles now have streams via StreamTape/HubCloud/StreamWish+GDFlix fallback+1xPlayer/GoFile for CAMRip. Geo bypass.",
+  "description": "KatMovieHD — Hollywood & web series in Hindi dubbed / dual audio. Movies in every posted quality (StreamTape, HubCloud, GDFlix Instant / Drive), series with full episode lists and other seasons merged in. Links are checked before they are shown.",
   "authors": [
-    "TJ Plugins"
+    "TJ-Plugins"
   ],
   "languages": [
     "hi",

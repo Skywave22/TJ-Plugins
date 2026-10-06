@@ -22,50 +22,9 @@
 
     var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-    // ── Universal Geo Bypass (no personal IP, public DNS) ──
-    // Uses public DNS IPs (8.8.8.8 Google, 1.1.1.1 Cloudflare) to avoid personal IP exposure
-    // Bypasses all geo restrictions (US, IN, PK, UK, etc) via CF-IPCountry and X-Forwarded-For spoofing
-    const GEO_BYPASS_IP = "8.8.8.8";
-    const GEO_BYPASS_IP2 = "1.1.1.1";
-    const GEO_BYPASS_COUNTRY = "US";
-    const GEO_BYPASS_HEADERS = {
-        "X-Forwarded-For": GEO_BYPASS_IP,
-        "X-Real-IP": GEO_BYPASS_IP,
-        "X-Client-IP": GEO_BYPASS_IP,
-        "CF-Connecting-IP": GEO_BYPASS_IP,
-        "True-Client-IP": GEO_BYPASS_IP,
-        "CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Country": GEO_BYPASS_COUNTRY,
-        "cf-ipcountry": GEO_BYPASS_COUNTRY,
-        "X-CF-IPCountry": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Country": GEO_BYPASS_COUNTRY,
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7,hi;q=0.6,ur;q=0.5,es;q=0.4"
-    };
-    // For PK-specific sites (CineJoy), also include PK bypass
-    const PK_GEO_IP = "39.33.116.25";
-    const PK_GEO_HEADERS = {
-        "X-Forwarded-For": PK_GEO_IP,
-        "X-Real-IP": PK_GEO_IP,
-        "X-Client-IP": PK_GEO_IP,
-        "CF-Connecting-IP": PK_GEO_IP,
-        "CF-IPCountry": "PK",
-        "X-Country": "PK",
-        "cf-ipcountry": "PK",
-        "X-CF-IPCountry": "PK",
-        "X-Forwarded-Country": "PK",
-        "Accept-Language": "en-PK,en;q=0.9,ur-PK;q=0.8,en-US;q=0.7"
-    };
-    function mergeGeoHeaders(base, isPK) {
-        const geo = isPK ? PK_GEO_HEADERS : GEO_BYPASS_HEADERS;
-        const out = Object.assign({}, base || {});
-        for (const k in geo) { if (!(k in out)) out[k] = geo[k]; }
-        // Always ensure bypass IP present if not already set
-        if (!out["X-Forwarded-For"]) out["X-Forwarded-For"] = geo["X-Forwarded-For"];
-        if (!out["CF-IPCountry"]) out["CF-IPCountry"] = geo["CF-IPCountry"];
-        return out;
-    }
+    // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
+    // don't change the caller's location, and Cloudflare answers them with HTTP 403.
+    function mergeGeoHeaders(base) { return Object.assign({}, base || {}); }
 
     var PLACEHOLDER = 'https://placehold.co/400x600.png?text=KatMovieHD';
 
@@ -76,16 +35,11 @@
     // Working hosts: StreamTape, StreamWish, HubCloud, GDFlix (GDFlix kept as fallback for titles that only have GDFlix)
     var TOUCHME_CODES = ['streamtape_res', 'streamwish_res', 'hubdrive_res', 'gdflix_res'];
     var PRIORITY_CODES = ['streamtape_res', 'streamwish_res', 'hubdrive_res']; // user requested these 3
-    // Geo bypass headers
-    var GEO_HEADERS = Object.assign({}, GEO_BYPASS_HEADERS, {
-        'X-Forwarded-For': GEO_BYPASS_IP,
-        'X-Real-IP': GEO_BYPASS_IP,
-        'CF-IPCountry': 'US',
+    // Common request headers (no spoofed IP/country headers — Cloudflare 403s them)
+    var GEO_HEADERS = Object.assign({}, {
         'Accept-Language': 'en-US,en;q=0.9,en-IN;q=0.8,en-PK;q=0.7',
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
-        'X-Country': 'US',
-        'cf-ipcountry': 'US'
     });
 
     var ROWS = [
@@ -117,8 +71,6 @@
             'Referer': SITE + '/',
             'Accept-Language': GEO_HEADERS['Accept-Language'],
             'Cache-Control': GEO_HEADERS['Cache-Control'],
-            'X-Forwarded-For': GEO_HEADERS['X-Forwarded-For'],
-            'CF-IPCountry': GEO_HEADERS['CF-IPCountry']
         };
         if (extraHeaders) Object.keys(extraHeaders).forEach(function (k) { h[k] = extraHeaders[k]; });
         var res = await http_get(url, h);
@@ -468,7 +420,22 @@
             var iu2 = String(res[0].url || '').replace(/&amp;/g, '&');
             if (!res[0].error && iu2.indexOf('http') === 0) instant.push(iu2);
             var u2 = String(res[1].url || '').replace(/&amp;/g, '&');
-            if (!res[1].error && u2.indexOf('http') === 0) direct.push(u2);
+            if (!res[1].error && u2.indexOf('http') === 0) {
+                // drive.google.com/open?id=X is a page; unwrap it through the
+                // usercontent confirm form into a direct (ranged) file URL.
+                var gid = (u2.match(/[?&]id=([A-Za-z0-9_-]{10,})/) || [])[1];
+                if (/drive\.google\.com/.test(u2) && gid) {
+                    try {
+                        var chtml = await withTimeout(getText('https://drive.usercontent.google.com/download?id=' + gid + '&export=download', { 'Referer': 'https://drive.google.com/' }), 10000);
+                        var action = (chtml.match(/action="([^"]+)"/) || [])[1] || '';
+                        var fields = [], fr = /name="([^"]+)"\s+value="([^"]*)"/g, fm;
+                        while ((fm = fr.exec(chtml))) fields.push(fm[1] + '=' + encodeURIComponent(fm[2]));
+                        if (action && fields.length) direct.push(action + '?' + fields.join('&'));
+                    } catch (_) {}
+                } else {
+                    direct.push(u2);
+                }
+            }
         } catch (_) {}
         return { instant: instant, urls: direct, r2: direct };
     }
@@ -504,8 +471,6 @@
                 'Origin': KMHD,
                 'Accept': 'application/json',
                 'Accept-Language': GEO_HEADERS['Accept-Language'],
-                'X-Forwarded-For': GEO_HEADERS['X-Forwarded-For'],
-                'CF-IPCountry': GEO_HEADERS['CF-IPCountry'],
                 'Cache-Control': 'no-cache'
             }, ''), 10000);
             var body = (res && res.body) || '';
@@ -580,13 +545,30 @@
         }
     }
 
+    // The site's search is a literal substring match ("spider man" misses
+    // "Spider-Man"), so query a few spellings at once and keep titles that
+    // contain every word of the query, ignoring punctuation.
     async function search(query, cb) {
         try {
             var q = String(query || '').trim();
             if (!q) return cb({ success: true, data: [] });
-            var url = SITE + '/__data.json?x-sveltekit-invalidated=01&q=' + encodeURIComponent(q) + '&page=1';
-            var data = await fetchSvelteItems(url);
-            var items = (data.items || []).map(postToItemFromSvelte).filter(Boolean);
+            var words = normWords(q);
+            var longest = words.slice().sort(function (a, b) { return b.length - a.length; })[0] || q;
+            var variants = [q, words.join('-'), longest].filter(function (v, i, arr) { return v && arr.indexOf(v) === i; });
+            var pages = await Promise.all(variants.map(function (v) {
+                return fetchSvelteItems(SITE + '/__data.json?x-sveltekit-invalidated=01&q=' + encodeURIComponent(v) + '&page=1')
+                    .then(function (d) { return d.items || []; }, function () { return []; });
+            }));
+            var seen = {}, all = [];
+            pages.forEach(function (list) {
+                list.forEach(function (it) { if (it && it.slug && !seen[it.slug]) { seen[it.slug] = 1; all.push(it); } });
+            });
+            var matching = all.filter(function (it) {
+                var t = ' ' + normWords(it.post_title || it.slug).join(' ') + ' ';
+                var tj = t.replace(/ /g, '');
+                return words.every(function (w) { return t.indexOf(' ' + w) >= 0 || tj.indexOf(w) >= 0; });
+            });
+            var items = (matching.length ? matching : all).map(postToItemFromSvelte).filter(Boolean);
             cb({ success: true, data: items });
         } catch (e) {
             cb({ success: false, errorCode: 'ERROR', message: String((e && e.message) || e) });
@@ -594,446 +576,302 @@
     }
 
     // ───────── load ─────────
-    function parseItemUrl(url) {
-        var m = String(url || '').match(/\/([^\/\?#]+)\/?(?:\?(.*))?$/);
-        if (!m) return null;
-        var slug = m[1];
-        var query = m[2] || '';
-        var mode = null, arg = null;
-        var pm = query.match(/play=([A-Za-z0-9_-]+)/); if (pm) { mode = 'play'; arg = pm[1]; }
-        var fm = query.match(/dl=([A-Za-z0-9_-]+)/); if (fm) { mode = 'dl'; arg = fm[1]; }
-        if (String(url).indexOf('gdflix.dev/file/') >= 0 || String(url).indexOf('gd.kmhd.eu/file/') >= 0 || String(url).indexOf('new4.gdflix.io/file/') >= 0) {
-            return { slug: slug, mode: 'gdflix', arg: url };
+    // Item url:     SITE/<slug>
+    // Episode url:  SITE/<slug>#<json>  where json = { p: playId, k: fileKey, f: [[fileId, label], ...] }
+    //   p/k  -> links.kmhd.me play entry (StreamTape code + touchme mirrors of that file)
+    //   f    -> quality files from the post's /file/ links (touchme -> HubCloud / GDFlix / StreamTape)
+    function splitUrl(url) {
+        var s = String(url || '');
+        var hash = '';
+        var hi = s.indexOf('#');
+        if (hi >= 0) { hash = s.slice(hi + 1); s = s.slice(0, hi); }
+        var m = s.match(/\/([^\/\?#]+)\/?(?:\?.*)?$/);
+        var ref = null;
+        if (hash) { try { ref = JSON.parse(decodeURIComponent(hash)); } catch (_) { ref = null; } }
+        return { slug: m ? m[1] : null, ref: ref };
+    }
+
+    function seasonOf(title, slug) {
+        var m = String(title || '').match(/Season\s*(\d+)/i) || String(slug || '').match(/-s(\d{1,2})(?:-|$)/i);
+        return m ? parseInt(m[1], 10) : 1;
+    }
+
+    function fileLinks(html) {
+        var out = [];
+        var re = /<a[^>]+href=["'](?:https?:\/\/links\.kmhd\.(?:me|eu))?\/file\/([A-Za-z0-9_-]+)["'][^>]*>([\s\S]*?)<\/a>/gi, m;
+        while ((m = re.exec(html))) out.push({ id: m[1], label: stripTags(m[2]).replace(/\s+/g, ' ').trim(), at: m.index });
+        return out;
+    }
+
+    // Episodes of one post: [{ season, episode, name, ref }]
+    async function postEpisodes(content, slug, title) {
+        var season = seasonOf(title, slug);
+        var links = parseKmhdLinks(content);
+        var play = null;
+        for (var i = 0; i < links.length; i++) if (links[i].kind === 'play') { play = links[i]; break; }
+        var files = fileLinks(content);
+
+        // "Episode N" markers in the download section -> per-episode quality files
+        var marks = [], mre = /Episode\s*0*(\d{1,3})\b(?![^<]{0,6}Added)/gi, mm;
+        var dlAt = content.search(/DOWNLOAD LINKS|Single Episodes? Link/i);
+        while ((mm = mre.exec(content))) if (mm.index > dlAt) marks.push({ ep: parseInt(mm[1], 10), at: mm.index });
+        var byEp = {};
+        if (marks.length && files.length) {
+            files.forEach(function (f) {
+                var cur = null;
+                for (var j = 0; j < marks.length; j++) if (marks[j].at < f.at) cur = marks[j].ep;
+                if (cur != null) (byEp[cur] = byEp[cur] || []).push([f.id, f.label]);
+            });
         }
-        return { slug: slug, mode: mode, arg: arg, query: query };
+
+        var eps = [];
+        if (play) {
+            var pd = null;
+            try { pd = await fetchPlayData(play.id); } catch (_) {}
+            var list = pd && pd.info ? parsePlayInfoFromData(pd) : [];
+            list.forEach(function (e) {
+                var sem = /S\d{1,2}\s?E\d{1,3}/i.test(e.name);
+                var s = sem ? e.season : season;
+                eps.push({ season: s, episode: e.episode, name: e.name, ref: { p: play.id, k: e.key, f: byEp[e.episode] || [] } });
+            });
+            // a movie's play entry has one file; attach the quality files to it
+            if (eps.length === 1 && !Object.keys(byEp).length) eps[0].ref.f = files.map(function (f) { return [f.id, f.label]; });
+        }
+        if (!eps.length && Object.keys(byEp).length) {
+            Object.keys(byEp).map(Number).sort(function (a, b) { return a - b; }).forEach(function (n) {
+                eps.push({ season: season, episode: n, name: 'Episode ' + n, ref: { f: byEp[n] } });
+            });
+        }
+        if (!eps.length && files.length) {
+            eps.push({ season: 1, episode: 1, name: title, ref: { f: files.map(function (f) { return [f.id, f.label]; }) } });
+        }
+        return eps;
+    }
+
+    function storyline(content) {
+        var c = String(content || '');
+        var i = c.search(/Storyline\s*:/i);
+        if (i < 0) return '';
+        var m = c.slice(i, i + 4000).match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+        if (!m) return '';
+        // "Marshals (TV Series 2026–): With the Yellowstone..." -> drop the leading label
+        return stripTags(m[1]).replace(/\s+/g, ' ').replace(/^[^:]{0,80}\)\s*:\s*/, '').trim();
     }
 
     async function load(url, cb) {
         try {
-            var p = parseItemUrl(url);
-            if (!p || !p.slug) return cb({ success: false, errorCode: 'BAD_URL', message: 'Unrecognized KatMovieHD URL: ' + url });
-
+            var p = splitUrl(url);
+            if (!p.slug) return cb({ success: false, errorCode: 'BAD_URL', message: 'Unrecognized KatMovieHD URL: ' + url });
             var content = await fetchPostContent(p.slug);
-            if (!content) content = await withTimeout(getText(SITE + '/' + p.slug), 12000);
+            if (!content) return cb({ success: false, errorCode: 'NOT_FOUND', message: 'This post could not be loaded from KatMovieHD right now.' });
 
-            var links = parseKmhdLinks(content);
-            var play = null;
-            links.forEach(function (l) {
-                if (l.kind === 'play' && !play) play = l;
-            });
-
-            var pt = parseTitle(content.match(/<title>([^<]+)<\/title>/) ? RegExp.$1 : p.slug);
-            var posterMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
-            var poster = posterMatch ? posterMatch[1] : PLACEHOLDER;
-
+            var rawTitle = (content.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i) || [])[1] || p.slug.replace(/-/g, ' ');
+            var pt = parseTitle(stripTags(rawTitle));
+            var imgs = content.match(/<img[^>]+src=["']([^"']+)["']/gi) || [];
+            var poster = PLACEHOLDER;
+            for (var ii = 0; ii < imgs.length; ii++) {
+                var src = (imgs[ii].match(/src=["']([^"']+)["']/i) || [])[1] || '';
+                if (src && !/\.th\.|screenshot|Kat-\d{4}/i.test(src)) { poster = src; break; }
+            }
             var baseItemUrl = SITE + '/' + p.slug;
-            var episodes = [];
-            var isSeries = false;
+            var eps = await postEpisodes(content, p.slug, stripTags(rawTitle) + ' ' + p.slug);
 
-            if (play) {
+            // Other seasons of the same show live in separate posts — merge them in.
+            var isSeries = eps.length > 1 || /season|-s\d+/i.test(rawTitle + ' ' + p.slug);
+            if (isSeries) {
                 try {
-                    var playData = await fetchPlayData(play.id);
-                    if (playData && playData.info) {
-                        var eps = parsePlayInfoFromData(playData);
-                        // Sort by season/episode
-                        eps.sort(function (a, b) { return (a.season - b.season) || (a.episode - b.episode); });
-                        eps.forEach(function (e, idx) {
-                            // Use parsed season, but episode number sequential within season
-                            episodes.push(mkEpisode({
-                                name: e.name,
-                                url: baseItemUrl + '?play=' + play.id + '&ep=' + e.key,
-                                season: e.season,
-                                episode: e.episode,
-                                posterUrl: poster,
-                                dubStatus: 'none',
-                                playbackPolicy: 'none'
-                            }));
-                        });
-                        if (eps.length > 1 || /season/i.test(pt.name)) isSeries = true;
-                    }
-                } catch (e) {
-                    console.error('Play data fetch failed', e && e.message);
-                }
-
-                // ── Try to merge other seasons under same base title (fix separate posters for S1/S2) ──
-                try {
-                    // Derive base name from slug for reliable search: mobland-s2-hindi -> mobland
-                    var baseSlug = p.slug.toLowerCase();
-                    var mBase = baseSlug.match(/^(.+?)-s\d+/);
-                    if (!mBase) mBase = baseSlug.match(/^(.+?)-season-\d+/);
-                    var baseSearch = mBase ? mBase[1].replace(/-/g, ' ') : pt.name;
-                    var baseName = baseSearch; // e.g., "mobland"
-                    // Search for related seasons
-                    var searchUrl = SITE + '/__data.json?x-sveltekit-invalidated=01&q=' + encodeURIComponent(baseName) + '&page=1';
-                    var searchData = await withTimeout(fetchSvelteItems(searchUrl), 8000);
-                    var related = (searchData.items || []).filter(function (it) {
+                    var baseName = (p.slug.match(/^(.+?)-(?:s|season-)\d+/) || [])[1];
+                    baseName = baseName ? baseName.replace(/-/g, ' ') : pt.name.replace(/\(Season\s*\d+\)/i, '').trim();
+                    var sd = await withTimeout(fetchSvelteItems(SITE + '/__data.json?x-sveltekit-invalidated=01&q=' + encodeURIComponent(baseName) + '&page=1'), 8000);
+                    var bl = normWords(baseName);
+                    var related = (sd.items || []).filter(function (it) {
                         if (!it.slug || it.slug === p.slug) return false;
-                        var title = (it.post_title || '').toLowerCase();
-                        var baseLower = baseName.toLowerCase();
-                        // Must contain base name and be a season
-                        if (title.indexOf(baseLower) < 0) return false;
                         if (!/season\s*\d+/i.test(it.post_title || '')) return false;
-                        // Avoid duplicates
-                        return true;
-                    }).slice(0, 3); // max 3 other seasons
-
-                    for (var ri = 0; ri < related.length; ri++) {
-                        var rel = related[ri];
-                        try {
-                            var relContent = await withTimeout(fetchPostContent(rel.slug), 8000);
-                            var relLinks = parseKmhdLinks(relContent);
-                            var relPlay = null;
-                            for (var rli = 0; rli < relLinks.length; rli++) if (relLinks[rli].kind === 'play') { relPlay = relLinks[rli]; break; }
-                            if (!relPlay) continue;
-                            var relPlayData = await withTimeout(fetchPlayData(relPlay.id), 8000);
-                            if (!relPlayData || !relPlayData.info) continue;
-                            var relEps = parsePlayInfoFromData(relPlayData);
-                            relEps.forEach(function (re) {
-                                // Avoid duplicate file keys
-                                var exists = episodes.some(function (ex) { return ex.url.indexOf(re.key) >= 0; });
-                                if (exists) return;
-                                episodes.push(mkEpisode({
-                                    name: re.name,
-                                    url: baseItemUrl + '?play=' + relPlay.id + '&ep=' + re.key,
-                                    season: re.season,
-                                    episode: re.episode,
-                                    posterUrl: poster,
-                                    dubStatus: 'none',
-                                    playbackPolicy: 'none'
-                                }));
-                            });
-                            isSeries = true;
-                        } catch (e) {}
-                    }
-                    // Re-sort after merging and deduplicate by season+episode
-                    episodes.sort(function (a, b) { return (a.season - b.season) || (a.episode - b.episode); });
-                    var seenEp = {};
-                    var deduped = [];
-                    for (var di = 0; di < episodes.length; di++) {
-                        var ep = episodes[di];
-                        var key = ep.season + ':' + ep.episode;
-                        if (!seenEp[key]) {
-                            seenEp[key] = true;
-                            deduped.push(ep);
-                        }
-                    }
-                    episodes = deduped;
-                } catch (e) {
-                    console.error('Season merge failed', e && e.message);
-                }
+                        var tw = normWords(parseTitle(it.post_title || '').name.replace(/\(Season\s*\d+\)/i, ''));
+                        return tw.join(' ') === bl.join(' ');
+                    }).slice(0, 4);
+                    var more = await Promise.all(related.map(function (it) {
+                        return withTimeout(fetchPostContent(it.slug), 9000).then(function (c) {
+                            return c ? withTimeout(postEpisodes(c, it.slug, it.post_title), 9000) : [];
+                        }).catch(function () { return []; });
+                    }));
+                    more.forEach(function (list, idx) {
+                        list.forEach(function (e) { e.slug = related[idx].slug; eps.push(e); });
+                    });
+                } catch (e) { /* merging is best-effort */ }
             }
 
-            if (!episodes.length) {
+            var seen = {}, episodes = [];
+            eps.sort(function (a, b) { return (a.season - b.season) || (a.episode - b.episode); });
+            eps.forEach(function (e) {
+                var key = e.season + ':' + e.episode;
+                if (seen[key]) return;
+                seen[key] = 1;
                 episodes.push(mkEpisode({
-                    name: pt.name || p.slug,
-                    url: baseItemUrl,
-                    season: 1, episode: 1,
-                    posterUrl: poster,
-                    dubStatus: 'none', playbackPolicy: 'none'
+                    name: isSeries ? ('Episode ' + e.episode) : (pt.name || e.name),
+                    url: SITE + '/' + (e.slug || p.slug) + '#' + encodeURIComponent(JSON.stringify(e.ref)),
+                    season: e.season,
+                    episode: e.episode,
+                    posterUrl: poster
                 }));
-            }
-
-            // For movies without play data, ensure we have at least 1 episode that will try GDFlix direct links in loadStreams
-            var item = mkItem({
-                title: pt.name || p.slug,
-                url: baseItemUrl,
-                posterUrl: poster,
-                bannerUrl: poster,
-                type: (isSeries || episodes.length > 1) ? 'series' : 'movie',
-                year: pt.year,
-                episodes: episodes
             });
-
-            cb({ success: true, data: item });
+            if (!episodes.length) {
+                return cb({ success: false, errorCode: 'NO_LINKS', message: 'No download/stream links have been posted for this title yet.' });
+            }
+            var desc = storyline(content);
+            var imdb = (content.match(/IMDb Rating\s*:?-?\s*([\d.]+)\s*\/\s*10/i) || [])[1];
+            cb({
+                success: true,
+                data: mkItem({
+                    title: pt.name,
+                    url: baseItemUrl,
+                    posterUrl: poster,
+                    bannerUrl: poster,
+                    type: isSeries ? 'series' : 'movie',
+                    year: pt.year,
+                    score: imdb ? parseFloat(imdb) : undefined,
+                    description: desc || undefined,
+                    episodes: episodes
+                })
+            });
         } catch (e) {
             cb({ success: false, errorCode: 'ERROR', message: String((e && e.message) || e) });
         }
     }
 
-    // ───────── loadStreams ─────────
-    async function loadExtractorSafe(url, label) {
-        if (typeof loadExtractor !== 'function') return null;
-        try {
-            var ex = await loadExtractor(url);
-            if (ex && ex.length) {
-                for (var i = 0; i < ex.length; i++) {
-                    if (ex[i] && ex[i].url) {
-                        ex[i].quality = label;
-                        return ex[i];
-                    }
-                }
-            }
-        } catch (_) {}
-        return null;
+    // ───────── streams ─────────
+    function normWords(s) {
+        return String(s || '').toLowerCase().replace(/&amp;/g, '&').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+    }
+
+    async function streamsForFile(fileId, label, codes) {
+        var out = [];
+        var mirrors = {};
+        var res = await Promise.all(codes.map(function (c) {
+            return touchMe(fileId, c).then(function (l) { return [c, l]; }, function () { return [c, null]; });
+        }));
+        res.forEach(function (r) { if (r[1] && r[1] !== 'None') mirrors[r[0]] = r[1]; });
+        var q = qualityFromText(label) || label || '';
+        var jobs = [];
+        if (mirrors.streamtape_res) jobs.push(extractStreamTape(mirrors.streamtape_res.indexOf('http') === 0 ? mirrors.streamtape_res : 'https://streamtape.com/e/' + mirrors.streamtape_res).then(function (d) {
+            if (d) out.push({ url: d, source: 'StreamTape • ' + q, headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/' }, rank: 1 });
+        }, function () {}));
+        if (mirrors.hubdrive_res) jobs.push(resolveHubcloud(mirrors.hubdrive_res).then(function (links) {
+            links.forEach(function (u, i) { out.push({ url: u, source: 'HubCloud • ' + q + (i ? ' #' + (i + 1) : ''), headers: { 'User-Agent': UA }, rank: 0 }); });
+        }, function () {}));
+        if (mirrors.gdflix_res) jobs.push(resolveGdflix(mirrors.gdflix_res).then(function (g) {
+            (g.instant || []).forEach(function (u) { out.push({ url: u, source: 'GDFlix Instant • ' + q, headers: { 'User-Agent': UA }, rank: 2 }); });
+            (g.urls || []).forEach(function (u) {
+                if (/drive\.google\.com\/open/.test(u)) return; // a Drive page, not a file
+                out.push({ url: u, source: 'GDFlix • ' + q, headers: { 'User-Agent': UA }, rank: 3 });
+            });
+        }, function () {}));
+        await Promise.all(jobs);
+        return out;
     }
 
     async function loadStreams(url, cb) {
         try {
-            var p = parseItemUrl(url);
-            if (!p || !p.slug) return cb({ success: false, errorCode: 'BAD_URL', message: 'Unrecognized KatMovieHD URL: ' + url });
-
-            var streams = [];
-
-            // Direct GDFlix URL fallback — try to get HubCloud via fileId if possible, otherwise return GDFlix as last resort
-            if (p.mode === 'gdflix' && p.arg) {
-                // Try to resolve GDFlix to R2 (may be blocked by CF in Node, but works in app)
-                try {
-                    var gdRes = await resolveGdflix(p.arg);
-                    var all = gdRes.instant.concat(gdRes.urls);
-                    for (var i = 0; i < all.length; i++) {
-                        streams.push(mkStream({
-                            url: all[i],
-                            quality: 'HubCloud • GDFlix R2 • ' + (qualityFromText(all[i]) || '1080p'),
-                            headers: { 'User-Agent': UA, 'Referer': p.arg, 'Accept-Language': GEO_HEADERS['Accept-Language'] }
-                        }));
-                    }
-                } catch (e) {}
-                // If still nothing, return original link as fallback so app's own extractor can try
-                if (!streams.length) {
-                    streams.push(mkStream({
-                        url: p.arg,
-                        quality: 'GDFlix • Original • ' + (qualityFromText(p.arg) || '1080p'),
-                        headers: { 'User-Agent': UA, 'Referer': 'https://' + GDFLIX_HOST + '/', 'Accept-Language': GEO_HEADERS['Accept-Language'] }
-                    }));
-                }
-                if (streams.length) return cb({ success: true, data: streams });
+            var p = splitUrl(url);
+            var ref = p.ref;
+            if (!ref && p.slug) {
+                // plain item url (older saved episodes): rebuild from the post
+                var content = await fetchPostContent(p.slug);
+                var eps = content ? await postEpisodes(content, p.slug, p.slug) : [];
+                ref = eps.length ? eps[0].ref : null;
             }
+            if (!ref) return cb({ success: false, errorCode: 'BAD_URL', message: 'Unrecognized KatMovieHD episode: ' + url });
 
-            var content = await fetchPostContent(p.slug);
-            var playIdMatch = String(url).match(/play=([A-Za-z0-9_-]+)/);
-            var epKeyMatch = String(url).match(/ep=([A-Za-z0-9_-]+)/);
-            var dlMatch = String(url).match(/dl=([A-Za-z0-9_-]+)/);
-
-            var fileId = null;
-            if (playIdMatch && epKeyMatch) fileId = epKeyMatch[1];
-            else if (dlMatch) fileId = dlMatch[1];
-
-            // ────── FileId via touchme — ONLY 3 hosts per user request ──────
-            if (fileId) {
-                var epName = '';
-                var q = '';
-                if (playIdMatch) {
-                    try {
-                        var playDataTmp = await fetchPlayData(playIdMatch[1]);
-                        if (playDataTmp && playDataTmp.info && playDataTmp.info[fileId]) {
-                            epName = playDataTmp.info[fileId].name || '';
-                            q = qualityFromText(epName) || '';
-                        }
-                    } catch (e) {}
-                }
-
-                // 1) StreamTape + StreamWish from playData (fast)
-                if (playIdMatch && epKeyMatch) {
-                    try {
-                        var playData = await fetchPlayData(playIdMatch[1]);
-                        if (playData && playData.info && playData.info[fileId]) {
-                            var ep = playData.info[fileId];
-                            if (ep.streamtape_res) {
-                                var direct = await extractStreamTape('https://streamtape.com/e/' + ep.streamtape_res);
-                                if (direct) {
-                                    streams.push(mkStream({
-                                        url: direct,
-                                        quality: 'StreamTape • ' + (q || '1080p'),
-                                        headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/', 'Accept-Language': GEO_HEADERS['Accept-Language'] }
-                                    }));
-                                } else {
-                                    var s1 = await loadExtractorSafe('https://streamtape.com/e/' + ep.streamtape_res, 'StreamTape • ' + (q || '1080p'));
-                                    if (s1) streams.push(s1);
-                                }
-                            }
-                            if (ep.streamwish_res) {
-                                var s2 = await loadExtractorSafe('https://hglink.to/e/' + ep.streamwish_res, 'StreamWish • ' + (q || '1080p'));
-                                if (s2) streams.push(s2);
-                            }
-                        }
-                    } catch (e) {}
-                }
-
-                // 2) HubCloud via touchme — with geo bypass + R2 direct + GDFlix fallback
-                try {
-                    var mirrors = await fetchAllMirrors(fileId);
-                    // Priority: StreamTape, StreamWish, HubCloud
-                    if (mirrors.hubdrive_res) {
-                        var hubLinks = await resolveHubcloud(mirrors.hubdrive_res);
-                        if (hubLinks.length) {
-                            for (var hi = 0; hi < hubLinks.length; hi++) {
-                                streams.push(mkStream({
-                                    url: hubLinks[hi],
-                                    quality: 'HubCloud • ' + (q || '1080p') + ' • Direct',
-                                    headers: { 'User-Agent': UA, 'Referer': mirrors.hubdrive_res, 'Accept-Language': GEO_HEADERS['Accept-Language'], 'X-Forwarded-For': GEO_HEADERS['X-Forwarded-For'] }
-                                }));
-                            }
-                        } else {
-                            streams.push(mkStream({
-                                url: mirrors.hubdrive_res,
-                                quality: 'HubCloud • ' + (q || '1080p') + ' • Watch Online',
-                                headers: { 'User-Agent': UA, 'Referer': 'https://' + HUBCLOUD_HOST + '/', 'Accept-Language': GEO_HEADERS['Accept-Language'], 'X-Forwarded-For': GEO_HEADERS['X-Forwarded-For'], 'CF-IPCountry': 'US' }
-                            }));
-                        }
+            var jobs = [];
+            var playQ = '';
+            if (ref.p && ref.k) {
+                jobs.push(fetchPlayData(ref.p).then(function (pd) {
+                    var e = pd && pd.info && pd.info[ref.k];
+                    playQ = e ? (qualityFromText(e.name) || '') : '';
+                    var tasks = [streamsForFile(ref.k, playQ || 'Auto', ['hubdrive_res', 'gdflix_res'])];
+                    if (e && e.streamtape_res && e.streamtape_res !== 'None') {
+                        tasks.push(extractStreamTape('https://streamtape.com/e/' + e.streamtape_res).then(function (d) {
+                            return d ? [{ url: d, source: 'StreamTape • ' + (playQ || 'Auto'), headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/' }, rank: 1 }] : [];
+                        }, function () { return []; }));
                     }
-                    // GDFlix fallback — for titles that only have GDFlix on website
-                    if (!streams.length && mirrors.gdflix_res) {
-                        try {
-                            var gd = await resolveGdflix(mirrors.gdflix_res);
-                            var allG = gd.instant.concat(gd.urls);
-                            if (allG.length) {
-                                for (var gi = 0; gi < allG.length; gi++) {
-                                    streams.push(mkStream({
-                                        url: allG[gi],
-                                        quality: 'GDFlix • ' + (q || '1080p') + ' • ' + (gi === 0 ? 'Instant' : 'Direct'),
-                                        headers: { 'User-Agent': UA, 'Referer': mirrors.gdflix_res, 'Accept-Language': GEO_HEADERS['Accept-Language'] }
-                                    }));
-                                }
-                            } else {
-                                streams.push(mkStream({
-                                    url: mirrors.gdflix_res,
-                                    quality: 'GDFlix • ' + (q || '1080p'),
-                                    headers: { 'User-Agent': UA, 'Referer': 'https://' + GDFLIX_HOST + '/' }
-                                }));
-                            }
-                        } catch (e) {
-                            streams.push(mkStream({ url: mirrors.gdflix_res, quality: 'GDFlix • ' + (q || '1080p'), headers: { 'User-Agent': UA } }));
-                        }
-                    }
-                    // If touchme returned StreamTape/StreamWish as direct http links (not codes), also add
-                    if (mirrors.streamtape_res && mirrors.streamtape_res.indexOf('http') === 0) {
-                        if (mirrors.streamtape_res.indexOf('streamtape.com/e/') >= 0) {
-                            var stDirect = await extractStreamTape(mirrors.streamtape_res);
-                            if (stDirect) {
-                                streams.push(mkStream({ url: stDirect, quality: 'StreamTape • ' + (q || '1080p'), headers: { 'User-Agent': UA, 'Referer': 'https://streamtape.com/' } }));
-                            } else {
-                                streams.push(mkStream({ url: mirrors.streamtape_res, quality: 'StreamTape • ' + (q || '1080p'), headers: { 'User-Agent': UA } }));
-                            }
-                        }
-                    }
-                    if (mirrors.streamwish_res && mirrors.streamwish_res.indexOf('http') === 0) {
-                        var sw = await loadExtractorSafe(mirrors.streamwish_res, 'StreamWish • ' + (q || '1080p'));
-                        if (sw) streams.push(sw);
-                        else streams.push(mkStream({ url: mirrors.streamwish_res, quality: 'StreamWish • ' + (q || '1080p'), headers: { 'User-Agent': UA } }));
-                    }
-                } catch (e) {
-                    console.error('fetchAllMirrors failed', e && e.message);
-                }
+                    return Promise.all(tasks).then(function (r) { return [].concat.apply([], r); });
+                }, function () { return []; }));
+            }
+            (ref.f || []).slice(0, 6).forEach(function (f) {
+                jobs.push(streamsForFile(f[0], f[1], ['hubdrive_res', 'gdflix_res', 'streamtape_res']).catch(function () { return []; }));
+            });
+            var all = [].concat.apply([], await Promise.all(jobs));
 
-                // Deduplicate by URL
-                var seen = {};
-                var uniq = [];
-                for (var si = 0; si < streams.length; si++) {
-                    var su = streams[si].url;
-                    if (!seen[su]) { seen[su] = true; uniq.push(streams[si]); }
-                }
-                streams = uniq;
-                if (!streams.length) {
-                    return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No StreamTape/StreamWish/HubCloud mirrors for ' + fileId });
-                }
-                return cb({ success: true, data: streams });
+            // best quality first, then host reliability
+            function qv(s) { var m = String(s.source).match(/(\d{3,4})p/); return m ? parseInt(m[1], 10) : 0; }
+            var seen = {}, list = [];
+            all.sort(function (a, b) { return (qv(b) - qv(a)) || (a.rank - b.rank); }).forEach(function (s) {
+                var k = String(s.url).split('?')[0];
+                if (seen[k]) return;
+                seen[k] = 1;
+                list.push(mkStream({ url: s.url, source: s.source, headers: s.headers }));
+            });
+            var verified = list.length ? await verifyStreams(list, 3) : [];
+            if (!verified.length) {
+                return cb({ success: false, errorCode: 'NO_STREAMS', message: 'The file servers for this title are still uploading or offline - try again later or pick another quality/episode.' });
             }
-
-            // ────── Plain movie URL — use first fileId + GDFlix direct fallback ──────
-            var links = parseKmhdLinks(content);
-            var play = null;
-            for (var li = 0; li < links.length; li++) if (links[li].kind === 'play') { play = links[li]; break; }
-            if (play) {
-                try {
-                    var pd = await fetchPlayData(play.id);
-                    if (pd && pd.info) {
-                        var keys = Object.keys(pd.info);
-                        if (keys.length) {
-                            var firstId = keys[0];
-                            var first = pd.info[firstId];
-                            var qFirst = qualityFromText(first.name) || '';
-                            var mirrorsFirst = await fetchAllMirrors(firstId);
-                            if (mirrorsFirst.hubdrive_res) {
-                                var hubFirst = await resolveHubcloud(mirrorsFirst.hubdrive_res);
-                                if (hubFirst.length) {
-                                    for (var hf = 0; hf < hubFirst.length; hf++) {
-                                        streams.push(mkStream({ url: hubFirst[hf], quality: 'HubCloud • ' + qFirst + ' • Direct', headers: { 'User-Agent': UA, 'Referer': mirrorsFirst.hubdrive_res, 'Accept-Language': GEO_HEADERS['Accept-Language'] } }));
-                                    }
-                                } else {
-                                    streams.push(mkStream({ url: mirrorsFirst.hubdrive_res, quality: 'HubCloud • ' + qFirst + ' • Watch Online', headers: { 'User-Agent': UA, 'Accept-Language': GEO_HEADERS['Accept-Language'] } }));
-                                }
-                            }
-                            if (first.streamtape_res) {
-                                var d0 = await extractStreamTape('https://streamtape.com/e/' + first.streamtape_res);
-                                if (d0) streams.push(mkStream({ url: d0, quality: 'StreamTape • ' + qFirst, headers: { 'User-Agent': UA } }));
-                                else {
-                                    var s4 = await loadExtractorSafe('https://streamtape.com/e/' + first.streamtape_res, 'StreamTape • ' + qFirst);
-                                    if (s4) streams.push(s4);
-                                }
-                            }
-                            if (first.streamwish_res) {
-                                var s5 = await loadExtractorSafe('https://hglink.to/e/' + first.streamwish_res, 'StreamWish • ' + qFirst);
-                                if (s5) streams.push(s5);
-                            }
-                            // GDFlix fallback if priority hosts gave nothing
-                            if (!streams.length && mirrorsFirst.gdflix_res) {
-                                try {
-                                    var gdFirst = await resolveGdflix(mirrorsFirst.gdflix_res);
-                                    var allFirst = gdFirst.instant.concat(gdFirst.urls);
-                                    if (allFirst.length) {
-                                        for (var gf = 0; gf < allFirst.length; gf++) {
-                                            streams.push(mkStream({ url: allFirst[gf], quality: 'GDFlix • ' + qFirst, headers: { 'User-Agent': UA } }));
-                                        }
-                                    } else {
-                                        streams.push(mkStream({ url: mirrorsFirst.gdflix_res, quality: 'GDFlix • ' + qFirst, headers: { 'User-Agent': UA } }));
-                                    }
-                                } catch (e) {
-                                    streams.push(mkStream({ url: mirrorsFirst.gdflix_res, quality: 'GDFlix • ' + qFirst, headers: { 'User-Agent': UA } }));
-                                }
-                            }
-                        }
-                    }
-                } catch (e) {}
-            }
-            // Fallback: GDFlix direct links found in post_content (for movies that only have GDFlix on website)
-            if (!streams.length) {
-                var gLinks3 = content.match(/https?:\/\/(?:gdflix\.dev|gd\.kmhd\.eu|new\d*\.gdflix\.io)\/file\/[A-Za-z0-9]+/g) || [];
-                for (var gm = 0; gm < Math.min(gLinks3.length, 2); gm++) {
-                    try {
-                        var gd3 = await resolveGdflix(gLinks3[gm]);
-                        var all3 = gd3.instant.concat(gd3.urls);
-                        if (all3.length) {
-                            for (var gn = 0; gn < all3.length; gn++) {
-                                streams.push(mkStream({ url: all3[gn], quality: 'GDFlix • Direct • ' + (qualityFromText(content) || '1080p'), headers: { 'User-Agent': UA, 'Referer': gLinks3[gm] } }));
-                            }
-                        } else {
-                            streams.push(mkStream({ url: gLinks3[gm], quality: 'GDFlix • Direct', headers: { 'User-Agent': UA } }));
-                        }
-                    } catch (e) {}
-                }
-            }
-            // Fallback: 1xPlayer iframe and GoFile/BBUpload for CAMRip titles like Idiots 2026
-            if (!streams.length) {
-                var extraLinks = parseKmhdLinks(content);
-                for (var eli = 0; eli < extraLinks.length; eli++) {
-                    var el = extraLinks[eli];
-                    if (el.kind === '1xplayer') {
-                        // Try extractor first, then direct iframe as fallback
-                        var ex1 = await loadExtractorSafe(el.url, '1XPlayer • ' + (qualityFromText(content) || '1080p'));
-                        if (ex1) streams.push(ex1);
-                        else streams.push(mkStream({ url: el.url, quality: '1XPlayer • ' + (qualityFromText(content) || '1080p'), headers: { 'User-Agent': UA, 'Referer': SITE + '/' } }));
-                    } else if (el.kind === 'gofile') {
-                        var exG = await loadExtractorSafe(el.url, 'GoFile • ' + (el.label || '1080p'));
-                        if (exG) streams.push(exG);
-                        else streams.push(mkStream({ url: el.url, quality: 'GoFile • ' + (el.label || '1080p'), headers: { 'User-Agent': UA } }));
-                    }
-                }
-            }
-            // Deduplicate
-            var seen2 = {};
-            var uniq2 = [];
-            for (var si2 = 0; si2 < streams.length; si2++) {
-                var su2 = streams[si2].url;
-                if (!seen2[su2]) { seen2[su2] = true; uniq2.push(streams[si2]); }
-            }
-            streams = uniq2;
-            if (!streams.length) {
-                return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No StreamTape/StreamWish/HubCloud streams found' });
-            }
-            return cb({ success: true, data: streams });
+            cb({ success: true, data: verified });
         } catch (e) {
             cb({ success: false, errorCode: 'ERROR', message: String((e && e.message) || e) });
         }
+    }
+
+    // ── stream verification (TJ-Plugins shared helper) ─────────────────────────
+    // Each candidate is requested once, with the exact headers the player will send.
+    //   ok      -> HLS playlist / DASH manifest / media bytes  -> listed first
+    //   unknown -> 401/403/429/timeout (often an IP/region block that works on a phone)
+    //              -> kept after the verified ones, labelled "(may not play)"
+    //   dead    -> 404/410/451/5xx, DNS failure, HTML error page -> dropped
+    function __tjDeadline(promise, ms) {
+        return new Promise(function (resolve) {
+            const t = setTimeout(function () { resolve(null); }, ms);
+            Promise.resolve(promise).then(function (v) { clearTimeout(t); resolve(v); }, function () { clearTimeout(t); resolve(null); });
+        });
+    }
+    async function __tjProbe(s) {
+        const u = String((s && s.url) || "");
+        if (!/^https?:\/\//i.test(u)) return "ok"; // magnet:, magic_m3u8:, MAGIC_PROXY… resolved by the app
+        const h = Object.assign({}, s.headers || {}, { "Range": "bytes=0-2047" });
+        const r = await __tjDeadline(http_get(u, h), 9000);
+        if (!r) return "unknown";
+        const st = Number(r.status || r.statusCode || 0);
+        const body = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 600);
+        if (st === 200 || st === 206) {
+            if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
+            if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            return "ok";
+        }
+        if (st === 0) {
+            const err = String(r.error || "");
+            // The app refuses bodies over 8 MB (it hangs up on the Content-Length):
+            // a server that ignores Range and sends a huge body is serving the file.
+            if (/too ?large|exceed/i.test(err)) return "ok";
+            return /host lookup|ENOTFOUND|getaddrinfo|No address/i.test(err) ? "dead" : "unknown";
+        }
+        if (st === 401 || st === 403 || st === 429) return "unknown";
+        return "dead";
+    }
+    async function verifyStreams(list, maxUnverified) {
+        const verdicts = await Promise.all(list.map(__tjProbe));
+        const ok = [], unknown = [];
+        list.forEach(function (s, i) {
+            if (verdicts[i] === "ok") ok.push(s);
+            else if (verdicts[i] === "unknown") unknown.push(s);
+        });
+        const keep = unknown.slice(0, Math.max(0, (maxUnverified == null ? 4 : maxUnverified) - Math.min(ok.length, 2)));
+        keep.forEach(function (s) { s.source = String(s.source || "Stream") + " (may not play)"; });
+        const out = ok.concat(keep), count = {}, idx = {};
+        out.forEach(function (s) { const k = String(s.source || "Stream"); count[k] = (count[k] || 0) + 1; });
+        out.forEach(function (s) {
+            const k = String(s.source || "Stream");
+            if (count[k] > 1) { idx[k] = (idx[k] || 0) + 1; s.source = k + " #" + idx[k]; }
+        });
+        return out;
     }
 
     globalThis.getHome = getHome;

@@ -414,7 +414,11 @@ async function probeStream(s) {
     if (/video|octet-stream|mp2t|matroska|mp4|x-mpegurl|binary/i.test(ct)) return { ok: true, why: `${res.status} ${ct}` };
     if (/text\/html/i.test(ct) || /^\s*<(!doctype|html)/i.test(head)) return { ok: false, why: `returns an HTML page (${ct}) — not a playable media URL` };
     return { ok: true, why: `${res.status} ${ct || "unknown type"}` };
-  } catch (e) { return { ok: false, why: e.code || e.message }; }
+  } catch (e) {
+    // Server ignored Range and streamed a body past the cap = it is serving the file.
+    if (/maxContentLength/i.test(String(e.message))) return { ok: true, why: "large body (server ignores Range) — media file" };
+    return { ok: false, why: e.code || e.message };
+  }
 }
 
 // ───────────────────────────── reporting ─────────────────────────────
