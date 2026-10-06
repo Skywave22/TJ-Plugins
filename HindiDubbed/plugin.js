@@ -13,9 +13,9 @@
     //    * Web series are grouped into SERIES (one poster, every episode,
     //      auto-updating via live re-fetch).
     //    * 20 official channels.
-    //    * Same HD pipeline as PakDramas v6: YouTube merged-HLS (WEB/TV
-    //      clients) + on-device single-segment fMP4 HLS (720p/1080p) from the
-    //      iOS client, with 360p MP4 as the guaranteed fallback.
+    //    * Streams: YouTube's own merged HLS (up to 1080p) when YouTube offers
+    //      it for the video, otherwise the progressive MP4 (360p, or 720p when
+    //      offered); Invidious only as a last resort.
     // =========================================================================
 
     const KEY = "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
@@ -29,6 +29,9 @@
 
     const IOS_UA = "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)";
     const IOS_CTX = { client: { clientName: "IOS", clientVersion: "21.02.3", deviceMake: "Apple", deviceModel: "iPhone16,2", userAgent: IOS_UA, osName: "iPhone", osVersion: "18.3.2.22D82", hl: "en", gl: "US" } };
+
+    const VR_UA = "com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
+    const VR_CTX = { client: { clientName: "ANDROID_VR", clientVersion: "1.62.27", deviceMake: "Oculus", deviceModel: "Quest 3", androidSdkVersion: 32, userAgent: VR_UA, osName: "Android", osVersion: "12L", hl: "en", gl: "US" } };
 
     // Safari UA on the WEB client -> pre-merged video+audio HLS (up to 1080p).
     const SAFARI_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15";
@@ -428,26 +431,43 @@
     // ------------------------------------------------------------------
     //  2. search — flat videos
     // ------------------------------------------------------------------
+    function durSecs(d) {
+        const parts = String(d || "").split(":").map(function (x) { return parseInt(x, 10); });
+        if (!parts.length || parts.some(isNaN)) return 0;
+        return parts.reduce(function (acc, x) { return acc * 60 + x; }, 0);
+    }
+
     async function search(query, cb) {
         if (!query) return cb({ success: true, data: [] });
         try {
-            const j = await innertube("search", { context: WEB_CTX, query: String(query) }, WEB_UA);
+            const q = String(query).trim();
+            // Bias YouTube towards full Hindi-dubbed uploads unless the user already did.
+            const yq = /movie|film|hindi|dubbed/i.test(q) ? q : q + " hindi dubbed full movie";
+            const j = await innertube("search", { context: WEB_CTX, query: yq }, WEB_UA);
             const vids = [];
             walkResponse(j, vids, {}, { t: null });
-            const items = [];
-            for (let i = 0; i < vids.length && i < 40; i++) {
+            const full = [], rest = [], seen = {};
+            for (let i = 0; i < vids.length; i++) {
                 const v = vids[i];
-                const title = (v.title || "").trim() || ("Video " + v.id);
-                items.push(new MultimediaItem({
-                    url: JSON.stringify({ v: v.id, t: title }),
-                    title: title,
+                if (!v || !v.id || seen[v.id]) continue;
+                seen[v.id] = 1;
+                const title = (v.title || "").trim();
+                const secs = durSecs(v.dur);
+                if (secs && secs < 180) continue;                 // shorts, clips, songs
+                const m = parseMovie(title);
+                const item = new MultimediaItem({
+                    url: JSON.stringify({ v: v.id, t: m ? m.name : title, y: m && m.year ? m.year : undefined }),
+                    title: m ? m.name : title,
                     posterUrl: thumb(v.id),
+                    bannerUrl: "https://i.ytimg.com/vi/" + v.id + "/maxresdefault.jpg",
                     type: "movie",
                     status: "completed",
-                    description: v.dur ? ("Duration: " + v.dur) : ""
-                }));
+                    year: (m && m.year) || undefined,
+                    description: (m && m.year ? m.year + " · " : "") + (v.dur ? "Duration " + v.dur + " · " : "") + title
+                });
+                if (m && secs >= 40 * 60) full.push(item); else rest.push(item);
             }
-            cb({ success: true, data: items });
+            cb({ success: true, data: (full.length ? full : rest).slice(0, 40) });
         } catch (e) {
             cb({ success: false, errorCode: "SITE_OFFLINE", message: "Search failed: " + (e && e.message ? e.message : e) });
         }
@@ -522,7 +542,7 @@
     }
 
     // ------------------------------------------------------------------
-    //  4. loadStreams — resolution ladder (HD HLS -> 720p -> 360p)
+    //  4. loadStreams — merged HLS (when offered) -> progressive MP4 -> Invidious
     // ------------------------------------------------------------------
     function playable(ps) {
         return ps && (ps.status === "OK" || ps.status === "CONTENT_CHECK_REQUIRED");
@@ -542,121 +562,6 @@
         return null;
     }
 
-    // ------------------------------------------------------------------
-    //  4b. On-device 720p/1080p — fragmented-MP4 HLS built in pure JS
-    //
-    //  YouTube serves HD only as separate DASH video+audio. For the iOS
-    //  client each adaptive format is a fragmented MP4 (ftyp+moov init,
-    //  sidx index, then moof/mdat fragments) and googlevideo serves it by
-    //  byte-range (a plain GET without Range returns 403). We rebuild the
-    //  structure as HLS: an EXT-X-MAP init segment plus contiguous
-    //  equal-size byte-range segments. Because the segments are contiguous
-    //  the player's MP4 demuxer sees the exact original byte stream and
-    //  finds every moof box itself — no sidx parsing, no muxing, no tools.
-    //  Video and audio media playlists are embedded in the master as data:
-    //  URIs so a single magic_m3u8 URL carries both tracks.
-    // ------------------------------------------------------------------
-    function b64encode(str) {
-        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        const bytes = [];
-        for (let i = 0; i < str.length; i++) {
-            const c = str.charCodeAt(i);
-            if (c < 0x80) bytes.push(c);
-            else if (c < 0x800) { bytes.push(0xC0 | (c >> 6), 0x80 | (c & 63)); }
-            else if (c < 0x10000) { bytes.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }
-            else { bytes.push(0xF0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }
-        }
-        let out = "";
-        for (let i = 0; i < bytes.length; i += 3) {
-            const b0 = bytes[i];
-            const b1 = i + 1 < bytes.length ? bytes[i + 1] : -1;
-            const b2 = i + 2 < bytes.length ? bytes[i + 2] : -1;
-            out += chars[b0 >> 2];
-            out += chars[((b0 & 3) << 4) | (b1 >= 0 ? (b1 >> 4) : 0)];
-            out += b1 >= 0 ? chars[((b1 & 15) << 2) | (b2 >= 0 ? (b2 >> 6) : 0)] : "=";
-            out += b2 >= 0 ? chars[b2 & 63] : "=";
-        }
-        return out;
-    }
-
-    function codecOf(fmt) {
-        const mt = String(fmt.mimeType || "");
-        const m = mt.match(/codecs="([^"]+)"/);
-        if (m) return m[1];
-        return String(fmt.codecs || "");
-    }
-
-    // Build one fMP4 media playlist as a SINGLE segment (one big byte-range
-    // covering the whole stream from the sidx to EOF). This keeps the
-    // playlist tiny — every HLS manifest line must stay under FFmpeg's
-    // 4096-byte line buffer, and a single segment is the only way a media
-    // playlist embedded as a data: URI in the master can fit on one line.
-    // The player streams the one range progressively and seeks inside it via
-    // the fMP4's own sidx index.
-    function buildFmp4Playlist(fmt, totalDurSec) {
-        const url = fmt.url;
-        const clen = parseInt(fmt.contentLength, 10);
-        const ir = fmt.indexRange, inr = fmt.initRange;
-        const segStart = parseInt(ir.end, 10) + 1;   // first moof sits right after the sidx
-        const segLen = clen - segStart;
-        const initLen = parseInt(inr.end, 10) - parseInt(inr.start, 10) + 1;
-        return (
-            "#EXTM3U\n" +
-            "#EXT-X-PLAYLIST-TYPE:VOD\n" +
-            '#EXT-X-MAP:URI="' + url + '#x",BYTERANGE="' + initLen + '@' + inr.start + '"\n' +
-            "#EXT-X-TARGETDURATION:" + (Math.ceil(totalDurSec) + 1) + "\n" +
-            "#EXTINF:" + totalDurSec.toFixed(3) + ",\n" +
-            "#EXT-X-BYTERANGE:" + segLen + "@" + segStart + "\n" +
-            url + "#x\n" +
-            "#EXT-X-ENDLIST\n"
-        );
-    }
-
-    function dataUri(playlist) {
-        const prefix = "data:application/vnd.apple.mpegurl;base64,";
-        const uri = prefix + b64encode(playlist);
-        // FFmpeg's HLS parser reads each manifest line into a 4096-byte
-        // buffer; longer lines are silently truncated and the playlist fails
-        // to parse. Guard against that.
-        if (uri.length > 4000) return null;
-        return uri;
-    }
-
-    // Build a master playlist carrying the best available HD video + AAC
-    // audio, both as single-segment fMP4 playlists embedded as data: URIs.
-    // Returns { master, height } or null when the video has no usable
-    // adaptive formats (or the URLs are too long to embed safely).
-    async function buildHlsMaster(videoId) {
-        const r = await fetchPlayer(IOS_CTX, IOS_UA, videoId);
-        if (!r || !r.streamingData) return null;
-        const af = (r.streamingData.adaptiveFormats || []).filter(function (f) {
-            return f && f.url && f.indexRange && f.initRange && f.contentLength;
-        });
-        const vorder = [137, 136, 135, 134, 133, 160, 298, 299, 616, 266];
-        let vf = null;
-        for (let i = 0; i < vorder.length; i++) {
-            vf = af.find(function (f) { return f.itag === vorder[i]; });
-            if (vf) break;
-        }
-        const au = af.find(function (f) { return f.itag === 140; }) ||
-                   af.find(function (f) { return f.itag === 139; });
-        if (!vf || !au) return null;
-        const durSec = parseFloat((r.videoDetails && r.videoDetails.lengthSeconds) || "0") || 0;
-        if (!(durSec > 0)) return null;
-        const vUri = dataUri(buildFmp4Playlist(vf, durSec));
-        const aUri = dataUri(buildFmp4Playlist(au, durSec));
-        if (!vUri || !aUri) return null;
-        const bw = (vf.bitrate || 0) + (au.bitrate || 0);
-        const vcodec = codecOf(vf) || "avc1.640028";
-        const acodec = codecOf(au) || "mp4a.40.2";
-        const master =
-            "#EXTM3U\n#EXT-X-VERSION:7\n" +
-            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="audio",DEFAULT=YES,AUTOSELECT=YES,URI="' + aUri + '"\n' +
-            '#EXT-X-STREAM-INF:BANDWIDTH=' + bw + ',RESOLUTION=' + vf.width + 'x' + vf.height + ',AUDIO="aud",CODECS="' + vcodec + ',' + acodec + '"\n' +
-            vUri + "\n";
-        return { master: master, height: vf.height };
-    }
-
     // Try to get YouTube's own pre-merged HLS manifest (single m3u8 with
     // video+audio muxed, up to 1080p). YouTube only returns it to the WEB
     // client on non-flagged IPs — residential/mobile IPs usually get it,
@@ -664,6 +569,7 @@
     // { url, height }.
     async function tryMergedHls(videoId) {
         const tries = [
+            { ctx: IOS_CTX, ua: IOS_UA },
             { ctx: SAFARI_CTX, ua: SAFARI_UA },
             { ctx: WEB_CTX, ua: WEB_UA },
             { ctx: TV_SIMPLE_CTX, ua: WEB_UA },
@@ -710,38 +616,31 @@
     //      longer return. Pure fallback behind the primary methods.
     // ------------------------------------------------------------------
     const INVIDIOUS_INSTANCES = [
-        "https://inv.nadeko.net",
-        "https://yewtu.be",
-        "https://invidious.nerdvpn.de",
-        "https://iv.melmac.space",
         "https://invidious.f5.si",
-        "https://vid.puffyan.us",
-        "https://invidious.privacyredirect.com",
-        "https://invidious.perennialte.ch",
-        "https://iv.ggtyler.dev",
-        "https://invidious.materialio.us"
+        "https://invidious.materialio.us",
+        "https://inv.nadeko.net",
+        "https://yewtu.be"
     ];
 
     async function invidiousStreams(videoId) {
+        const rs = await Promise.all(INVIDIOUS_INSTANCES.map(function (base) {
+            return Promise.race([
+                httpGetText(base + "/api/v1/videos/" + videoId + "?fields=formatStreams&local=true", { "Accept": "application/json" }),
+                sleep(7000).then(function () { return ""; })
+            ]).then(function (t) { return { base: base, text: t }; }, function () { return { base: base, text: "" }; });
+        }));
         const out = [];
-        for (let i = 0; i < INVIDIOUS_INSTANCES.length && out.length < 2; i++) {
-            const base = INVIDIOUS_INSTANCES[i];
-            let text = "";
-            try {
-                text = await httpGetText(base + "/api/v1/videos/" + videoId +
-                    "?fields=formatStreams", { "Accept": "application/json" });
-            } catch (e) { continue; }
-            if (!text) continue;
+        for (let i = 0; i < rs.length && out.length < 3; i++) {
             let j = null;
-            try { j = JSON.parse(text); } catch (e) { continue; }
+            try { j = JSON.parse(rs[i].text || "null"); } catch (e) { continue; }
             const fs = (j && j.formatStreams) || [];
             for (let k = 0; k < fs.length; k++) {
                 const f = fs[k];
                 if (!f || !f.url) continue;
                 let u = String(f.url);
-                if (u.charAt(0) === "/") u = base + u;   // relative -> instance-proxied
-                if (f.itag === 22) out.push({ url: u, label: "720p (Invidious)", rank: 12 });
-                else if (f.itag === 18) out.push({ url: u, label: "360p (Invidious)", rank: 31 });
+                if (u.charAt(0) === "/") u = rs[i].base + u;   // relative -> instance-proxied
+                if (f.itag === 22 || String(f.itag) === "22") out.push({ url: u, label: "720p (Invidious)", rank: 12 });
+                else if (f.itag === 18 || String(f.itag) === "18") out.push({ url: u, label: "360p (Invidious)", rank: 31 });
             }
         }
         return out;
@@ -788,43 +687,35 @@
             if (!mh.length) errors.push("merged-hls:none");
         } catch (e) { errors.push("merged-hls:" + (e && e.message ? e.message : e)); }
 
-        // (2) On-device fMP4 HLS (fallback when YouTube gives no merged HLS) —
-        //     single-segment per track so the data: URIs fit FFmpeg's 4096-byte
-        //     line buffer. NOTE: this issues one large byte-range; googlevideo
-        //     rejects ranges larger than ~16 MB on some networks, in which case
-        //     use the (1) or (4) entries.
+        // (2) Progressive MP4 (video+audio in one file; itag 18 = 360p, 22 = 720p
+        //     when offered). ANDROID first, ANDROID_VR as a second opinion.
+        //     NOTE: YouTube's separate HD video/audio tracks only accept byte
+        //     ranges of ~10 MB, so they can't be handed to the player as one
+        //     range (that was the old "fMP4" option, which always got HTTP 403).
         try {
-            const hd = await buildHlsMaster(m.v);
-            if (hd && hd.master) {
-                const p = hd.height ? (hd.height + "p") : "HD";
-                add("magic_m3u8:" + b64encode(hd.master), p + " (fMP4)", 5);
-            } else {
-                errors.push("hls:no-adaptive");
-            }
-        } catch (e) { errors.push("hls:" + (e && e.message ? e.message : e)); }
-
-        // (3) Invidious -> itag 22 (720p progressive) when an instance has it
-        try {
-            const inv = await invidiousStreams(m.v);
-            for (let i = 0; i < inv.length; i++) add(inv[i].url, inv[i].label, inv[i].rank);
-            if (!inv.length) errors.push("invidious:no-stream");
-        } catch (e) { errors.push("invidious:" + (e && e.message ? e.message : e)); }
-
-        // (4) ANDROID -> progressive MP4 fallback (itag 22 = 720p, itag 18 = 360p)
-        try {
-            const r = await fetchPlayer(AND_CTX, AND_UA, m.v);
-            if (r) {
-                const fmts = (r.streamingData && r.streamingData.formats) || [];
+            let got = false;
+            const clients = [{ ctx: AND_CTX, ua: AND_UA }, { ctx: VR_CTX, ua: VR_UA }];
+            for (let c = 0; c < clients.length && !got; c++) {
+                const r = await fetchPlayer(clients[c].ctx, clients[c].ua, m.v);
+                const fmts = (r && r.streamingData && r.streamingData.formats) || [];
                 for (let i = 0; i < fmts.length; i++) {
                     const f = fmts[i];
                     if (!f || !f.url) continue;
-                    if (f.itag === 22) add(f.url, "720p (MP4)", 10);
-                    if (f.itag === 18) add(f.url, "360p (MP4)", 30);
+                    if (f.itag === 22) { add(f.url, "720p (MP4)", 10); got = true; }
+                    if (f.itag === 18) { add(f.url, "360p (MP4)", 30); got = true; }
                 }
-            } else {
-                errors.push("android:no-stream");
             }
-        } catch (e) { errors.push("android:" + (e && e.message ? e.message : e)); }
+            if (!got) errors.push("mp4:no-stream");
+        } catch (e) { errors.push("mp4:" + (e && e.message ? e.message : e)); }
+
+        // (3) Invidious — only when YouTube itself gave us nothing playable
+        if (!results.length) {
+            try {
+                const inv = await invidiousStreams(m.v);
+                for (let i = 0; i < inv.length; i++) add(inv[i].url, inv[i].label, inv[i].rank);
+                if (!inv.length) errors.push("invidious:no-stream");
+            } catch (e) { errors.push("invidious:" + (e && e.message ? e.message : e)); }
+        }
 
         if (!results.length) {
             return cb({
