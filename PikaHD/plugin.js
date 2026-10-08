@@ -825,7 +825,7 @@
         var url = SITE + '/' + item.slug;
         var thumb = item.thumbnail_image || PLACEHOLDER;
         var cats = item.categories || [];
-        var isSeries = cats.indexOf('tv-series-dubbed') >= 0 || cats.indexOf('series') >= 0 || /\bSeason\s*\d+|\[S\d+\s*E(?:pisode|P)?\s*\d+|\bEpisodes?\s*\d+/i.test(item.post_title || '') || /web[- ]series/i.test(item.post_title || '');
+        var isSeries = cats.indexOf('tv-series-dubbed') >= 0 || cats.indexOf('series') >= 0 || /\bSeason\s*\d+|\bS\d{1,2}\b|\[S\d+\s*E(?:pisode|P)?\s*\d+|\bEpisodes?\s*\d+/i.test(item.post_title || '') || /web[- ]series/i.test(item.post_title || '');
         return mkItem({
             title: pt.name,
             url: url,
