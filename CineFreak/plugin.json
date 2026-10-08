@@ -1,9 +1,9 @@
 {
   "packageName": "com.cinefreak.skystream",
   "name": "CineFreak",
-  "version": 8,
-  "baseUrl": "https://cinefreak.net",
-  "description": "CineFreak (cinefreak.net) — Hindi, English, dual-audio movies, web series & K-Drama. Direct 480p/720p/1080p files from the site's own player, with automatic stream preparation.",
+  "version": 9,
+  "baseUrl": "https://cinefreak.ch",
+  "description": "CineFreak — Hindi, English, dual-audio movies, web series & K-Drama. Catalog and search come from the site's own search index (works where the site domain is blocked), live domain auto-detected, direct 480p/720p/1080p files.",
   "authors": [
     "TJ-Plugins"
   ],
@@ -15,5 +15,15 @@
   "categories": [
     "Movie",
     "TvSeries"
+  ],
+  "domains": [
+    {
+      "name": "cinefreak.ch (current)",
+      "url": "https://cinefreak.ch"
+    },
+    {
+      "name": "cinefreak.net",
+      "url": "https://cinefreak.net"
+    }
   ]
 }

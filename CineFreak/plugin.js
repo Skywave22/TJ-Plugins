@@ -362,9 +362,18 @@
 
     // Dynamic base URL: the app injects the domain the user picked in the
     // plugin's settings gear (mirrors), so never hardcode the primary host.
-    const SITE       = (typeof manifest !== "undefined" && manifest.baseUrl)
+    // CineFreak moves between domains (cinefreak.net -> cinefreak.ch -> ...). The current one is
+    // read from a public community domain list and cached for 12 h; a domain the user typed in
+    // the plugin settings always wins over it.
+    const DEFAULT_SITES = ["https://cinefreak.ch", "https://cinefreak.net"];
+    let SITE = (typeof manifest !== "undefined" && manifest.baseUrl)
         ? String(manifest.baseUrl).replace(/\/+$/, "")
-        : "https://cinefreak.net";
+        : DEFAULT_SITES[0];
+    const DOMAINS_URL = "https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json";
+    const DOMAIN_TTL  = 12 * 3600 * 1000;
+    // Catalog + search index used by the site itself. It lives on a separate host from the
+    // site domain, so home and search keep working where the site domain is blocked.
+    const INDEX_API   = "https://search.yagaverse.net/api/search";
     const STREAM_API = "https://subtitle.yagaverse.net/stream-api.php";
     const STREAM_KEY = "pushpa";
 
@@ -387,6 +396,41 @@
     }, false);
     const STREAM_HEADERS = mergeGeoHeaders({ "User-Agent": UA }, false);
 
+    let __siteReady = null;
+    function useSite(origin) {
+        const m = String(origin || "").match(/^https?:\/\/[^\/?#]+/i);
+        if (!m) return;
+        const o = m[0].replace(/^http:/i, "https:").toLowerCase();
+        SITE = o;
+        try {
+            const g = __NG.groups[0];
+            if (!g.some(function (x) { return __ngBare(__ngHost(x)) === __ngBare(__ngHost(o)); })) g.unshift(o);
+        } catch (_) {}
+    }
+    /** Resolve the live site domain once per session (never blocks for more than ~6 s). */
+    function ensureSite() {
+        if (__siteReady) return __siteReady;
+        __siteReady = withTimeout((async function () {
+            if (DEFAULT_SITES.indexOf(SITE) < 0) return;           // user-chosen domain wins
+            let cached = null;
+            try {
+                if (typeof getPreference === "function") cached = JSON.parse((await withTimeout(getPreference("tj_cf_domain"), 1500)) || "null");
+            } catch (_) { cached = null; }
+            if (cached && cached.u && Date.now() - Number(cached.t || 0) < DOMAIN_TTL) return useSite(cached.u);
+            const r = await withTimeout(http_get(DOMAINS_URL, { "User-Agent": UA, "Accept": "application/json" }), 6000);
+            let j = {};
+            try { j = JSON.parse((r && r.body) || "{}"); } catch (_) { j = {}; }
+            const u = j.cinefreak || j.CineFreak || j.Cinefreak;
+            if (u && /^https?:\/\/[a-z0-9.-]*cinefreak[a-z0-9.-]*\.[a-z]{2,}/i.test(u)) {
+                useSite(u);
+                try { if (typeof setPreference === "function") setPreference("tj_cf_domain", JSON.stringify({ u: SITE, t: Date.now() })); } catch (_) {}
+            } else if (cached && cached.u) {
+                useSite(cached.u);
+            }
+        })(), 6500).catch(function () {});
+        return __siteReady;
+    }
+
     // ─────────────────────────── helpers ───────────────────────────
 
     function mkItem(obj)    { try { return new MultimediaItem(obj); } catch (_) { return obj; } }
@@ -401,7 +445,7 @@
     }
 
     async function fetchHtml(url) {
-        const r = await withTimeout(http_get(url, HTML_HEADERS), 25000);
+        const r = await withTimeout(http_get(url, Object.assign({}, HTML_HEADERS, { "Referer": SITE + "/" })), 25000);
         return (r && r.body) || "";
     }
 
@@ -430,6 +474,9 @@
         s = s.replace(/\s*(?:Download|Watch\s+Online)\b.*$/i, "");
         s = s.replace(/\s*\[[^\]]*\]\s*$/, "").trim();
         s = s.replace(/\s*&\s*$/, "").replace(/\s*,\s*$/, "").trim();
+        // "Name (2017) Dual Audio [Hindi & English] Netflix Web series Season 1" -> "Name (2017) Season 1"
+        const ym = s.match(/^(.+?\((?:19|20)\d{2}\))(.*)$/);
+        if (ym) { const sm = ym[2].match(/\bSeason\s*\d+/i); s = ym[1] + (sm ? " " + sm[0] : ""); }
         return s || decodeEntities(t);
     }
 
@@ -440,7 +487,7 @@
     function fixPoster(u) {
         const s = decodeEntities(u || "");
         if (!s || s.indexOf("http") !== 0) return s;
-        if (s.indexOf("cinefreak.net/") !== -1) return s;
+        if (/^https?:\/\/(?:www\.)?cinefreak\.[a-z]+\//i.test(s)) return s;
         if (s.indexOf("images.weserv.nl/") !== -1) return s;
         return "https://images.weserv.nl/?url=" + encodeURIComponent(s.replace(/^https?:\/\//, ""));
     }
@@ -501,8 +548,8 @@
 
     function parseCards(html, forcedType) {
         const out = [], seen = {};
-        const host = SITE.replace(/^https?:\/\//, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const anchorRe = new RegExp('<a[^>]+href="https?://(?:www\\.)?' + host + '/([a-z0-9][a-z0-9-]*)/"[^>]*class="movie-card"[^>]*>([\\s\\S]*?)</a>', "g");
+        // any host: after a mirror failover the cards link to whichever domain answered
+        const anchorRe = /<a[^>]+href="https?:\/\/[^\/"]+\/([a-z0-9][a-z0-9-]*)\/"[^>]*class="movie-card"[^>]*>([\s\S]*?)<\/a>/g;
         let m;
         while ((m = anchorRe.exec(html)) !== null) {
             const slug = m[1];
@@ -525,17 +572,83 @@
         return out;
     }
 
+    // ─────────────── catalog index (search.yagaverse.net) ───────────────
+    // Typesense-style JSON: { found, hits: [{ document: { title, slug, thumb, cats[], quality } }] },
+    // 30 hits per page, q=* returns the newest uploads first.
+    const TV_RE = /web[- ]?series|tv show|k-?drama|c-?drama|season|episode|\bS\d{1,2}\b|series/i;
+    function docToItem(d) {
+        if (!d || !d.slug) return null;
+        const cats = (d.cats || []).join(" ");
+        const isTv = TV_RE.test(cats) || /season\s*\d|web series|all episodes|\bS\d{1,2}\b/i.test(d.title || "");
+        const poster = d.thumb ? fixPoster(d.thumb) : "";
+        return mkItem({
+            title: cleanTitle(d.title || d.slug),
+            url: JSON.stringify({ slug: String(d.slug).replace(/^\/+|\/+$/g, "") }),
+            posterUrl: poster,
+            bannerUrl: poster,
+            type: isTv ? "tv" : "movie"
+        });
+    }
+    async function indexPage(q, pg) {
+        const url = INDEX_API + "?q=" + encodeURIComponent(q) + "&pg=" + pg;
+        const r = await withTimeout(http_get(url, { "User-Agent": UA, "Accept": "application/json", "Origin": SITE, "Referer": SITE + "/" }), 15000);
+        let j = null;
+        try { j = JSON.parse((r && r.body) || "null"); } catch (_) { j = null; }
+        if (!j || !Array.isArray(j.hits)) throw new Error("index unavailable (HTTP " + ((r && r.status) || 0) + ")");
+        return j.hits.map(function (h) { return h && h.document; }).filter(Boolean);
+    }
+
+    const INDEX_ROWS = [
+        { row: "Hindi Movies",   re: /^Hindi Movies$/i },
+        { row: "English Movies", re: /^English Movies$/i },
+        { row: "Hindi Dubbed",   re: /^Hindi Dubbed/i },
+        { row: "Dual Audio",     re: /^Dual Audio$/i },
+        { row: "Web Series",     re: /^(WEB-?Series|TV Show)$/i },
+        { row: "K-Drama",        re: /^(K-?Drama|Korean|C-?Drama|Chinese)$/i },
+        { row: "South Indian",   re: /^(Tamil|Telugu|Malayalam|Kannada)$/i },
+        { row: "Bangla",         re: /^Bangla/i },
+        { row: "Anime & Animation", re: /^(Anime|Animation)$/i }
+    ];
+
+    async function homeFromIndex() {
+        const pages = await Promise.all([1, 2, 3, 4, 5, 6].map(function (pg) {
+            return indexPage("*", pg).catch(function () { return []; });
+        }));
+        const docs = [], seen = {};
+        pages.forEach(function (list) { list.forEach(function (d) { if (d && d.slug && !seen[d.slug]) { seen[d.slug] = 1; docs.push(d); } }); });
+        if (!docs.length) return null;
+        const rows = {};
+        const latest = docs.filter(function (d) { return d.thumb; }).slice(0, 24).map(docToItem).filter(Boolean);
+        if (latest.length) rows["Latest Uploads"] = latest;
+        INDEX_ROWS.forEach(function (r) {
+            const items = docs.filter(function (d) {
+                return d.thumb && (d.cats || []).some(function (c) { return r.re.test(String(c).trim()); });
+            }).slice(0, 24).map(docToItem).filter(Boolean);
+            if (items.length >= 4) rows[r.row] = items;
+        });
+        return Object.keys(rows).length ? rows : null;
+    }
+
+    async function homeFromSite() {
+        await ensureSite();
+        const rows = {};
+        await Promise.all(HOME_CATS.map(async function (c) {
+            try {
+                const html = await withTimeout(fetchHtml(SITE + c.path), 25000);
+                const items = parseCards(html, c.type);
+                if (items.length) rows[c.row] = items;
+            } catch (e) { /* row skipped */ }
+        }));
+        return Object.keys(rows).length ? rows : null;
+    }
+
     async function getHome(cb) {
         try {
-            const rows = {};
-            await Promise.all(HOME_CATS.map(async function (c) {
-                try {
-                    const html = await withTimeout(fetchHtml(SITE + c.path), 25000);
-                    const items = parseCards(html, c.type);
-                    if (items.length) rows[c.row] = items;
-                } catch (e) { /* row skipped */ }
-            }));
-            if (!Object.keys(rows).length) {
+            ensureSite();   // warm up the domain lookup for the detail page; home doesn't need it
+            let rows = null;
+            try { rows = await homeFromIndex(); } catch (_) { rows = null; }
+            if (!rows) rows = await homeFromSite();
+            if (!rows) {
                 return cb({ success: false, errorCode: "HOME_ERROR", message: "CineFreak catalog unavailable right now." });
             }
             cb({ success: true, data: rows });
@@ -546,25 +659,45 @@
 
     // ─────────────────────────── search ────────────────────────────
 
+    async function searchSite(q) {
+        await ensureSite();
+        const url = SITE + "/search-api.php?q=" + encodeURIComponent(q) + "&pg=1";
+        const j = await withTimeout(fetchJson(url, Object.assign({}, JSON_HEADERS, { "Referer": SITE + "/" })), 25000);
+        const results = (j && j.results) || [];
+        const out = [];
+        for (let i = 0; i < results.length && out.length < 30; i++) {
+            const r = results[i] || {};
+            if (!r.l) continue;
+            const isTv = /series|drama|show|anime|tv\b/i.test(String(r.c || ""));
+            out.push(mkItem({
+                title: cleanTitle(r.t),
+                url: JSON.stringify({ slug: String(r.l) }),
+                posterUrl: fixPoster(r.i),
+                bannerUrl: fixPoster(r.i),
+                type: isTv ? "tv" : "movie"
+            }));
+        }
+        return out;
+    }
+
     async function search(query, cb) {
         try {
             const q = String(query || "").trim();
             if (!q) return cb({ success: true, data: [] });
-            const url = SITE + "/search-api.php?q=" + encodeURIComponent(q) + "&pg=1";
-            const j = await withTimeout(fetchJson(url), 25000);
-            const results = (j && j.results) || [];
-            const out = [];
-            for (let i = 0; i < results.length && out.length < 30; i++) {
-                const r = results[i] || {};
-                if (!r.l) continue;
-                const isTv = /series|drama|show|anime|tv\b/i.test(String(r.c || ""));
-                out.push(mkItem({
-                    title: cleanTitle(r.t),
-                    url: JSON.stringify({ slug: String(r.l) }),
-                    posterUrl: fixPoster(r.i),
-                    bannerUrl: fixPoster(r.i),
-                    type: isTv ? "tv" : "movie"
+            let out = [];
+            try {
+                const pages = await Promise.all([1, 2].map(function (pg) {
+                    return indexPage(q, pg).catch(function (e) { if (pg === 1) throw e; return []; });
                 }));
+                const seen = {};
+                pages.forEach(function (list) { list.forEach(function (d) {
+                    if (!d || !d.slug || seen[d.slug]) return;
+                    seen[d.slug] = 1;
+                    const it = docToItem(d);
+                    if (it) out.push(it);
+                }); });
+            } catch (_) {
+                out = await searchSite(q);
             }
             cb({ success: true, data: out });
         } catch (e) {
@@ -609,6 +742,7 @@
             try { p = JSON.parse(url); } catch (e) { p = null; }
             if (!p || !p.slug) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized item url" });
             const slug = String(p.slug);
+            await ensureSite();
             const html = await fetchHtml(SITE + "/" + slug + "/");
 
             const tM = html.match(/<meta property="og:title" content="([^"]*)"/);
@@ -649,7 +783,8 @@
                         const meta = String(ep.ep_meta || "");
                         episodes.push(mkEpisode({
                             name: sName + " · " + epTitle + (meta ? " · " + meta : ""),
-                            url: JSON.stringify({ slug: slug, s: si, e: ei }),
+                            // carry the player tokens so playback doesn't need the site again
+                            url: JSON.stringify({ slug: slug, s: si, e: ei, src: ep.sources }),
                             season: si + 1,
                             episode: num
                         }));
@@ -660,7 +795,7 @@
                 // movie (or series post without per-episode data): single play-all
                 episodes.push(mkEpisode({
                     name: title,
-                    url: JSON.stringify({ slug: slug, s: -1, e: -1 }),
+                    url: JSON.stringify({ slug: slug, s: -1, e: -1, src: (data && data.sources) || undefined }),
                     season: 1,
                     episode: 1
                 }));
@@ -773,17 +908,20 @@
             if (!p || !p.slug) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized episode url" });
             const slug = String(p.slug);
 
-            const html = await fetchHtml(SITE + "/" + slug + "/");
-            const data = extractDataset(html);
-            if (!data) return cb({ success: false, errorCode: "NO_STREAMS", message: "No stream data on this page (download-only post?)" });
-
-            let sources = null;
-            if (p.s >= 0 && Array.isArray(data.seasons) && data.seasons[p.s]) {
+            let sources = (p.src && typeof p.src === "object" && Object.keys(p.src).length) ? p.src : null;
+            let data = null;
+            if (!sources) {
+                await ensureSite();
+                const html = await fetchHtml(SITE + "/" + slug + "/");
+                data = extractDataset(html);
+                if (!data) return cb({ success: false, errorCode: "NO_STREAMS", message: "No stream data on this page (download-only post?)" });
+            }
+            if (!sources && p.s >= 0 && Array.isArray(data.seasons) && data.seasons[p.s]) {
                 const eps = data.seasons[p.s].episodes || [];
                 const ep = eps[p.e] || eps[0];
                 sources = ep && ep.sources;
             }
-            if (!sources) sources = data.sources;
+            if (!sources && data) sources = data.sources;
 
             if (!sources) return cb({ success: false, errorCode: "NO_STREAMS", message: "This post has no online player (download links only)." });
             const prep = await ensurePrepared(sources);
