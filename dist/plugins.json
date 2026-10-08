@@ -21,7 +21,7 @@
   {
     "packageName": "com.cinefreak.skystream",
     "name": "CineFreak",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://cinefreak.net",
     "description": "CineFreak (cinefreak.net) — Hindi, English, dual-audio movies, web series & K-Drama. Direct 480p/720p/1080p files from the site's own player, with automatic stream preparation.",
     "authors": [
@@ -41,7 +41,7 @@
   {
     "packageName": "com.cinehd.skystream",
     "name": "CineHD",
-    "version": 9,
+    "version": 10,
     "baseUrl": "https://cinehd.vc",
     "description": "CineHD (cinehd.vc) — movies & series from a TMDB catalog with many servers per title (MhPly/AwsPly Hindi, Nitro multi-audio, HDHub, Rock HLS, MovieBox, VidAPI…). Every link is checked before it is shown; Hindi first.",
     "authors": [
@@ -59,7 +59,7 @@
   {
     "packageName": "com.cinejoy.skystream",
     "name": "CineJoy",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://cinejoy.pk",
     "description": "CineJoy (cinejoy.pk) — movies & series from a TMDB catalog (Netflix/Prime rows) with many servers per title: Nitro multi-audio, MhPly/AwsPly Hindi, HDHub, VidAPI, MovieBox, Rock HLS. Links are checked before they are shown.",
     "authors": [
@@ -77,7 +77,7 @@
   {
     "packageName": "com.desidubanime.skystream",
     "name": "DesiDubAnime",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://www.desidubanime.me",
     "description": "DesiDubAnime (desidubanime.me) - Hindi, Tamil, Telugu and multi-audio dubbed anime series and movies. Full episode lists with titles, played as HLS from the site's own P2PPlay (Cloudflare and direct) and VidMoly servers with English subtitles; each link is checked before it is shown.",
     "authors": [
@@ -99,7 +99,7 @@
   {
     "packageName": "com.desiserialonline.skystream",
     "name": "DesiSerialOnline",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://desiserialonline.su",
     "description": "DesiSerialOnline / Yo Desi Serial (desiserialonline.su) - daily Hindi TV serials and reality shows (Star Plus, Colors, Zee, Sony, Dangal and more). Every show with its full episode history by air date; plays direct MP4 from VKSpeed and Blogger (720p/360p, multi-part episodes listed as Part 1, 2, ...). Each link is checked before it is shown.",
     "authors": [
@@ -117,7 +117,7 @@
   {
     "packageName": "com.desiserials.skystream",
     "name": "DesiSerials",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://www.desi-serials.to",
     "description": "DesiSerials (desi-serials.to, formerly desiserials.us) - daily Hindi TV serials and reality shows from Star Plus, Zee TV, Sony TV, Colors, Star Bharat, Sab TV and & TV, plus hundreds of completed shows. Episodes listed by air date; plays TVLogy HLS and VKSpeed / VkPrime MP4. Each link is checked before it is shown.",
     "authors": [
@@ -135,7 +135,7 @@
   {
     "packageName": "com.fmoviess.skystream",
     "name": "FMoviess",
-    "version": 5,
+    "version": 6,
     "baseUrl": "https://fmoviess.tv",
     "domains": [
       {
@@ -161,7 +161,7 @@
   {
     "packageName": "com.hicine.skystream",
     "name": "HiCine",
-    "version": 9,
+    "version": 10,
     "baseUrl": "https://api.hicine.sbs",
     "domains": [
       {
@@ -188,7 +188,7 @@
   {
     "packageName": "com.hindidubbed.provider",
     "name": "Hindi Dubbed",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://www.youtube.com",
     "description": "Hindi Dubbed — Hollywood & South Indian Hindi-dubbed movies, Bollywood and Hindi cartoons from 20 official YouTube channels (Goldmines, Aditya, Shemaroo, Ultra, Pen, Rajshri, B4U…). Full movies as single items, web series grouped with episodes. Search finds full movies only.",
     "authors": [
