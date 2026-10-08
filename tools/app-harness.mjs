@@ -145,9 +145,21 @@ async function curlHttp(method, url, headers, body) {
   return { status, body: resBody, headers: rh, finalUrl: fu.join(" ") || url };
 }
 
+// --block <regex> [--block-mode dns|cf]: simulate a provider block for matching hosts.
+//   dns -> the request fails like a poisoned DNS answer (status 0, "Failed host lookup")
+//   cf  -> Cloudflare "you have been blocked" page (HTTP 403, error 1020/1009)
+const BLOCK_RE = (() => { const v = opt("--block", ""); return v ? new RegExp(v, "i") : null; })();
+const BLOCK_MODE = opt("--block-mode", "dns");
 async function doHttp(req) {
   const method = req.method || "GET";
   const url = req.url;
+  if (BLOCK_RE && typeof url === "string" && BLOCK_RE.test((url.match(/^https?:\/\/([^\/?#]+)/i) || [])[1] || "")) {
+    httpLog.push({ method, url, status: BLOCK_MODE === "cf" ? 403 : 0, ms: 0, err: "simulated block" });
+    if (!QUIET_HTTP) console.log(C.d(`  [HTTP] ${method} BLOCKED(${BLOCK_MODE}) ${short(url)}`));
+    if (BLOCK_MODE === "cf") return { code: 403, statusCode: 403, status: 403, headers: { server: "cloudflare" }, finalUrl: url,
+      body: '<!DOCTYPE html><html><head><title>Attention Required! | Cloudflare</title></head><body><div id="cf-error-details"><h1>Sorry, you have been blocked</h1><span>Error 1009</span> The owner of this website has banned the country or region your IP address is in.</div></body></html>' };
+    return { code: 0, statusCode: 0, status: 0, body: "", error: "DioException [connection error]: SocketException: Failed host lookup: '" + ((url.match(/^https?:\/\/([^\/?#]+)/i) || [])[1]) + "'" };
+  }
   const headers = normHeaders(req.headers, url);
   if (!Object.keys(headers).some((k) => k.toLowerCase() === "user-agent")) headers["User-Agent"] = APP_UA;
   if (!Object.keys(headers).some((k) => k.toLowerCase() === "accept-encoding")) headers["Accept-Encoding"] = "identity";

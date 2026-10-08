@@ -33,38 +33,65 @@ It happens in many countries, so try these in order:
 4. **VPN:** if the provider blocks the site completely (by its name, not only by DNS), only a VPN
    or a mirror domain helps.
 
-Since the 2026-10-08 update, every plugin detects this itself:
-- If the site doesn't answer on your network, it automatically retries on the site's other known
-  domains (and TMDB's official alias `api.tmdb.org`). It then remembers the one that works.
-- If nothing gets through, you see a clear message, for example *"… is blocked on your network
-  (DNS blocked), usually by your internet provider"*, with the steps above, instead of an empty
-  list. A site that is merely slow or down gets a different message ("not responding, try again").
+Every plugin also handles this itself (network guard, since 2026-10-08):
+- **Detects blocks:** DNS failures, cut connections, HTTP 451, provider block pages, and
+  **Cloudflare country/VPN bans or challenges the app could not solve**. These used to show up as
+  *"… returned no content"* or *"catalog unavailable"*.
+- **Mirror failover:** it retries on the site's other known domains (and TMDB's official alias
+  `api.tmdb.org`), then remembers the one that works.
+- **🌍 Geo-pass relay:** if the site is still blocked, the plugin fetches that page through the
+  TJ-Plugins relay, a free Cloudflare Worker that providers almost never block. Blocked sites
+  are remembered, so later requests go straight to the relay. This makes the catalog, search and
+  links work **in any country without a VPN**. Videos still play directly. Setup (one time,
+  5 minutes): **[relay/README.md](relay/README.md)**. Relays are listed in
+  [`relay.json`](relay.json), and installed plugins pick up changes without an update.
+- **Clear messages:** if nothing gets through, you see *"… is blocked on your network"* with
+  the steps above, instead of an empty list. A site that is merely slow or down gets a different
+  message ("not responding, try again").
 
 ## 📦 Plugins
 
 | Plugin | Version | Author | Source | Categories | Languages | Mirrors |
 |---|---|---|---|---|---|---|
-| **321Movies UK** | v3 | TJ-Plugins | 321movies.co.uk | Movie, TvSeries | en, hi | — |
-| **CineFreak** | v6 | TJ-Plugins | cinefreak.net | Movie, TvSeries | hi, en, mal | — |
-| **CineHD** | v9 | TJ-Plugins | cinehd.vc | Movie, TvSeries | en | — |
-| **CineJoy** | v4 | TJ-Plugins | cinejoy.pk | Movie, TvSeries | en | — |
-| **DesiDubAnime** | v1 | TJ-Plugins | desidubanime.me | Anime, Movie, TvSeries | hi, ta, te | — |
-| **DesiSerialOnline** | v1 | TJ-Plugins | desiserialonline.su | TvSeries | hi | — |
-| **DesiSerials** | v1 | TJ-Plugins | desi-serials.to | TvSeries | hi | — |
-| **FMoviess** | v5 | TJ-Plugins | fmoviess.tv | Movies, Series, Anime | en | ✅ |
-| **HiCine** | v8 | TJ-Plugins | api.hicine.sbs | Movies, Series, Anime | hi, en | ✅ |
-| **Hindi Dubbed** | v3 | TJ-Plugins | youtube.com | Movie, TvSeries | hi, en | — |
-| **KatMovieHD** | v11 | TJ-Plugins | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
-| **KDramaMaza** | v6 | TJ-Plugins | kdramasmaza.net | TvSeries | en, hi, ur | — |
-| **NetMirror** | v7 | TJ-Plugins | netmirror.center | Movie, TvSeries | en, hi | — |
-| **RareAnimes** | v1 | TJ-Plugins | rareanimes.mov | Anime, TvSeries, Movie | hi, ta, te, ml | — |
-| **RiveStream** | v4 | TJ-Plugins | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
-| **SSR Movies** | v6 | TJ-Plugins | ssrmovies.name | Movies, Series | hi, en | ✅ |
-| **SubDubAnime** | v4 | TJ-Plugins | subdubanime.site | TvSeries, Movie | en, hi | — |
-| **Vidbox** | v3 | TJ-Plugins | vidbox.vc | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
+| **321Movies UK** | v5 | TJ-Plugins | 321movies.co.uk | Movie, TvSeries | en, hi | — |
+| **CineFreak** | v8 | TJ-Plugins | cinefreak.net | Movie, TvSeries | hi, en, mal | — |
+| **CineHD** | v11 | TJ-Plugins | cinehd.vc | Movie, TvSeries | en | — |
+| **CineJoy** | v6 | TJ-Plugins | cinejoy.pk | Movie, TvSeries | en | — |
+| **DesiDubAnime** | v3 | TJ-Plugins | desidubanime.me | Anime, Movie, TvSeries | hi, ta, te | — |
+| **DesiSerialOnline** | v3 | TJ-Plugins | desiserialonline.su | TvSeries | hi | — |
+| **DesiSerials** | v3 | TJ-Plugins | desi-serials.to | TvSeries | hi | — |
+| **FMoviess** | v7 | TJ-Plugins | fmoviess.tv | Movies, Series, Anime | en | ✅ |
+| **HiCine** | v11 | TJ-Plugins | api.hicine.sbs | Movies, Series, Anime | hi, en | ✅ |
+| **Hindi Dubbed** | v5 | TJ-Plugins | youtube.com | Movie, TvSeries | hi, en | — |
+| **KatDrama** | v1 | TJ-Plugins | new.katdrama.my | Series, Movies | hi, en, ko, zh | ✅ |
+| **KatMovieHD** | v13 | TJ-Plugins | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
+| **KDramaMaza** | v9 | TJ-Plugins | kdramasmaza.net | TvSeries | en, hi, ur | — |
+| **NetMirror** | v10 | TJ-Plugins | netmirror.center | Movie, TvSeries | en, hi | — |
+| **PikaHD** | v2 | TJ-Plugins | new.pikahd.co | Anime, Movies, Series | hi, en, ja | ✅ |
+| **RareAnimes** | v4 | TJ-Plugins | rareanimes.mov | Anime, TvSeries, Movie | hi, ta, te, ml | — |
+| **RiveStream** | v6 | TJ-Plugins | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
+| **SSR Movies** | v8 | TJ-Plugins | ssrmovies.games | Movies, Series | hi, en | ✅ |
+| **SubDubAnime** | v6 | TJ-Plugins | subdubanime.site | TvSeries, Movie | en, hi | — |
+| **Vidbox** | v5 | TJ-Plugins | vidbox.vc | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🔄 Update — 2026-10-08 (2)
+
+- **New: PikaHD** (new.pikahd.co): anime in Hindi dubbed, dual audio and English subbed.
+- **New: KatDrama** (new.katdrama.my): Korean and Chinese dramas in Hindi, dual audio and English dubbed.
+  Both use the KatMovieHD engine (same site platform and file hosts).
+- **Geo-pass relay + Cloudflare block detection** in every plugin (see *Works only with a VPN?*
+  above). This fixes the "Site Not Reachable … returned no content" errors for SSR Movies,
+  RareAnimes, CineFreak and KatMovieHD on blocked networks, once the relay is set up.
+- **KatMovieHD / PikaHD:** episode lists written as "E01:", "E02:" were collapsed into a single
+  episode; they are now split into proper episodes.
+- **RareAnimes:** the site itself is currently down. Its domain is disconnected from its own server
+  (it fails with a VPN too). The plugin now says so clearly instead of showing an empty list, falls back to the
+  cached catalog when only search is broken, and finds posts that were renamed.
+- KatMovie4K (katmovie4k.mov) could not be added: the domain currently has no server
+  (no DNS address), and its older domains are parked.
 
 ## 🔄 Update — 2026-10-08
 

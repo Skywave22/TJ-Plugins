@@ -14,6 +14,8 @@ import json, os, re, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SNIP = open(os.path.join(ROOT, 'tools/snippets/net-guard.js')).read().rstrip('\n')
 MIRRORS = json.load(open(os.path.join(ROOT, 'tools/mirrors.json')))
+_rp = os.path.join(ROOT, 'tools/relay.json')
+RELAY = json.load(open(_rp)) if os.path.exists(_rp) else {'url': '', 'key': ''}
 START = '    // ── network guard (TJ-Plugins shared helper)'
 END = '    // ── end network guard'
 OPEN_RE = re.compile(r'^\(function\s*\(([^)]*)\)\s*\{[ \t]*$', re.M)
@@ -26,7 +28,7 @@ def apply(d):
     p = os.path.join(ROOT, d, 'plugin.js')
     s = open(p).read()
     mirrors = [m.rstrip('/') for m in MIRRORS.get(d, [])]
-    block = SNIP.replace('__NG_MIRRORS_PLACEHOLDER__', json.dumps(mirrors))
+    block = SNIP.replace('__NG_MIRRORS_PLACEHOLDER__', json.dumps(mirrors)).replace('__NG_RELAY_PLACEHOLDER__', json.dumps({'url': RELAY.get('url', ''), 'key': RELAY.get('key', ''), 'config': RELAY.get('config', '')}))
 
     if START in s:  # refresh
         a = s.index(START)
