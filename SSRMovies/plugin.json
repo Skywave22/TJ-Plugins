@@ -1,16 +1,16 @@
 {
   "packageName": "com.ssr.skystream",
   "name": "SSR Movies",
-  "version": 6,
-  "baseUrl": "https://ssrmovies.name",
+  "version": 7,
+  "baseUrl": "https://ssrmovies.games",
   "domains": [
     {
-      "name": "ssrmovies.name (primary)",
-      "url": "https://ssrmovies.name"
+      "name": "SSRMovies (ssrmovies.games)",
+      "url": "https://ssrmovies.games"
     },
     {
-      "name": "ssrmovies.blue",
-      "url": "https://ssrmovies.blue"
+      "name": "ssrmovies.name",
+      "url": "https://ssrmovies.name"
     },
     {
       "name": "ssrmovies.com",
