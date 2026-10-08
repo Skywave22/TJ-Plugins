@@ -1,7 +1,7 @@
 {
   "packageName": "com.vidbox.plugin",
   "name": "Vidbox",
-  "version": 4,
+  "version": 5,
   "baseUrl": "https://vidbox.vc",
   "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies and TV shows (vidbox uses TMDB ids, so titles match 1:1). Streams come from the Nxsha multi-language servers. Hindi audio is listed first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every link is checked before it is shown; working links come first.",
   "authors": [
