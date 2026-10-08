@@ -131,12 +131,51 @@
         });
     }
 
+    // WP REST is answered live by the origin, which is often overloaded (15-40 s); a timed-out or
+    // failed call is flagged with .failed so callers can tell "slow site" from "no results".
     async function wpPosts(qs) {
         try {
-            const r = await withTimeout(http_get(API + "/posts?" + qs, mergeGeoHeaders({ "User-Agent": UA }, false)), 20000);
-            const j = JSON.parse((r && r.body) || "[]");
-            return Array.isArray(j) ? j : [];
-        } catch (e) { return []; }
+            const r = await withTimeout(http_get(API + "/posts?" + qs, mergeGeoHeaders({ "User-Agent": UA }, false)), 15000);
+            const st = Number((r && (r.status || r.statusCode)) || 0);
+            const j = JSON.parse((r && r.body) || "null");
+            if (Array.isArray(j)) return j;
+            const out = []; out.failed = "HTTP " + st; return out;
+        } catch (e) { const out = []; out.failed = String((e && e.message) || e); return out; }
+    }
+
+    // The home page is served from the site's cache in under a second even when the origin is
+    // overloaded, so it backs up the REST catalog: [{ title, link, poster, raw }]
+    let homeCache = null;
+    async function homeCards() {
+        if (homeCache && Date.now() - homeCache.t < 10 * 60000) return homeCache.list;
+        const html = await getText(SITE + "/", { "Referer": SITE + "/" });
+        const list = [], seen = {};
+        const re = /<article\b[\s\S]*?<\/article>/gi;
+        let m;
+        while ((m = re.exec(html))) {
+            const a = m[0];
+            const link = (a.match(/href="(https?:\/\/[^"]+)"/) || [])[1];
+            const tm = a.match(/<h[23][^>]*>\s*<a[^>]*>([\s\S]*?)<\/a>/i) || a.match(/title="([^"]+)"/i);
+            if (!link || !tm || seen[link] || /\/(category|author|tag)\//.test(link)) continue;
+            seen[link] = 1;
+            const img = (a.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || "";
+            list.push({ raw: stripTags(tm[1]), link: link, poster: img.replace(/&amp;/g, "&") });
+        }
+        // extra drama links from widgets / menus (title from the link text)
+        const lr = /<a[^>]+href="(https?:\/\/kdramasmaza\.[a-z.]+\/[a-z0-9-]+-(?:drama|movie|anime)[a-z0-9-]*\/)"[^>]*>([^<]{3,140})<\/a>/gi;
+        while ((m = lr.exec(html))) {
+            if (seen[m[1]]) continue;
+            seen[m[1]] = 1;
+            list.push({ raw: stripTags(m[2]), link: m[1], poster: "" });
+        }
+        if (list.length) homeCache = { t: Date.now(), list: list };
+        return list;
+    }
+    function cardToItem(c) {
+        const pt = parseTitle(c.raw);
+        const title = cleanTitle(c.raw) || pt.name;
+        if (!title) return null;
+        return mkItem({ title: title, url: JSON.stringify({ link: c.link }), posterUrl: c.poster, bannerUrl: c.poster, type: "tv", description: metaLine(pt) });
     }
 
     // ─────────────────────── host resolvers ────────────────────────
@@ -256,14 +295,29 @@
                 { title: "Korean Movies in Hindi",      qs: "per_page=24&categories=3149" },
                 { title: "Anime in Hindi",              qs: "per_page=24&categories=37" }
             ];
-            const settled = await Promise.all(sections.map(function (s) { return wpPosts(s.qs); }));
+            const res = await Promise.all([
+                Promise.all(sections.map(function (s) { return wpPosts(s.qs); })),
+                homeCards().catch(function () { return []; })
+            ]);
+            const settled = res[0], cards = res[1];
             const home = {};
             for (let i = 0; i < sections.length; i++) {
                 const items = (settled[i] || []).map(wpToItem).filter(function (x) { return !!x; });
                 if (items.length) home[sections[i].title] = items;
             }
+            if (!home["Latest Dramas"] && cards.length) {
+                // origin too slow for the API: show what the cached home page lists
+                const latest = cards.filter(function (c) { return c.poster; }).map(cardToItem).filter(function (x) { return !!x; });
+                const more = cards.filter(function (c) { return !c.poster; }).map(cardToItem).filter(function (x) { return !!x; });
+                const ordered = {};
+                if (latest.length) ordered["Latest Dramas"] = latest;
+                Object.keys(home).forEach(function (k) { ordered[k] = home[k]; });
+                if (more.length) ordered["More Dramas"] = more;
+                Object.keys(home).forEach(function (k) { delete home[k]; });
+                Object.keys(ordered).forEach(function (k) { home[k] = ordered[k]; });
+            }
             if (!Object.keys(home).length) {
-                return cb({ success: false, errorCode: "API_ERROR", message: "KDramaMaza catalog unavailable" });
+                return cb({ success: false, errorCode: "SITE_SLOW", message: "KDramaMaza's server is not responding right now (it is overloaded). Please try again in a few minutes." });
             }
             cb({ success: true, data: home });
         } catch (e) {
@@ -276,8 +330,18 @@
     async function search(query, cb) {
         try {
             if (!query || !String(query).trim()) return cb({ success: true, data: [] });
-            const posts = await wpPosts("per_page=24&search=" + encodeURIComponent(String(query).trim()));
-            cb({ success: true, data: posts.map(wpToItem).filter(function (x) { return !!x; }) });
+            const q = String(query).trim();
+            const posts = await wpPosts("per_page=24&search=" + encodeURIComponent(q));
+            if (!posts.failed) return cb({ success: true, data: posts.map(wpToItem).filter(function (x) { return !!x; }) });
+            // the site's search timed out: match against the dramas on the (cached) home page
+            const words = q.toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 1; });
+            const cards = await homeCards().catch(function () { return []; });
+            const hits = cards.filter(function (c) {
+                const t = c.raw.toLowerCase();
+                return words.length && words.every(function (w) { return t.indexOf(w) >= 0; });
+            }).map(cardToItem).filter(function (x) { return !!x; });
+            if (hits.length) return cb({ success: true, data: hits });
+            cb({ success: false, errorCode: "SITE_SLOW", message: "KDramaMaza's search is not responding right now (the site is overloaded). Please try again in a minute." });
         } catch (e) {
             cb({ success: false, errorCode: "SEARCH_ERROR", message: String((e && e.message) || e) });
         }
@@ -401,6 +465,7 @@
         if (st === 200 || st === 206) {
             if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
             if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            if (/^PK\u0003\u0004|^Rar!\u001a|^7z\u00bc\u00af/.test(body)) return "dead"; // ZIP/RAR/7z archive, not a video
             return "ok";
         }
         if (st === 0) {

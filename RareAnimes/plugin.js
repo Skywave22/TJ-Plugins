@@ -129,6 +129,8 @@
             if (!a || seen[a[1]]) continue;
             var rawTitle = a[2] || stripTags((body.match(/<h2[^>]*>([\s\S]*?)<\/h2>/) || [])[1] || '');
             if (!rawTitle) continue;
+            // index posts ("All Anime & Cartoon Movies List") are link directories, not playable titles
+            if (/^\s*all\b[\s\S]*\blist\s*$/i.test(decodeEntities(stripTags(rawTitle)))) continue;
             var img = body.match(/<img[^>]+src="([^"]+)"/);
             seen[a[1]] = 1;
             out.push(mkItem({
@@ -499,6 +501,7 @@
         if (st === 200 || st === 206) {
             if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
             if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            if (/^PK\u0003\u0004|^Rar!\u001a|^7z\u00bc\u00af/.test(body)) return "dead"; // ZIP/RAR/7z archive, not a video
             if (/^\{\s*"success"\s*:\s*false/.test(body)) return "dead";
             return "ok";
         }

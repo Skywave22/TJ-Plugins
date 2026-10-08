@@ -591,8 +591,30 @@
         try {
             var q = String(query || '').trim();
             if (!q) return cb({ success: true, data: [] });
-            var d = await getJson(API + '/api/search/' + encodeURIComponent(q));
-            var items = (d && Array.isArray(d.data)) ? d.data : (Array.isArray(d) ? d : []);
+            // HiCine's search is a plain substring match on the title: "spider man" finds nothing,
+            // "spider-man" finds 16. Try the query as typed, then spelling variants and single words,
+            // keeping only titles that contain every word of the query.
+            var norm = function (t) { return String(t || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ''); };
+            var words = q.toLowerCase().split(/[^a-z0-9]+/i).filter(function (w) { return w.length > 1; });
+            var fetchQ = function (t) {
+                return getJson(API + '/api/search/' + encodeURIComponent(t)).then(function (d) {
+                    return (d && Array.isArray(d.data)) ? d.data : (Array.isArray(d) ? d : []);
+                }).catch(function () { return []; });
+            };
+            var items = await fetchQ(q);
+            if (items.length < 3 && words.length > 1) {
+                var variants = [words.join('-'), words.join(' ')];
+                words.slice().sort(function (a, b) { return b.length - a.length; }).slice(0, 2).forEach(function (w) {
+                    if (w.length > 2) variants.push(w);
+                });
+                var extra = await Promise.all(variants.filter(function (v, i, a) { return v !== q && a.indexOf(v) === i; }).map(fetchQ));
+                extra.forEach(function (list) {
+                    list.forEach(function (rec) {
+                        var t = norm(rec && (rec.title || rec.name));
+                        if (words.every(function (w) { return t.indexOf(norm(w)) >= 0; })) items.push(rec);
+                    });
+                });
+            }
 
             var results = [];
             var seen = {};

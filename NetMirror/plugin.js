@@ -314,7 +314,9 @@
     // extension does exactly this: Referer: https://movieboxonline.net/ for
     // every hakunaymatata URL. Cloud/datacenter IPs get 426 regardless.
     function streamHeaders(u) {
-        if (/hakunaymatata\.com|aoneroom\.com/i.test(u)) return { "User-Agent": UA, "Referer": "https://movieboxonline.net/" };
+        // The file CDN now answers "426 Forbidden" to Referer movieboxonline.net (blacklisted, 2026-10);
+        // send what a browser on the play page sends: that page's origin.
+        if (/hakunaymatata\.com|aoneroom\.com/i.test(u)) return { "User-Agent": UA, "Referer": PLAY.replace(/^(https?:\/\/[^\/]+).*$/, "$1") + "/" };
         return { "User-Agent": UA };
     }
 
@@ -429,6 +431,7 @@
         if (st === 200 || st === 206) {
             if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
             if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            if (/^PK\u0003\u0004|^Rar!\u001a|^7z\u00bc\u00af/.test(body)) return "dead"; // ZIP/RAR/7z archive, not a video
             return "ok";
         }
         if (st === 0) {
