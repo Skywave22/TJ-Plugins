@@ -1,7 +1,7 @@
 {
   "packageName": "com.cinefreak.skystream",
   "name": "CineFreak",
-  "version": 6,
+  "version": 7,
   "baseUrl": "https://cinefreak.net",
   "description": "CineFreak (cinefreak.net) — Hindi, English, dual-audio movies, web series & K-Drama. Direct 480p/720p/1080p files from the site's own player, with automatic stream preparation.",
   "authors": [
