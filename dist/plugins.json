@@ -161,7 +161,7 @@
   {
     "packageName": "com.hicine.skystream",
     "name": "HiCine",
-    "version": 8,
+    "version": 9,
     "baseUrl": "https://api.hicine.sbs",
     "domains": [
       {
@@ -207,7 +207,7 @@
   {
     "packageName": "com.kdramamaza.skystream",
     "name": "KDramaMaza",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://kdramasmaza.net",
     "description": "KDramaMaza (kdramasmaza.net) — Korean, Chinese, Turkish & Japanese dramas plus anime in Hindi/Urdu dub. Full episode lists with direct HubCloud and GDFlix (Instant / Drive) files, checked before they are shown.",
     "authors": [
@@ -269,7 +269,7 @@
   {
     "packageName": "com.netmirror.skystream",
     "name": "NetMirror",
-    "version": 7,
+    "version": 8,
     "baseUrl": "https://netmirror.center",
     "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime and Reality TV, heavy on Hindi content. Direct files per title/episode (up to 1080p) with English subtitles where available. Every link is checked before it is shown; working links come first.",
     "authors": [
@@ -288,7 +288,7 @@
   {
     "packageName": "com.rareanimes.skystream",
     "name": "RareAnimes",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://www.rareanimes.mov",
     "description": "RareAnimes / Rare Toons India (rareanimes.mov) - Hindi, Tamil, Telugu and Malayalam dubbed anime, cartoons and animated movies. Every audio language an episode has is listed (Hindi, Tamil, Telugu, Untouched NF/CR), played as direct HD files from the site's StreamBeta servers; each link is checked before it is shown.",
     "authors": [
