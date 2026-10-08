@@ -1,7 +1,7 @@
 {
   "packageName": "com.hindidubbed.provider",
   "name": "Hindi Dubbed",
-  "version": 4,
+  "version": 5,
   "baseUrl": "https://www.youtube.com",
   "description": "Hindi Dubbed — Hollywood & South Indian Hindi-dubbed movies, Bollywood and Hindi cartoons from 20 official YouTube channels (Goldmines, Aditya, Shemaroo, Ultra, Pen, Rajshri, B4U…). Full movies as single items, web series grouped with episodes. Search finds full movies only.",
   "authors": [
