@@ -24,6 +24,7 @@
         if (st === 200 || st === 206) {
             if (/^#EXTM3U/.test(body) || /<MPD[\s>]/i.test(body)) return "ok";
             if (/^<(!doctype|html|head|body)/i.test(body)) return "dead";
+            if (/^PK\u0003\u0004|^Rar!\u001a|^7z\u00bc\u00af/.test(body)) return "dead"; // ZIP/RAR/7z archive, not a video
             return "ok";
         }
         if (st === 0) {

@@ -15,8 +15,30 @@ https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/repo.json
 4. Tap **Add**, wait for the list to populate, and **install** the plugins you want.
 5. On the Home screen, switch the **Provider** (bottom-right button) to your new plugins.
 
-Already installed? Open Extensions and tap **Update**: every plugin got a new version in this rebuild,
-and four new plugins were added (see below).
+Already installed? Open Extensions and tap **Update**: every plugin got a new version on 2026-10-08
+(see the update notes below).
+
+## 🛡️ Works only with a VPN?
+
+Many internet providers block streaming sites. Usually they give a fake DNS answer for the site
+name, and some also cut the connection. That's why a plugin can work with a VPN and fail without one.
+It happens in many countries, so try these in order:
+
+1. **Private DNS (Android, recommended):** phone **Settings → Network & internet → Private DNS →
+   Private DNS provider hostname → `dns.google`** (or `one.one.one.one`). This covers the whole
+   phone, including the video player. On iPhone, install a DNS profile such as Cloudflare's 1.1.1.1 app.
+2. **SkyStream's own DNS:** **Settings → Accounts, Network & Downloads → DNS over HTTPS → On**
+   (Cloudflare or Google).
+3. **Another domain:** if a plugin has a ⚙️ gear in Extensions, pick another domain there.
+4. **VPN:** if the provider blocks the site completely (by its name, not only by DNS), only a VPN
+   or a mirror domain helps.
+
+Since the 2026-10-08 update, every plugin detects this itself:
+- If the site doesn't answer on your network, it automatically retries on the site's other known
+  domains (and TMDB's official alias `api.tmdb.org`). It then remembers the one that works.
+- If nothing gets through, you see a clear message, for example *"… is blocked on your network
+  (DNS blocked), usually by your internet provider"*, with the steps above, instead of an empty
+  list. A site that is merely slow or down gets a different message ("not responding, try again").
 
 ## 📦 Plugins
 
@@ -43,6 +65,22 @@ and four new plugins were added (see below).
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🔄 Update — 2026-10-08
+
+Every plugin was re-tested and given the network guard described above
+(see **Works only with a VPN?** above). Fixes:
+
+- **HiCine:** search for multi-word titles ("spider man") returned nothing; it now also tries the
+  hyphenated and single-word forms.
+- **KDramaMaza:** when the site's server is overloaded, the home screen falls back to the site's
+  cached front page, and search matches against it instead of showing "no results".
+- **NetMirror:** "NM Hub" files failed for everyone (the file CDN started rejecting the referer the
+  plugin sent, HTTP 426). It now sends the player page's own address.
+- **RareAnimes:** the site's "All … List" index posts are no longer shown as titles.
+- **SSR Movies:** now uses **ssrmovies.games** (where .name and .com redirect); .blue was dropped.
+- **KatMovieHD:** removed domains that were dead, parked, or a different site.
+- **All plugins:** ZIP/RAR archives are no longer listed as playable streams.
 
 ## 🆕 New plugins — 2026-10-06
 
@@ -95,9 +133,9 @@ passed. Changes that apply to all plugins:
 
 - **StreamWish was dropped** (KatMovieHD): its player is obfuscated and only hands back an HTML
   page, so it can't be played.
-- **NetMirror "NM Hub" files** come from the MovieBox CDN, which refuses cloud/datacenter IPs.
-  They were configured exactly like NetMirror's own extension but could only be tested up to
-  the CDN from the test server; on a home/mobile connection they should play. "NM Direct" files
+- **NetMirror "NM Hub" files** come from the MovieBox CDN, which rate-limits cloud/datacenter
+  IPs (HTTP 429), so they could only be tested up to the CDN from the test server. On a home or
+  mobile connection they should play. Many titles only have NM Hub files; "NM Direct" (R2) files
   were verified end to end.
 - **GDFlix** (KDramaMaza, KatMovieHD, SSR Movies) is behind a Cloudflare rule that challenges
   Node.js clients. In `skystream test` only the other hosters appear for those titles; the app
