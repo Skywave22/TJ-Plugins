@@ -1,0 +1,27 @@
+{
+  "packageName": "com.katdrama.skystream",
+  "name": "KatDrama",
+  "version": 1,
+  "baseUrl": "https://new.katdrama.my",
+  "domains": [
+    {
+      "name": "new.katdrama.my (primary)",
+      "url": "https://new.katdrama.my"
+    }
+  ],
+  "description": "KatDrama (new.katdrama.my) — Korean and Chinese dramas in Hindi, dual audio and English dubbed, plus drama movies. Series with full episode lists; files from HubCloud, GDFlix and KMHD (StreamTape); links are checked before they are shown. Works without a VPN through the TJ-Plugins relay when the site is blocked on your network.",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "hi",
+    "en",
+    "ko",
+    "zh"
+  ],
+  "categories": [
+    "Series",
+    "Movies"
+  ],
+  "isAdult": false
+}
