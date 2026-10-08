@@ -54,7 +54,7 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 | Plugin | Version | Author | Source | Categories | Languages | Mirrors |
 |---|---|---|---|---|---|---|
 | **321Movies UK** | v5 | TJ-Plugins | 321movies.co.uk | Movie, TvSeries | en, hi | — |
-| **CineFreak** | v8 | TJ-Plugins | cinefreak.net | Movie, TvSeries | hi, en, mal | — |
+| **CineFreak** | v9 | TJ-Plugins | cinefreak.ch | Movie, TvSeries | hi, en, mal | — |
 | **CineHD** | v11 | TJ-Plugins | cinehd.vc | Movie, TvSeries | en | — |
 | **CineJoy** | v6 | TJ-Plugins | cinejoy.pk | Movie, TvSeries | en | — |
 | **DesiDubAnime** | v3 | TJ-Plugins | desidubanime.me | Anime, Movie, TvSeries | hi, ta, te | — |
@@ -67,7 +67,7 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 | **KatMovieHD** | v13 | TJ-Plugins | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
 | **KDramaMaza** | v9 | TJ-Plugins | kdramasmaza.net | TvSeries | en, hi, ur | — |
 | **NetMirror** | v10 | TJ-Plugins | netmirror.center | Movie, TvSeries | en, hi | — |
-| **PikaHD** | v2 | TJ-Plugins | new.pikahd.co | Anime, Movies, Series | hi, en, ja | ✅ |
+| **PikaHD** | v3 | TJ-Plugins | new.pikahd.co | Anime, Movies, Series | hi, en, ja | ✅ |
 | **RareAnimes** | v4 | TJ-Plugins | rareanimes.mov | Anime, TvSeries, Movie | hi, ta, te, ml | — |
 | **RiveStream** | v6 | TJ-Plugins | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
 | **ScreenScape** | v1 | TJ-Plugins | screenscape.me (via nxsha.space) | Movie, TvSeries, Anime | hi, en, ta, te, ko, ja | — |
@@ -77,6 +77,17 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🔄 Update — 2026-10-08 (4)
+
+- **CineFreak v9:** the site moved to **cinefreak.ch**. The plugin now finds the current domain
+  automatically, and cinefreak.net is kept as a backup. Home and search now come from the site's own search
+  index (search.yagaverse.net), which is on a different server from the site. The dashboard and search keep
+  working even where cinefreak's domain is blocked. Once a title is opened, playback never touches the site
+  again. New home rows: Latest Uploads, South Indian, Bangla, Anime & Animation.
+- **PikaHD v3:** titles were cut off on the details page (e.g. "Tokyo Revengers … (English"). They now use
+  the post's real title. Films the site tags as both "movie" and "series" (e.g. Doraemon movies) now
+  open as movies. Merged-season pages are named after the show ("Grand Blue Dreaming", not "… S3").
 
 ## 🔄 Update — 2026-10-08 (3)
 
