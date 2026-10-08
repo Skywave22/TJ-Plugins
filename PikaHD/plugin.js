@@ -435,9 +435,12 @@
         var year = y2 ? parseInt(y2[1], 10) : undefined;
         var sm = t.match(/^(.*?\(Season\s*\d+\))/i);
         var base = sm ? sm[1] : t;
-        var cut = base.split(/\s+(?=(?:Hindi|English|Dual|Dubbed|ORG|Clean|Full|All\s+Episodes|Complete|TCRip|HDRip|WEB|BluRay|AMZN|Netflix|JioHotstar|Prime|1080p|720p|480p|2160p|4K|10bit|x265|x264|DD\b|5\.1))/i)[0];
-        cut = cut.replace(/\s*[-–|:]+\\s*$/, '').replace(/\s*\|.*$/, '').trim();
+        var cut = base.split(/\s+(?=\(?(?:Hindi|English|Dual|Dubbed|ORG|Clean|Full|All\s+Episodes|Complete|TCRip|HDRip|WEB|BluRay|AMZN|Netflix|JioHotstar|Prime|1080p|720p|480p|2160p|4K|10bit|x265|x264|DD\b|5\.1))/i)[0];
+        cut = cut.replace(/\s*[-–|:]+\s*$/, '').replace(/\s*\|.*$/, '').trim();
+        // drop a dangling "(" fragment, e.g. "Show (English" when the closing part was cut off
+        if ((cut.match(/\(/g) || []).length > (cut.match(/\)/g) || []).length) cut = cut.replace(/\s*\([^()]*$/, '').trim();
         if (!cut || cut.length < 2) cut = t.split(/\s+(?:Hindi|English|Dual|Dubbed)/i)[0].trim();
+        cut = cut.replace(/\s*:\s*\(/, ' (');
         return { name: cut || t.slice(0, 80), year: year };
     }
 
@@ -574,11 +577,21 @@
         return data || { items: [], page: 1, perPage: 0, totalItems: 0, totalPages: 0 };
     }
 
+    var POST_TITLES = {};
     async function fetchPostContent(slug) {
         var url = SITE + '/' + slug + '/__data.json?x-sveltekit-invalidated=01';
         var txt = await withTimeout(getText(url), 12000);
         var resolvedList = resolveAllChunks(txt);
         var content = findPostContentInResolved(resolvedList);
+        var pt0 = (txt.match(/"post_title"\s*:\s*"((?:[^"\\]|\\.)*)"/) || [])[1];
+        if (!pt0) {
+            for (var ci = 0; ci < resolvedList.length && !pt0; ci++) for (var ri = 0; ri < resolvedList[ci].length; ri++) {
+                var v = resolvedList[ci][ri];
+                if (v && typeof v.post_title === 'string') { pt0 = v.post_title; break; }
+                if (v && v.data && typeof v.data.post_title === 'string') { pt0 = v.data.post_title; break; }
+            }
+        }
+        if (pt0) POST_TITLES[slug] = pt0;
         if (content) return content;
         // fallback HTML parse
         try {
@@ -825,7 +838,11 @@
         var url = SITE + '/' + item.slug;
         var thumb = item.thumbnail_image || PLACEHOLDER;
         var cats = item.categories || [];
-        var isSeries = cats.indexOf('tv-series-dubbed') >= 0 || cats.indexOf('series') >= 0 || /\bSeason\s*\d+|\bS\d{1,2}\b|\[S\d+\s*E(?:pisode|P)?\s*\d+|\bEpisodes?\s*\d+/i.test(item.post_title || '') || /web[- ]series/i.test(item.post_title || '');
+        var pTitle = item.post_title || '';
+        // The site sometimes tags a film with both "movie" and "series": a movie tag / "Full Movie" wins
+        // unless the title itself names a season or an episode.
+        var movieTag = cats.indexOf('movie') >= 0 || /\b(?:Full\s+)?Movie\b/i.test(pTitle);
+        var isSeries = ((cats.indexOf('tv-series-dubbed') >= 0 || cats.indexOf('series') >= 0) && !movieTag) || /\bSeason\s*\d+|\bS\d{1,2}\b|\[S\d+\s*E(?:pisode|P)?\s*\d+|\bEpisodes?\s*\d+/i.test(item.post_title || '') || /web[- ]series/i.test(item.post_title || '');
         return mkItem({
             title: pt.name,
             url: url,
@@ -989,8 +1006,10 @@
             var content = await fetchPostContent(p.slug);
             if (!content) return cb({ success: false, errorCode: 'NOT_FOUND', message: 'This post could not be loaded from PikaHD right now.' });
 
-            var rawTitle = (content.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i) || [])[1] || p.slug.replace(/-/g, ' ');
+            var rawTitle = POST_TITLES[p.slug] || (content.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i) || [])[1] || p.slug.replace(/-/g, ' ');
             var pt = parseTitle(stripTags(rawTitle));
+            // seasons are merged into one page, so "Show S3" -> "Show"
+            if (/season|-s\d+/i.test(rawTitle + ' ' + p.slug)) pt.name = pt.name.replace(/\s+S\d{1,2}$/i, '').trim() || pt.name;
             var imgs = content.match(/<img[^>]+src=["']([^"']+)["']/gi) || [];
             var poster = PLACEHOLDER;
             for (var ii = 0; ii < imgs.length; ii++) {

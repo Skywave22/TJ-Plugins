@@ -1,7 +1,7 @@
 {
   "packageName": "com.pikahd.skystream",
   "name": "PikaHD",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://new.pikahd.co",
   "domains": [
     {
@@ -9,7 +9,7 @@
       "url": "https://new.pikahd.co"
     }
   ],
-  "description": "PikaHD (new.pikahd.co) — anime in Hindi dubbed, dual audio and English subbed: series with full episode lists and animated movies. Files from HubCloud, GDFlix and KMHD (StreamTape); links are checked before they are shown. Works without a VPN through the TJ-Plugins relay when the site is blocked on your network.",
+  "description": "Anime & dubbed movies/series from PikaHD — fixed titles, movie/series detection and merged seasons",
   "authors": [
     "TJ-Plugins"
   ],
