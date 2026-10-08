@@ -1,7 +1,7 @@
 {
   "packageName": "com.desidubanime.skystream",
   "name": "DesiDubAnime",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://www.desidubanime.me",
   "description": "DesiDubAnime (desidubanime.me) - Hindi, Tamil, Telugu and multi-audio dubbed anime series and movies. Full episode lists with titles, played as HLS from the site's own P2PPlay (Cloudflare and direct) and VidMoly servers with English subtitles; each link is checked before it is shown.",
   "authors": [
