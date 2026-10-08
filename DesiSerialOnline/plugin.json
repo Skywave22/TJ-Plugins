@@ -1,7 +1,7 @@
 {
   "packageName": "com.desiserialonline.skystream",
   "name": "DesiSerialOnline",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://desiserialonline.su",
   "description": "DesiSerialOnline / Yo Desi Serial (desiserialonline.su) - daily Hindi TV serials and reality shows (Star Plus, Colors, Zee, Sony, Dangal and more). Every show with its full episode history by air date; plays direct MP4 from VKSpeed and Blogger (720p/360p, multi-part episodes listed as Part 1, 2, ...). Each link is checked before it is shown.",
   "authors": [
