@@ -1,0 +1,23 @@
+{
+  "packageName": "com.screenscape.skystream",
+  "name": "ScreenScape",
+  "version": 1,
+  "baseUrl": "https://nxsha.space",
+  "description": "ScreenScape (screenscape.me) - the site's catalog (Trending, Top 10, Netflix, Prime Video, JioHotstar, Hindi, K-Drama, Anime, Marvel, DC...) with its \"Scape\" server panel: 30+ servers per title (MbPly/MhPly/AwsPly/Citadel Hindi dubs, Nitro multi-audio, Prism, CastVid, 4K-Hub...). Hindi first; every link is checked before it is shown.",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "hi",
+    "en",
+    "ta",
+    "te",
+    "ko",
+    "ja"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries",
+    "Anime"
+  ]
+}
