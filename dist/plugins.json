@@ -253,7 +253,7 @@
   {
     "packageName": "com.netmirror.skystream",
     "name": "NetMirror",
-    "version": 8,
+    "version": 9,
     "baseUrl": "https://netmirror.center",
     "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime and Reality TV, heavy on Hindi content. Direct files per title/episode (up to 1080p) with English subtitles where available. Every link is checked before it is shown; working links come first.",
     "authors": [
@@ -272,7 +272,7 @@
   {
     "packageName": "com.rareanimes.skystream",
     "name": "RareAnimes",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://www.rareanimes.mov",
     "description": "RareAnimes / Rare Toons India (rareanimes.mov) - Hindi, Tamil, Telugu and Malayalam dubbed anime, cartoons and animated movies. Every audio language an episode has is listed (Hindi, Tamil, Telugu, Untouched NF/CR), played as direct HD files from the site's StreamBeta servers; each link is checked before it is shown.",
     "authors": [
@@ -295,7 +295,7 @@
   {
     "packageName": "com.rivestream.plugin",
     "name": "RiveStream",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://rivestream.ru",
     "description": "RiveStream (rivestream.ru) - TMDB-powered catalog of movies and TV shows, streamed from rivestream's server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk) plus MhPly, AwsPly, VidPi and HDHub as fallbacks. Hindi audio is listed first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every link is checked before it is shown; working links come first.",
     "authors": [
@@ -319,16 +319,16 @@
   {
     "packageName": "com.ssr.skystream",
     "name": "SSR Movies",
-    "version": 6,
-    "baseUrl": "https://ssrmovies.name",
+    "version": 7,
+    "baseUrl": "https://ssrmovies.games",
     "domains": [
       {
-        "name": "ssrmovies.name (primary)",
-        "url": "https://ssrmovies.name"
+        "name": "SSRMovies (ssrmovies.games)",
+        "url": "https://ssrmovies.games"
       },
       {
-        "name": "ssrmovies.blue",
-        "url": "https://ssrmovies.blue"
+        "name": "ssrmovies.name",
+        "url": "https://ssrmovies.name"
       },
       {
         "name": "ssrmovies.com",
