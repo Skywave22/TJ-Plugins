@@ -2,7 +2,7 @@
   {
     "packageName": "com.movies321uk.skystream",
     "name": "321Movies UK",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://321movies.co.uk",
     "description": "321Movies UK — movies & TV series from 321movies.co.uk (TMDB catalog). Real HLS sources from the site's own player (Cascade, StreamAggregator, Surge, Movy…), each probed before it is offered; Hindi audio first.",
     "authors": [
@@ -21,7 +21,7 @@
   {
     "packageName": "com.cinefreak.skystream",
     "name": "CineFreak",
-    "version": 7,
+    "version": 8,
     "baseUrl": "https://cinefreak.net",
     "description": "CineFreak (cinefreak.net) — Hindi, English, dual-audio movies, web series & K-Drama. Direct 480p/720p/1080p files from the site's own player, with automatic stream preparation.",
     "authors": [
@@ -41,7 +41,7 @@
   {
     "packageName": "com.cinehd.skystream",
     "name": "CineHD",
-    "version": 10,
+    "version": 11,
     "baseUrl": "https://cinehd.vc",
     "description": "CineHD (cinehd.vc) — movies & series from a TMDB catalog with many servers per title (MhPly/AwsPly Hindi, Nitro multi-audio, HDHub, Rock HLS, MovieBox, VidAPI…). Every link is checked before it is shown; Hindi first.",
     "authors": [
@@ -59,7 +59,7 @@
   {
     "packageName": "com.cinejoy.skystream",
     "name": "CineJoy",
-    "version": 5,
+    "version": 6,
     "baseUrl": "https://cinejoy.pk",
     "description": "CineJoy (cinejoy.pk) — movies & series from a TMDB catalog (Netflix/Prime rows) with many servers per title: Nitro multi-audio, MhPly/AwsPly Hindi, HDHub, VidAPI, MovieBox, Rock HLS. Links are checked before they are shown.",
     "authors": [
@@ -77,7 +77,7 @@
   {
     "packageName": "com.desidubanime.skystream",
     "name": "DesiDubAnime",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://www.desidubanime.me",
     "description": "DesiDubAnime (desidubanime.me) - Hindi, Tamil, Telugu and multi-audio dubbed anime series and movies. Full episode lists with titles, played as HLS from the site's own P2PPlay (Cloudflare and direct) and VidMoly servers with English subtitles; each link is checked before it is shown.",
     "authors": [
@@ -99,7 +99,7 @@
   {
     "packageName": "com.desiserialonline.skystream",
     "name": "DesiSerialOnline",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://desiserialonline.su",
     "description": "DesiSerialOnline / Yo Desi Serial (desiserialonline.su) - daily Hindi TV serials and reality shows (Star Plus, Colors, Zee, Sony, Dangal and more). Every show with its full episode history by air date; plays direct MP4 from VKSpeed and Blogger (720p/360p, multi-part episodes listed as Part 1, 2, ...). Each link is checked before it is shown.",
     "authors": [
@@ -117,7 +117,7 @@
   {
     "packageName": "com.desiserials.skystream",
     "name": "DesiSerials",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://www.desi-serials.to",
     "description": "DesiSerials (desi-serials.to, formerly desiserials.us) - daily Hindi TV serials and reality shows from Star Plus, Zee TV, Sony TV, Colors, Star Bharat, Sab TV and & TV, plus hundreds of completed shows. Episodes listed by air date; plays TVLogy HLS and VKSpeed / VkPrime MP4. Each link is checked before it is shown.",
     "authors": [
@@ -135,7 +135,7 @@
   {
     "packageName": "com.fmoviess.skystream",
     "name": "FMoviess",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://fmoviess.tv",
     "domains": [
       {
@@ -161,7 +161,7 @@
   {
     "packageName": "com.hicine.skystream",
     "name": "HiCine",
-    "version": 10,
+    "version": 11,
     "baseUrl": "https://api.hicine.sbs",
     "domains": [
       {
@@ -188,7 +188,7 @@
   {
     "packageName": "com.hindidubbed.provider",
     "name": "Hindi Dubbed",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://www.youtube.com",
     "description": "Hindi Dubbed — Hollywood & South Indian Hindi-dubbed movies, Bollywood and Hindi cartoons from 20 official YouTube channels (Goldmines, Aditya, Shemaroo, Ultra, Pen, Rajshri, B4U…). Full movies as single items, web series grouped with episodes. Search finds full movies only.",
     "authors": [
@@ -207,7 +207,7 @@
   {
     "packageName": "com.kdramamaza.skystream",
     "name": "KDramaMaza",
-    "version": 8,
+    "version": 9,
     "baseUrl": "https://kdramasmaza.net",
     "description": "KDramaMaza (kdramasmaza.net) — Korean, Chinese, Turkish & Japanese dramas plus anime in Hindi/Urdu dub. Full episode lists with direct HubCloud and GDFlix (Instant / Drive) files, checked before they are shown.",
     "authors": [
@@ -254,7 +254,7 @@
   {
     "packageName": "com.katmoviehd.skystream",
     "name": "KatMovieHD",
-    "version": 12,
+    "version": 13,
     "baseUrl": "https://new.katmoviehd.top",
     "domains": [
       {
@@ -281,7 +281,7 @@
   {
     "packageName": "com.netmirror.skystream",
     "name": "NetMirror",
-    "version": 9,
+    "version": 10,
     "baseUrl": "https://netmirror.center",
     "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime and Reality TV, heavy on Hindi content. Direct files per title/episode (up to 1080p) with English subtitles where available. Every link is checked before it is shown; working links come first.",
     "authors": [
@@ -300,7 +300,7 @@
   {
     "packageName": "com.pikahd.skystream",
     "name": "PikaHD",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://new.pikahd.co",
     "domains": [
       {
@@ -328,7 +328,7 @@
   {
     "packageName": "com.rareanimes.skystream",
     "name": "RareAnimes",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://www.rareanimes.mov",
     "description": "RareAnimes / Rare Toons India (rareanimes.mov) - Hindi, Tamil, Telugu and Malayalam dubbed anime, cartoons and animated movies. Every audio language an episode has is listed (Hindi, Tamil, Telugu, Untouched NF/CR), played as direct HD files from the site's StreamBeta servers; each link is checked before it is shown.",
     "authors": [
@@ -351,7 +351,7 @@
   {
     "packageName": "com.rivestream.plugin",
     "name": "RiveStream",
-    "version": 5,
+    "version": 6,
     "baseUrl": "https://rivestream.ru",
     "description": "RiveStream (rivestream.ru) - TMDB-powered catalog of movies and TV shows, streamed from rivestream's server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk) plus MhPly, AwsPly, VidPi and HDHub as fallbacks. Hindi audio is listed first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every link is checked before it is shown; working links come first.",
     "authors": [
@@ -375,7 +375,7 @@
   {
     "packageName": "com.ssr.skystream",
     "name": "SSR Movies",
-    "version": 7,
+    "version": 8,
     "baseUrl": "https://ssrmovies.games",
     "domains": [
       {
@@ -409,7 +409,7 @@
   {
     "packageName": "com.subdub.skystream",
     "name": "SubDubAnime",
-    "version": 5,
+    "version": 6,
     "baseUrl": "https://www.subdubanime.site",
     "description": "SubDubAnime (subdubanime.site) - Hindi and English dubbed/subbed anime: series, seasons and movies via the Blakite API. Every quality an episode has is offered (up to 1080p), highest first; each link is checked before it is shown.",
     "authors": [
@@ -428,7 +428,7 @@
   {
     "packageName": "com.vidbox.plugin",
     "name": "Vidbox",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://vidbox.vc",
     "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies and TV shows (vidbox uses TMDB ids, so titles match 1:1). Streams come from the Nxsha multi-language servers. Hindi audio is listed first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every link is checked before it is shown; working links come first.",
     "authors": [
