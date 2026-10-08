@@ -1,7 +1,7 @@
 {
   "packageName": "com.subdub.skystream",
   "name": "SubDubAnime",
-  "version": 4,
+  "version": 5,
   "baseUrl": "https://www.subdubanime.site",
   "description": "SubDubAnime (subdubanime.site) - Hindi and English dubbed/subbed anime: series, seasons and movies via the Blakite API. Every quality an episode has is offered (up to 1080p), highest first; each link is checked before it is shown.",
   "authors": [
