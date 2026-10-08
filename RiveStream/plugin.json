@@ -1,7 +1,7 @@
 {
   "packageName": "com.rivestream.plugin",
   "name": "RiveStream",
-  "version": 5,
+  "version": 6,
   "baseUrl": "https://rivestream.ru",
   "description": "RiveStream (rivestream.ru) - TMDB-powered catalog of movies and TV shows, streamed from rivestream's server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk) plus MhPly, AwsPly, VidPi and HDHub as fallbacks. Hindi audio is listed first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every link is checked before it is shown; working links come first.",
   "authors": [
