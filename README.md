@@ -70,12 +70,21 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 | **PikaHD** | v2 | TJ-Plugins | new.pikahd.co | Anime, Movies, Series | hi, en, ja | ✅ |
 | **RareAnimes** | v4 | TJ-Plugins | rareanimes.mov | Anime, TvSeries, Movie | hi, ta, te, ml | — |
 | **RiveStream** | v6 | TJ-Plugins | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
+| **ScreenScape** | v1 | TJ-Plugins | screenscape.me (via nxsha.space) | Movie, TvSeries, Anime | hi, en, ta, te, ko, ja | — |
 | **SSR Movies** | v8 | TJ-Plugins | ssrmovies.games | Movies, Series | hi, en | ✅ |
 | **SubDubAnime** | v6 | TJ-Plugins | subdubanime.site | TvSeries, Movie | en, hi | — |
 | **Vidbox** | v5 | TJ-Plugins | vidbox.vc | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🔄 Update — 2026-10-08 (3)
+
+- **New: ScreenScape** (screenscape.me). The site's own pages and API sit behind a Cloudflare
+  "Verify you are human" checkbox that an app plugin can't tick, so the plugin rebuilds the site from
+  its sources. It has the same home rows (Trending, Top 10, Netflix, Prime Video, JioHotstar, Hindi,
+  K-Drama, Anime, Marvel, DC, genres) from TMDB, plus the site's **"Scape" server panel** (the nxsha
+  backend): 30+ servers per title, Hindi dubs first, and every link is checked before it is shown.
 
 ## 🔄 Update — 2026-10-08 (2)
 
