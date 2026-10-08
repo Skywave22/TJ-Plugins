@@ -270,6 +270,34 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.netmirror.skystream.sky"
   },
   {
+    "packageName": "com.pikahd.skystream",
+    "name": "PikaHD",
+    "version": 1,
+    "baseUrl": "https://new.pikahd.co",
+    "domains": [
+      {
+        "name": "new.pikahd.co (primary)",
+        "url": "https://new.pikahd.co"
+      }
+    ],
+    "description": "PikaHD (new.pikahd.co) — anime in Hindi dubbed, dual audio and English subbed: series with full episode lists and animated movies. Files from HubCloud, GDFlix and KMHD (StreamTape); links are checked before they are shown. Works without a VPN through the TJ-Plugins relay when the site is blocked on your network.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "hi",
+      "en",
+      "ja"
+    ],
+    "categories": [
+      "Anime",
+      "Movies",
+      "Series"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.pikahd.skystream.sky"
+  },
+  {
     "packageName": "com.rareanimes.skystream",
     "name": "RareAnimes",
     "version": 3,
