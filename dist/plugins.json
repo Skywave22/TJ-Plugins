@@ -310,7 +310,7 @@
   {
     "packageName": "com.pikahd.skystream",
     "name": "PikaHD",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://new.pikahd.co",
     "domains": [
       {
