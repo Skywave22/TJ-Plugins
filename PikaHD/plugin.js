@@ -350,7 +350,7 @@
     var PLACEHOLDER = 'https://placehold.co/400x600.png?text=PikaHD';
 
     var HUBCLOUD_HOST = 'hubcloud.ist';
-    var GDFLIX_HOST = 'new4.gdflix.io';
+    var GDFLIX_HOST = 'new5.gdflix.io';   // gdflix.dev always redirects to the live newN host (fallback below)
     var GD_KEY = 'acbe2066696a1d44345698deb3d9ebf9ae9bbdfd';
 
     // Working hosts: StreamTape, StreamWish, HubCloud, GDFlix (GDFlix kept as fallback for titles that only have GDFlix)
@@ -577,12 +577,36 @@
         return data || { items: [], page: 1, perPage: 0, totalItems: 0, totalPages: 0 };
     }
 
+
+    // post_meta.data.post_title lives in the page's {"type":"data","nodes":[...]} line, not in the streamed chunks
+    function postTitleFromText(text) {
+        var lines = String(text || '').split('\n');
+        for (var i = 0; i < lines.length; i++) {
+            var obj = null;
+            try { obj = JSON.parse(lines[i]); } catch (e) { continue; }
+            if (!obj || obj.type !== 'data' || !obj.nodes) continue;
+            for (var n = 0; n < obj.nodes.length; n++) {
+                var node = obj.nodes[n];
+                if (!node || node.type !== 'data' || !Array.isArray(node.data)) continue;
+                try {
+                    var res = devalueResolve(node.data);
+                    for (var r = 0; r < res.length; r++) {
+                        var v = res[r];
+                        if (v && v.post_meta && v.post_meta.data && typeof v.post_meta.data.post_title === 'string') return v.post_meta.data.post_title;
+                        if (v && v.data && typeof v.data.post_title === 'string') return v.data.post_title;
+                    }
+                } catch (e) {}
+            }
+        }
+        return null;
+    }
     var POST_TITLES = {};
     async function fetchPostContent(slug) {
         var url = SITE + '/' + slug + '/__data.json?x-sveltekit-invalidated=01';
         var txt = await withTimeout(getText(url), 12000);
         var resolvedList = resolveAllChunks(txt);
         var content = findPostContentInResolved(resolvedList);
+        if (!POST_TITLES[slug]) { var ptx = postTitleFromText(txt); if (ptx) POST_TITLES[slug] = ptx; }
         var pt0 = (txt.match(/"post_title"\s*:\s*"((?:[^"\\]|\\.)*)"/) || [])[1];
         if (!pt0) {
             for (var ci = 0; ci < resolvedList.length && !pt0; ci++) for (var ri = 0; ri < resolvedList[ci].length; ri++) {
@@ -643,7 +667,7 @@
             var label = stripTags(m[3]);
             out.push({ kind: m[1], id: m[2], label: label });
         }
-        var re2 = /<a[^>]+href=["'](https?:\/\/(?:gdflix\.dev|gd\.kmhd\.eu|new\d*\.gdflix\.io)\/file\/[A-Za-z0-9]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        var re2 = /<a[^>]+href=["'](https?:\/\/(?:gdflix\.dev|gdlink\.dev|gd\.kmhd\.(?:eu|me)|new\d*\.gdflix\.io)\/file\/[A-Za-z0-9]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
         while ((m = re2.exec(contentHtml)) !== null) {
             var label2 = stripTags(m[2]);
             out.push({ kind: 'gdflix_direct', id: m[1], label: label2, url: m[1] });
@@ -713,14 +737,43 @@
         return out;
     }
 
+    // GDFlix "instant" links (instant.busycdn.xyz/…) now redirect to a wrapper page
+    // (fastdl-*.pages.dev/?url=<direct Google file URL>) that the player can't play: unwrap it.
+    async function unwrapInstant(u) {
+        try {
+            var r = await withTimeout(http_get(u, { 'User-Agent': UA, 'Range': 'bytes=0-0' }), 12000);
+            var fu = String((r && r.finalUrl) || '');
+            var m = fu.match(/[?&]url=([^&#]+)/);
+            if (m) { var inner = decodeURIComponent(m[1]); if (/^https?:\/\//i.test(inner)) return inner; }
+            if (fu && fu !== u && !/\.pages\.dev\//i.test(fu) && /^https?:/i.test(fu)) return fu;
+            if (/\.pages\.dev\//i.test(fu)) return null;   // wrapper without a usable link
+        } catch (_) {}
+        return u;
+    }
+
     async function resolveGdflix(pageUrl) {
+        var g = await resolveGdflixRaw(pageUrl);
+        if (g && g.instant && g.instant.length) {
+            var un = await Promise.all(g.instant.slice(0, 3).map(unwrapInstant));
+            g.instant = un.filter(function (x, i) { return x && un.indexOf(x) === i; });
+        }
+        return g;
+    }
+
+    async function resolveGdflixRaw(pageUrl) {
         var instant = [], direct = [];
         try {
             var fid = (String(pageUrl).match(/\/file\/([A-Za-z0-9]+)/) || [])[1];
             if (!fid) return { instant: instant, urls: direct, r2: [] };
             var pageUrlRef = 'https://' + GDFLIX_HOST + '/file/' + fid;
+            // gd.kmhd.me / gdlink.dev / gd.kmhd.eu are only redirectors: go to the live host directly,
+            // then through gdflix.dev (which always points at the current newN host) if that fails.
+            var html = '';
+            var pages = [pageUrlRef, 'https://gdflix.dev/file/' + fid];
+            for (var pi = 0; pi < pages.length && !/busycdn\.xyz|r2\.dev/.test(html); pi++) {
+                try { html = await withTimeout(getText(pages[pi], { 'Referer': 'https://' + GDFLIX_HOST + '/' }), 12000); } catch (_) { html = ''; }
+            }
             try {
-                var html = await withTimeout(getText(pageUrl, { 'Referer': 'https://' + GDFLIX_HOST + '/' }), 12000);
                 var r2m = html.match(/https:\/\/pub-[^\s"']+\.r2\.dev\/[^\s"']+\?token=[^\s"']+/g);
                 if (r2m) {
                     for (var i = 0; i < r2m.length; i++) {
