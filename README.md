@@ -63,11 +63,11 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 | **FMoviess** | v7 | TJ-Plugins | fmoviess.tv | Movies, Series, Anime | en | ✅ |
 | **HiCine** | v11 | TJ-Plugins | api.hicine.sbs | Movies, Series, Anime | hi, en | ✅ |
 | **Hindi Dubbed** | v5 | TJ-Plugins | youtube.com | Movie, TvSeries | hi, en | — |
-| **KatDrama** | v1 | TJ-Plugins | new.katdrama.my | Series, Movies | hi, en, ko, zh | ✅ |
+| **KatDrama** | v2 | TJ-Plugins | new.katdrama.my | Series, Movies | hi, en, ko, zh | ✅ |
 | **KatMovieHD** | v13 | TJ-Plugins | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
 | **KDramaMaza** | v9 | TJ-Plugins | kdramasmaza.net | TvSeries | en, hi, ur | — |
 | **NetMirror** | v10 | TJ-Plugins | netmirror.center | Movie, TvSeries | en, hi | — |
-| **PikaHD** | v3 | TJ-Plugins | new.pikahd.co | Anime, Movies, Series | hi, en, ja | ✅ |
+| **PikaHD** | v4 | TJ-Plugins | new.pikahd.co | Anime, Movies, Series | hi, en, ja | ✅ |
 | **RareAnimes** | v4 | TJ-Plugins | rareanimes.mov | Anime, TvSeries, Movie | hi, ta, te, ml | — |
 | **RiveStream** | v6 | TJ-Plugins | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
 | **ScreenScape** | v1 | TJ-Plugins | screenscape.me (via nxsha.space) | Movie, TvSeries, Anime | hi, en, ta, te, ko, ja | — |
@@ -77,6 +77,20 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🔄 Update — 2026-10-09
+
+- **KatDrama v2:**
+  - Shows whose episodes are listed on the newer "Single Episodes" pack pages showed as 1 episode
+    (e.g. City of Romance). They now list every episode (City of Romance: 22).
+  - GDFlix "Instant" links had started pointing at a download web page instead of the video. They are
+    unwrapped to the direct file again, so most episodes now have 4-7 working servers instead of 2-4.
+  - The GDFlix server moved to a new domain; the plugin now follows it automatically.
+  - Posts that only have whole-season ZIP archives (can't be streamed) open the same season's other
+    language version when it has episodes (e.g. Four Hands, Two Sonatas), and say so clearly when no
+    version has episodes yet.
+  - Show names on the details page now come from the post's real title.
+- **PikaHD v4:** same GDFlix fixes and real post titles.
 
 ## 🔄 Update — 2026-10-08 (4)
 
