@@ -350,7 +350,7 @@
     var PLACEHOLDER = 'https://placehold.co/400x600.png?text=KatDrama';
 
     var HUBCLOUD_HOST = 'hubcloud.ist';
-    var GDFLIX_HOST = 'new4.gdflix.io';
+    var GDFLIX_HOST = 'new5.gdflix.io';   // gdflix.dev always redirects to the live newN host (fallback below)
     var GD_KEY = 'acbe2066696a1d44345698deb3d9ebf9ae9bbdfd';
 
     // Working hosts: StreamTape, StreamWish, HubCloud, GDFlix (GDFlix kept as fallback for titles that only have GDFlix)
@@ -435,9 +435,11 @@
         var year = y2 ? parseInt(y2[1], 10) : undefined;
         var sm = t.match(/^(.*?\(Season\s*\d+\))/i);
         var base = sm ? sm[1] : t;
-        var cut = base.split(/\s+(?=(?:Hindi|English|Dual|Dubbed|ORG|Clean|Full|All\s+Episodes|Complete|TCRip|HDRip|WEB|BluRay|AMZN|Netflix|JioHotstar|Prime|1080p|720p|480p|2160p|4K|10bit|x265|x264|DD\b|5\.1))/i)[0];
-        cut = cut.replace(/\s*[-–|:]+\\s*$/, '').replace(/\s*\|.*$/, '').trim();
+        var cut = base.split(/\s+(?=\(?(?:Hindi|English|Dual|Dubbed|ORG|Clean|Full|All\s+Episodes|Complete|TCRip|HDRip|WEB|BluRay|AMZN|Netflix|JioHotstar|Prime|1080p|720p|480p|2160p|4K|10bit|x265|x264|DD\b|5\.1))/i)[0];
+        cut = cut.replace(/\s*[-–|:]+\s*$/, '').replace(/\s*\|.*$/, '').trim();
+        if ((cut.match(/\(/g) || []).length > (cut.match(/\)/g) || []).length) cut = cut.replace(/\s*\([^()]*$/, '').trim();
         if (!cut || cut.length < 2) cut = t.split(/\s+(?:Hindi|English|Dual|Dubbed)/i)[0].trim();
+        cut = cut.replace(/\s*:\s*\(/, ' (');
         return { name: cut || t.slice(0, 80), year: year };
     }
 
@@ -574,11 +576,41 @@
         return data || { items: [], page: 1, perPage: 0, totalItems: 0, totalPages: 0 };
     }
 
+
+    // post_meta.data.post_title lives in the page's {"type":"data","nodes":[...]} line, not in the streamed chunks
+    function postTitleFromText(text) {
+        var lines = String(text || '').split('\n');
+        for (var i = 0; i < lines.length; i++) {
+            var obj = null;
+            try { obj = JSON.parse(lines[i]); } catch (e) { continue; }
+            if (!obj || obj.type !== 'data' || !obj.nodes) continue;
+            for (var n = 0; n < obj.nodes.length; n++) {
+                var node = obj.nodes[n];
+                if (!node || node.type !== 'data' || !Array.isArray(node.data)) continue;
+                try {
+                    var res = devalueResolve(node.data);
+                    for (var r = 0; r < res.length; r++) {
+                        var v = res[r];
+                        if (v && v.post_meta && v.post_meta.data && typeof v.post_meta.data.post_title === 'string') return v.post_meta.data.post_title;
+                        if (v && v.data && typeof v.data.post_title === 'string') return v.data.post_title;
+                    }
+                } catch (e) {}
+            }
+        }
+        return null;
+    }
+    var POST_TITLES = {};
     async function fetchPostContent(slug) {
         var url = SITE + '/' + slug + '/__data.json?x-sveltekit-invalidated=01';
         var txt = await withTimeout(getText(url), 12000);
         var resolvedList = resolveAllChunks(txt);
         var content = findPostContentInResolved(resolvedList);
+        if (!POST_TITLES[slug]) { var ptx = postTitleFromText(txt); if (ptx) POST_TITLES[slug] = ptx; }
+        for (var ci = 0; ci < resolvedList.length && !POST_TITLES[slug]; ci++) for (var ri = 0; ri < resolvedList[ci].length; ri++) {
+            var v = resolvedList[ci][ri];
+            if (v && typeof v.post_title === 'string') { POST_TITLES[slug] = v.post_title; break; }
+            if (v && v.data && typeof v.data.post_title === 'string') { POST_TITLES[slug] = v.data.post_title; break; }
+        }
         if (content) return content;
         // fallback HTML parse
         try {
@@ -592,6 +624,13 @@
         } catch (e) {
             return '';
         }
+    }
+
+    // links.kmhd.me/pack/<id>: "Single Episodes Link" pages -> { _id, name, info: { FILE_ID: { name } } }
+    async function fetchPackData(packId) {
+        var url = KMHD + '/pack/' + encodeURIComponent(packId) + '/__data.json?x-sveltekit-invalidated=01';
+        var txt = await withTimeout(getText(url, { 'Referer': KMHD + '/', 'Origin': KMHD }), 12000);
+        return findPlayDataInResolved(resolveAllChunks(txt));
     }
 
     async function fetchPlayData(playId) {
@@ -630,7 +669,7 @@
             var label = stripTags(m[3]);
             out.push({ kind: m[1], id: m[2], label: label });
         }
-        var re2 = /<a[^>]+href=["'](https?:\/\/(?:gdflix\.dev|gd\.kmhd\.eu|new\d*\.gdflix\.io)\/file\/[A-Za-z0-9]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        var re2 = /<a[^>]+href=["'](https?:\/\/(?:gdflix\.dev|gdlink\.dev|gd\.kmhd\.(?:eu|me)|new\d*\.gdflix\.io)\/file\/[A-Za-z0-9]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
         while ((m = re2.exec(contentHtml)) !== null) {
             var label2 = stripTags(m[2]);
             out.push({ kind: 'gdflix_direct', id: m[1], label: label2, url: m[1] });
@@ -700,14 +739,43 @@
         return out;
     }
 
+    // GDFlix "instant" links (instant.busycdn.xyz/…) now redirect to a wrapper page
+    // (fastdl-*.pages.dev/?url=<direct Google file URL>) that the player can't play: unwrap it.
+    async function unwrapInstant(u) {
+        try {
+            var r = await withTimeout(http_get(u, { 'User-Agent': UA, 'Range': 'bytes=0-0' }), 12000);
+            var fu = String((r && r.finalUrl) || '');
+            var m = fu.match(/[?&]url=([^&#]+)/);
+            if (m) { var inner = decodeURIComponent(m[1]); if (/^https?:\/\//i.test(inner)) return inner; }
+            if (fu && fu !== u && !/\.pages\.dev\//i.test(fu) && /^https?:/i.test(fu)) return fu;
+            if (/\.pages\.dev\//i.test(fu)) return null;   // wrapper without a usable link
+        } catch (_) {}
+        return u;
+    }
+
     async function resolveGdflix(pageUrl) {
+        var g = await resolveGdflixRaw(pageUrl);
+        if (g && g.instant && g.instant.length) {
+            var un = await Promise.all(g.instant.slice(0, 3).map(unwrapInstant));
+            g.instant = un.filter(function (x, i) { return x && un.indexOf(x) === i; });
+        }
+        return g;
+    }
+
+    async function resolveGdflixRaw(pageUrl) {
         var instant = [], direct = [];
         try {
             var fid = (String(pageUrl).match(/\/file\/([A-Za-z0-9]+)/) || [])[1];
             if (!fid) return { instant: instant, urls: direct, r2: [] };
             var pageUrlRef = 'https://' + GDFLIX_HOST + '/file/' + fid;
+            // gd.kmhd.me / gdlink.dev / gd.kmhd.eu are only redirectors: go to the live host directly,
+            // then through gdflix.dev (which always points at the current newN host) if that fails.
+            var html = '';
+            var pages = [pageUrlRef, 'https://gdflix.dev/file/' + fid];
+            for (var pi = 0; pi < pages.length && !/busycdn\.xyz|r2\.dev/.test(html); pi++) {
+                try { html = await withTimeout(getText(pages[pi], { 'Referer': 'https://' + GDFLIX_HOST + '/' }), 12000); } catch (_) { html = ''; }
+            }
             try {
-                var html = await withTimeout(getText(pageUrl, { 'Referer': 'https://' + GDFLIX_HOST + '/' }), 12000);
                 var r2m = html.match(/https:\/\/pub-[^\s"']+\.r2\.dev\/[^\s"']+\?token=[^\s"']+/g);
                 if (r2m) {
                     for (var i = 0; i < r2m.length; i++) {
@@ -825,7 +893,9 @@
         var url = SITE + '/' + item.slug;
         var thumb = item.thumbnail_image || PLACEHOLDER;
         var cats = item.categories || [];
-        var isSeries = cats.indexOf('tv-series-dubbed') >= 0 || cats.indexOf('series') >= 0 || /\bSeason\s*\d+|\bS\d{1,2}\b|\[S\d+\s*E(?:pisode|P)?\s*\d+|\bEpisodes?\s*\d+/i.test(item.post_title || '') || /web[- ]series/i.test(item.post_title || '');
+        var pTitle = item.post_title || '';
+        var movieTag = cats.indexOf('movie') >= 0 || cats.indexOf('movies') >= 0 || /\b(?:Full\s+)?Movie\b/i.test(pTitle);
+        var isSeries = ((cats.indexOf('tv-series-dubbed') >= 0 || cats.indexOf('series') >= 0) && !movieTag) || /\bSeason\s*\d+|\bS\d{1,2}\b|\[S\d+\s*E(?:pisode|P)?\s*\d+|\bEpisodes?\s*\d+/i.test(item.post_title || '') || /web[- ]series/i.test(item.post_title || '');
         return mkItem({
             title: pt.name,
             url: url,
@@ -915,7 +985,7 @@
     }
 
     function seasonOf(title, slug) {
-        var m = String(title || '').match(/Season\s*(\d+)/i) || String(slug || '').match(/-s(\d{1,2})(?:-|$)/i);
+        var m = String(title || '').match(/Season\s*(\d+)/i) || String(slug || '').match(/-s(?:eason-)?(\d{1,2})(?:-|$)/i);
         return m ? parseInt(m[1], 10) : 1;
     }
 
@@ -948,6 +1018,34 @@
             });
         }
 
+        // per-episode files listed on /pack/ pages (one page per quality)
+        var packEps = {}, packKeys = [];
+        var packs = links.filter(function (l) { return l.kind === 'pack'; }).slice(0, 4);
+        if (packs.length) {
+            var pdl = await Promise.all(packs.map(function (pk) {
+                return fetchPackData(pk.id).then(function (d) { return { pk: pk, d: d }; }, function () { return { pk: pk, d: null }; });
+            }));
+            pdl.forEach(function (x) {
+                if (!x.d || !x.d.info) return;
+                var lab = String(x.pk.label || '').replace(/\s*Links?\b/i, '').replace(/\s+/g, ' ').trim();
+                Object.keys(x.d.info).forEach(function (k) {
+                    var v = x.d.info[k];
+                    if (!v || !v.name || !/\.(mkv|mp4|avi)\b/i.test(v.name)) return;
+                    var sem = v.name.match(/S(\d{1,2})\s?E(\d{1,3})/i);
+                    var em = sem ? null : v.name.match(/(?:\bE|\bEP|Episode)[ ._-]?(\d{1,3})\b/i);
+                    if (!sem && !em) return;
+                    var s = sem ? parseInt(sem[1], 10) : season, e = parseInt(sem ? sem[2] : em[1], 10);
+                    var key = s + ':' + e;
+                    if (!packEps[key]) { packEps[key] = { season: s, episode: e, f: [] }; packKeys.push(key); }
+                    packEps[key].f.push([k, lab || qualityFromText(v.name) || 'Auto']);
+                });
+            });
+        }
+        function addFiles(list, extra) {
+            (extra || []).forEach(function (f) { if (!list.some(function (g) { return g[0] === f[0]; })) list.push(f); });
+            return list;
+        }
+
         var eps = [];
         if (play) {
             var pd = null;
@@ -959,7 +1057,22 @@
                 eps.push({ season: s, episode: e.episode, name: e.name, ref: { p: play.id, k: e.key, f: byEp[e.episode] || [] } });
             });
             // a movie's play entry has one file; attach the quality files to it
-            if (eps.length === 1 && !Object.keys(byEp).length) eps[0].ref.f = files.map(function (f) { return [f.id, f.label]; });
+            if (eps.length === 1 && !Object.keys(byEp).length && !packKeys.length) eps[0].ref.f = files.map(function (f) { return [f.id, f.label]; });
+            if (packKeys.length) {
+                var have = {};
+                eps.forEach(function (e) { have[e.season + ':' + e.episode] = 1; if (packEps[e.season + ':' + e.episode]) addFiles(e.ref.f, packEps[e.season + ':' + e.episode].f); });
+                packKeys.forEach(function (key) {
+                    if (have[key]) return;
+                    var pe = packEps[key];
+                    eps.push({ season: pe.season, episode: pe.episode, name: 'Episode ' + pe.episode, ref: { f: addFiles(pe.f.slice(), byEp[pe.episode]) } });
+                });
+            }
+        }
+        if (!eps.length && packKeys.length) {
+            packKeys.forEach(function (key) {
+                var pe = packEps[key];
+                eps.push({ season: pe.season, episode: pe.episode, name: 'Episode ' + pe.episode, ref: { f: addFiles(pe.f.slice(), byEp[pe.episode]) } });
+            });
         }
         if (!eps.length && Object.keys(byEp).length) {
             Object.keys(byEp).map(Number).sort(function (a, b) { return a - b; }).forEach(function (n) {
@@ -968,6 +1081,11 @@
         }
         if (!eps.length && files.length) {
             eps.push({ season: 1, episode: 1, name: title, ref: { f: files.map(function (f) { return [f.id, f.label]; }) } });
+        }
+        // last resort: plain GDFlix file links (whole-season "Pack"/zip archives can't be streamed)
+        if (!eps.length) {
+            var gd = links.filter(function (l) { return l.kind === 'gdflix_direct' && !/\bpack\b|\bzip\b/i.test(l.label); });
+            if (gd.length) eps.push({ season: 1, episode: 1, name: title, ref: { g: gd.slice(0, 4).map(function (l) { return [l.url, l.label]; }) } });
         }
         return eps;
     }
@@ -989,7 +1107,7 @@
             var content = await fetchPostContent(p.slug);
             if (!content) return cb({ success: false, errorCode: 'NOT_FOUND', message: 'This post could not be loaded from KatDrama right now.' });
 
-            var rawTitle = (content.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i) || [])[1] || p.slug.replace(/-/g, ' ');
+            var rawTitle = POST_TITLES[p.slug] || (content.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i) || [])[1] || p.slug.replace(/-/g, ' ');
             var pt = parseTitle(stripTags(rawTitle));
             var imgs = content.match(/<img[^>]+src=["']([^"']+)["']/gi) || [];
             var poster = PLACEHOLDER;
@@ -999,6 +1117,37 @@
             }
             var baseItemUrl = SITE + '/' + p.slug;
             var eps = await postEpisodes(content, p.slug, stripTags(rawTitle) + ' ' + p.slug);
+
+            // ZIP-only post (e.g. the English dub uploaded as season archives): open the same season's
+            // other language version instead, when that one has playable episodes.
+            var altNote = '';
+            if (!eps.length) {
+                try {
+                    var bare = function (t) { return String(t || '').replace(/\(Season\s*\d+\)|\bSeason\s*\d+|\bS\d{1,2}\b|\((?:19|20)\d{2}(?:[-–]\d{2,4})?\)/gi, ' ').replace(/\s+/g, ' ').trim(); };
+                    var bn = bare(pt.name);
+                    var mySeason = seasonOf(stripTags(rawTitle), p.slug);
+                    var sd0 = await withTimeout(fetchSvelteItems(SITE + '/__data.json?x-sveltekit-invalidated=01&q=' + encodeURIComponent(bn) + '&page=1'), 8000);
+                    var want = normWords(bn).join(' ');
+                    var alts = (sd0.items || []).filter(function (it) {
+                        if (!it.slug || it.slug === p.slug || /\bzip\b/i.test(it.post_title || '')) return false;
+                        if (seasonOf(it.post_title, it.slug) !== mySeason) return false;
+                        var aw = normWords(bare(parseTitle(it.post_title || '').name));
+                        return aw.slice(0, want.split(' ').length).join(' ') === want;
+                    }).slice(0, 3);
+                    for (var ai = 0; ai < alts.length && !eps.length; ai++) {
+                        var ac = await withTimeout(fetchPostContent(alts[ai].slug), 9000);
+                        var al = ac ? await withTimeout(postEpisodes(ac, alts[ai].slug, alts[ai].post_title + ' ' + alts[ai].slug), 12000) : [];
+                        if (al.length) {
+                            al.forEach(function (e) { e.slug = alts[ai].slug; });
+                            eps = al;
+                            var at = String(alts[ai].post_title || '');
+                            var dub = /\bHindi\b/i.test(at) ? 'Hindi' : ((at.match(/\b([A-Z][a-z]+)\s+Dubbed\b/) || [])[1] || '');
+                            var lang = dub ? dub + ' dubbed' : (/subtitle|esub/i.test(at) ? 'subtitled' : 'other');
+                            altNote = 'This post only has ZIP season downloads, so the ' + lang + ' version is shown instead. ';
+                        }
+                    }
+                } catch (_) { /* fall through to the NO_LINKS message */ }
+            }
 
             // Other seasons of the same show live in separate posts — merge them in.
             var isSeries = eps.length > 1 || /season|-s\d+/i.test(rawTitle + ' ' + p.slug);
@@ -1040,7 +1189,10 @@
                 }));
             });
             if (!episodes.length) {
-                return cb({ success: false, errorCode: 'NO_LINKS', message: 'No download/stream links have been posted for this title yet.' });
+                var zipOnly = /\b(?:zip|pack)\b/i.test(stripTags(rawTitle)) || /gd(?:link|flix)\.(?:dev|io)\/file\/[^"']+["'][^>]*>[^<]*\bPack\b/i.test(content);
+                return cb({ success: false, errorCode: 'NO_LINKS', message: zipOnly
+                    ? 'This title is only available as whole-season ZIP downloads (no single episodes in any language yet), and ZIP files can\'t be streamed. Check back later or try another title.'
+                    : 'No download/stream links have been posted for this title yet.' });
             }
             var desc = storyline(content);
             var imdb = (content.match(/IMDb Rating\s*:?-?\s*([\d.]+)\s*\/\s*10/i) || [])[1];
@@ -1054,7 +1206,7 @@
                     type: isSeries ? 'series' : 'movie',
                     year: pt.year,
                     score: imdb ? parseFloat(imdb) : undefined,
-                    description: desc || undefined,
+                    description: (altNote + (desc || '')).trim() || undefined,
                     episodes: episodes
                 })
             });
@@ -1121,6 +1273,15 @@
                     return Promise.all(tasks).then(function (r) { return [].concat.apply([], r); });
                 }, function () { return []; }));
             }
+            (ref.g || []).slice(0, 4).forEach(function (g) {
+                var q = qualityFromText(g[1]) || g[1] || 'Auto';
+                jobs.push(resolveGdflix(g[0]).then(function (r) {
+                    var o = [];
+                    (r.instant || []).forEach(function (u) { o.push({ url: u, source: 'GDFlix Instant • ' + q, headers: { 'User-Agent': UA }, rank: 2 }); });
+                    (r.urls || []).forEach(function (u) { if (!/drive\.google\.com\/open/.test(u)) o.push({ url: u, source: 'GDFlix • ' + q, headers: { 'User-Agent': UA }, rank: 3 }); });
+                    return o;
+                }, function () { return []; }));
+            });
             (ref.f || []).slice(0, 6).forEach(function (f) {
                 jobs.push(streamsForFile(f[0], f[1], ['hubdrive_res', 'gdflix_res', 'streamtape_res']).catch(function () { return []; }));
             });
