@@ -311,6 +311,38 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.katmoviehd.skystream.sky"
   },
   {
+    "packageName": "com.movies4u.skystream",
+    "name": "Movies4u",
+    "version": 1,
+    "baseUrl": "https://new1.movies4u.garden",
+    "domains": [
+      {
+        "name": "new1.movies4u.garden (primary)",
+        "url": "https://new1.movies4u.garden"
+      }
+    ],
+    "description": "Bollywood, Hollywood, Hindi dubbed & South movies, web series, TV shows and K-dramas from Movies4u — multi-audio player plus HubCloud/GDFlix files",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "hi",
+      "en",
+      "ta",
+      "te",
+      "ml",
+      "kn",
+      "pa",
+      "ko"
+    ],
+    "categories": [
+      "Movies",
+      "Series"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movies4u.skystream.sky"
+  },
+  {
     "packageName": "com.movieshubhd.skystream",
     "name": "MoviesHubHD",
     "version": 1,
