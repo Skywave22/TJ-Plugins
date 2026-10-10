@@ -1,7 +1,7 @@
 {
   "name": "TJ-Plugins",
   "packageName": "com.tjplugins.repo",
-  "description": "SkyStream plugins repository",
+  "description": "TJ-Plugins for the Skystream",
   "manifestVersion": 1,
   "pluginLists": [
     "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/plugins.json"
