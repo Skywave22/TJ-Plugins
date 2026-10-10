@@ -66,6 +66,7 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 | **KatDrama** | v2 | TJ-Plugins | new.katdrama.my | Series, Movies | hi, en, ko, zh | ✅ |
 | **KatMovieHD** | v13 | TJ-Plugins | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
 | **KDramaMaza** | v9 | TJ-Plugins | kdramasmaza.net | TvSeries | en, hi, ur | — |
+| **MoviesHubHD** | v1 | TJ-Plugins | movieshubhd.com | Movie, TvSeries | hi, en | — |
 | **NetMirror** | v10 | TJ-Plugins | netmirror.center | Movie, TvSeries | en, hi | — |
 | **PikaHD** | v4 | TJ-Plugins | new.pikahd.co | Anime, Movies, Series | hi, en, ja | ✅ |
 | **RareAnimes** | v4 | TJ-Plugins | rareanimes.mov | Anime, TvSeries, Movie | hi, ta, te, ml | — |
@@ -77,6 +78,19 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🆕 New plugin — 2026-10-10
+
+- **MoviesHubHD** (movieshubhd.com):
+  - Same rows as the site's home page: Latest Releases, Trending, Hindi Movies, Top Rated Movies & TV,
+    plus genres.
+  - Search covers movies and TV shows, and every TV episode is listed.
+  - Most of the site's 15 player servers are web-page embeds that SkyStream can't play, or are dead or
+    locked. The plugin uses the player network behind the site's NontonGo server, which serves direct
+    video links.
+  - That gives 4-6 servers per title: Hindi and English audio tracks (Hindi first), multi-audio,
+    up to 1080p/4K, plus subtitles where available.
+  - Every link is checked before it is shown.
 
 ## 🔄 Update — 2026-10-09
 
