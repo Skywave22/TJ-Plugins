@@ -57,6 +57,7 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 | **CineFreak** | v9 | TJ-Plugins | cinefreak.ch | Movie, TvSeries | hi, en, mal | — |
 | **CineHD** | v11 | TJ-Plugins | cinehd.vc | Movie, TvSeries | en | — |
 | **CineJoy** | v6 | TJ-Plugins | cinejoy.pk | Movie, TvSeries | en | — |
+| **Cinezo** | v1 | TJ-Plugins | cinezo.gd | Movie, TvSeries, Anime | hi, en, ta, te | — |
 | **DesiDubAnime** | v3 | TJ-Plugins | desidubanime.me | Anime, Movie, TvSeries | hi, ta, te | — |
 | **DesiSerialOnline** | v3 | TJ-Plugins | desiserialonline.su | TvSeries | hi | — |
 | **DesiSerials** | v3 | TJ-Plugins | desi-serials.to | TvSeries | hi | — |
@@ -78,6 +79,19 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🆕 New plugin — 2026-10-10 (2)
+
+- **Cinezo** (cinezo.gd, formerly cinezo.net):
+  - Same rows as the site's home page: Trending, Hot Today, Popular Movies/TV, In Theaters, On Air,
+    Top Rated, plus network rows (Netflix, Amazon Prime, HBO, Disney+, Apple TV+), Hindi Movies and
+    genres.
+  - The site lists ~50 player servers, but most are web-page players SkyStream can't play. The plugin
+    uses the two with direct links:
+    - **VidNest:** Hindi/English audio tracks, multi-audio, subtitles.
+    - **ScreenScape (nxsha):** Hindi dubs, multi-audio, 4K.
+  - That gives 15-30 servers per title, with Hindi first. Every link is checked before it is shown,
+    and unconfirmed ones are listed last.
 
 ## 🆕 New plugin — 2026-10-10
 
