@@ -540,7 +540,7 @@
                         if (ep.air_date && ep.air_date > today) return; // not aired yet
                         episodes.push(mkEpisode({
                             name: ep.name || ("Episode " + ep.episode_number),
-                            url: JSON.stringify({ type: "tv", id: d.id, s: sj.season_number, e: ep.episode_number, title: d.name }),
+                            url: JSON.stringify({ type: "tv", id: d.id, s: sj.season_number, e: ep.episode_number, title: d.name, rt: ep.runtime || (d.episode_run_time || [])[0] || null }),
                             season: sj.season_number,
                             episode: ep.episode_number,
                             posterUrl: img(ep.still_path, "w500"),
@@ -859,6 +859,59 @@
 
     function qRank(q) { return { "4K": 5, "1080p": 4, "720p": 3, "Auto": 3, "480p": 2, "360p": 1 }[q] || 0; }
 
+    // ── TV episode sanity check ──────────────────────────────────────────────
+    // Some scrapers ignore the episode number and hand back a movie with a similar title, or the
+    // same file for every episode. For a TV episode every HLS link's real length is compared with
+    // the episode's runtime on TMDB, and links that are far longer (a movie) or far shorter
+    // (a preview) are dropped.
+    async function expectedMinutes(p) {
+        if (p.rt) return +p.rt;
+        const ep = await withTimeout(tmdb("/tv/" + p.id + "/season/" + (p.s || 1) + "/episode/" + (p.e || 1)), 8000).catch(function () { return null; });
+        if (ep && ep.runtime) return +ep.runtime;
+        const sh = await withTimeout(tmdb("/tv/" + p.id), 8000).catch(function () { return null; });
+        const r = sh && sh.episode_run_time && sh.episode_run_time[0];
+        return r ? +r : 0;
+    }
+    function resolveUrl(base, rel) {
+        rel = String(rel || "").trim();
+        if (/^https?:\/\//i.test(rel)) return rel;
+        const m = String(base).match(/^(https?:)\/\/[^\/?#]+/i);
+        if (!m) return rel;
+        if (rel.indexOf("//") === 0) return m[1] + rel;
+        if (rel.charAt(0) === "/") return m[0] + rel;
+        return String(base).split(/[?#]/)[0].replace(/[^\/]*$/, "") + rel;
+    }
+    async function playlistText(u, headers) {
+        const r = await __tjDeadline(http_get(u, Object.assign({}, headers || {}, { "Range": "bytes=0-1048575" })), 9000);
+        if (!r || (Number(r.status) !== 200 && Number(r.status) !== 206)) return null;
+        const t = String(r.body || "").replace(/^\uFEFF/, "");
+        return /^\s*#EXTM3U/.test(t) ? { text: t, url: r.finalUrl || u } : null;
+    }
+    // total length in seconds of an HLS stream, 0 when unknown (not HLS, unreachable, ...)
+    async function hlsSeconds(s) {
+        const u = String(s.url || "");
+        if (!/^https?:\/\//i.test(u) || /\.(mp4|mkv|avi|webm|mpd)(\?|$)/i.test(u.split("?")[0])) return 0;
+        let pl = await playlistText(u, s.headers);
+        if (!pl) return 0;
+        if (/#EXT-X-STREAM-INF/.test(pl.text)) {
+            const v = pl.text.split(/\r?\n/).filter(function (l) { return l && l.charAt(0) !== "#"; })[0];
+            if (!v) return 0;
+            pl = await playlistText(resolveUrl(pl.url, v), s.headers);
+            if (!pl) return 0;
+        }
+        let sum = 0;
+        pl.text.replace(/#EXTINF:\s*([\d.]+)/g, function (_, d) { sum += parseFloat(d) || 0; return _; });
+        return sum;
+    }
+    async function dropWrongLength(list, p) {
+        if (!p || p.type !== "tv" || !list.length) return list;
+        const exp = await expectedMinutes(p);
+        if (!exp) return list;
+        const maxS = Math.max(exp * 1.8, exp + 20) * 60, minS = exp * 0.4 * 60;
+        const secs = await Promise.all(list.map(function (s) { return hlsSeconds(s).catch(function () { return 0; }); }));
+        return list.filter(function (s, i) { return !secs[i] || (secs[i] <= maxS && secs[i] >= minS); });
+    }
+
     async function loadStreams(url, cb) {
         try {
             const p = parseUrl(url);
@@ -894,6 +947,8 @@
                 const tags = [];
                 if (s.type === "mpd") tags.push("DASH");
                 const size = (String(s.label || "").match(/\b\d+(\.\d+)?\s*GB\b/i) || [])[0];
+                // HDHub-type scrapers answer episode requests with season packs or same-named movies
+                if (p.type === "tv" && (/hdhub|4k-?bk|4k-?hub/i.test(String(it.scraper) + " " + String(it.server)) || (size && parseFloat(size) > 4))) return;
                 const per = perSrv[it.scraper] || (perSrv[it.scraper] = 0);
                 if (per >= 3) return; // max 3 files per server
                 perSrv[it.scraper] = per + 1;
@@ -914,7 +969,8 @@
             const ordered = hindi.sort(byQ).concat(multi.sort(byQ), other.sort(byQ)).slice(0, 28);
             ordered.forEach(function (s) { try { delete s.__q; } catch (_) {} });
 
-            const verified = ordered.length ? await verifyStreams(ordered, 4) : [];
+            const res = ordered.length ? await Promise.all([verifyStreams(ordered, 4), dropWrongLength(ordered, p)]) : [[], []];
+            const verified = res[0].filter(function (s) { return res[1].indexOf(s) >= 0; });
             if (!verified.length) {
                 return cb({ success: false, errorCode: "NO_STREAMS", message: "No ScreenScape server has a working link for this " + (p.type === "tv" ? "episode" : "movie") + " right now. Try again later." });
             }

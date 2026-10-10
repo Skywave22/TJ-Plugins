@@ -1,9 +1,9 @@
 {
   "packageName": "com.cinezo.skystream",
   "name": "Cinezo",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://cinezo.gd",
-  "description": "Cinezo (cinezo.gd, formerly cinezo.net) - the site's catalog (Trending, Hot Today, Popular, In Theaters, On Air, Top Rated, Netflix, Prime, HBO, Disney+, Apple TV+, Hindi, genres) with direct streams from its VidNest and ScreenScape servers: Hindi dubs, multi-audio, English, up to 4K, with subtitles. Hindi first; every link is checked before it is shown.",
+  "description": "TV episodes: drop movies/season packs that scrapers return instead of the episode",
   "authors": [
     "TJ-Plugins"
   ],

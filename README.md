@@ -57,7 +57,7 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 | **CineFreak** | v9 | TJ-Plugins | cinefreak.ch | Movie, TvSeries | hi, en, mal | — |
 | **CineHD** | v11 | TJ-Plugins | cinehd.vc | Movie, TvSeries | en | — |
 | **CineJoy** | v6 | TJ-Plugins | cinejoy.pk | Movie, TvSeries | en | — |
-| **Cinezo** | v1 | TJ-Plugins | cinezo.gd | Movie, TvSeries, Anime | hi, en, ta, te | — |
+| **Cinezo** | v2 | TJ-Plugins | cinezo.gd | Movie, TvSeries, Anime | hi, en, ta, te | — |
 | **DesiDubAnime** | v3 | TJ-Plugins | desidubanime.me | Anime, Movie, TvSeries | hi, ta, te | — |
 | **DesiSerialOnline** | v3 | TJ-Plugins | desiserialonline.su | TvSeries | hi | — |
 | **DesiSerials** | v3 | TJ-Plugins | desi-serials.to | TvSeries | hi | — |
@@ -72,13 +72,22 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 | **PikaHD** | v4 | TJ-Plugins | new.pikahd.co | Anime, Movies, Series | hi, en, ja | ✅ |
 | **RareAnimes** | v4 | TJ-Plugins | rareanimes.mov | Anime, TvSeries, Movie | hi, ta, te, ml | — |
 | **RiveStream** | v6 | TJ-Plugins | rivestream.ru | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
-| **ScreenScape** | v1 | TJ-Plugins | screenscape.me (via nxsha.space) | Movie, TvSeries, Anime | hi, en, ta, te, ko, ja | — |
+| **ScreenScape** | v2 | TJ-Plugins | screenscape.me (via nxsha.space) | Movie, TvSeries, Anime | hi, en, ta, te, ko, ja | — |
 | **SSR Movies** | v8 | TJ-Plugins | ssrmovies.games | Movies, Series | hi, en | ✅ |
 | **SubDubAnime** | v6 | TJ-Plugins | subdubanime.site | TvSeries, Movie | en, hi | — |
 | **Vidbox** | v5 | TJ-Plugins | vidbox.vc | Movie, TvSeries | hi, en, ta, te, ur, mal, bn | — |
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🔧 Fix — 2026-10-10 (3)
+
+- **Cinezo v2 / ScreenScape v2:** some shows, e.g. *Link Click*, played the same movie for every episode.
+  - A few scrapers (CastVid, 4K-BK, 4K-Hub) ignore the episode number. They send back a movie with a
+    similar title or a whole season pack, and that link was listed first.
+  - For TV episodes, each HLS link's real length is now compared with the episode's runtime on TMDB.
+    Links far longer (a movie) or far shorter than the episode are removed.
+  - 4K-BK / 4K-Hub files and files over 4 GB are skipped for episodes. Movies are not affected.
 
 ## 🆕 New plugin — 2026-10-10 (2)
 
