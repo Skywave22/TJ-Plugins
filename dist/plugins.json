@@ -289,6 +289,25 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.katmoviehd.skystream.sky"
   },
   {
+    "packageName": "com.movieshubhd.skystream",
+    "name": "MoviesHubHD",
+    "version": 1,
+    "baseUrl": "https://www.movieshubhd.com",
+    "description": "MoviesHubHD (movieshubhd.com) - the site's catalog (Latest Releases, Trending, Hindi Movies, Top Rated Movies & TV, genres) with direct streams from its player network: Hindi + English tracks, multi-audio, up to 4K, with subtitles where available. Hindi first; every link is checked before it is shown.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "hi",
+      "en"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movieshubhd.skystream.sky"
+  },
+  {
     "packageName": "com.netmirror.skystream",
     "name": "NetMirror",
     "version": 10,
