@@ -67,6 +67,7 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 | **KatDrama** | v2 | TJ-Plugins | new.katdrama.my | Series, Movies | hi, en, ko, zh | ✅ |
 | **KatMovieHD** | v13 | TJ-Plugins | new.katmoviehd.top | Movies, Series, Anime | hi, en | ✅ |
 | **KDramaMaza** | v9 | TJ-Plugins | kdramasmaza.net | TvSeries | en, hi, ur | — |
+| **Movies4u** | v1 | TJ-Plugins | movies4u.garden | Movie, TvSeries | hi, en, ta, te, ml, kn, pa, ko | — |
 | **MoviesHubHD** | v1 | TJ-Plugins | movieshubhd.com | Movie, TvSeries | hi, en | — |
 | **NetMirror** | v10 | TJ-Plugins | netmirror.center | Movie, TvSeries | en, hi | — |
 | **PikaHD** | v4 | TJ-Plugins | new.pikahd.co | Anime, Movies, Series | hi, en, ja | ✅ |
@@ -79,6 +80,17 @@ Every plugin also handles this itself (network guard, since 2026-10-08):
 
 **Mirrors** ✅ = the plugin declares a `domains` list, so you can switch to a working mirror
 from the plugin's settings gear if the primary domain is blocked.
+
+## 🆕 New plugin — 2026-10-10 (4)
+
+- **Movies4u** (new1.movies4u.garden):
+  - Rows: Latest Uploads, Bollywood, Hollywood, Hindi Dubbed, South Hindi, Web Series, TV Shows,
+    K-Drama, Anime, Punjabi, Action, Horror, Comedy. Search uses the site's own search.
+  - Movies: the site's **Movies4u Player** (multi-audio HLS with subtitles) comes first, then HubCloud
+    and GDFlix files for every quality (480p to 4K).
+  - Series and TV shows (incl. daily shows like KBC / Bigg Boss): every season and episode is listed,
+    each with HubCloud and GDFlix files per quality.
+  - If the site moves to a new domain, the plugin picks up the current one automatically.
 
 ## 🔧 Fix — 2026-10-10 (3)
 
