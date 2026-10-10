@@ -85,6 +85,28 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.cinejoy.skystream.sky"
   },
   {
+    "packageName": "com.cinezo.skystream",
+    "name": "Cinezo",
+    "version": 1,
+    "baseUrl": "https://cinezo.gd",
+    "description": "Cinezo (cinezo.gd, formerly cinezo.net) - the site's catalog (Trending, Hot Today, Popular, In Theaters, On Air, Top Rated, Netflix, Prime, HBO, Disney+, Apple TV+, Hindi, genres) with direct streams from its VidNest and ScreenScape servers: Hindi dubs, multi-audio, English, up to 4K, with subtitles. Hindi first; every link is checked before it is shown.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "hi",
+      "en",
+      "ta",
+      "te"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries",
+      "Anime"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.cinezo.skystream.sky"
+  },
+  {
     "packageName": "com.desidubanime.skystream",
     "name": "DesiDubAnime",
     "version": 3,
