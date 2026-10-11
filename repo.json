@@ -4,6 +4,9 @@
   "description": "TJ-Plugins for the Skystream",
   "manifestVersion": 1,
   "pluginLists": [
-    "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/plugins.json"
+    "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/plugins.json",
+    "https://raw.githubusercontent.com/akashdh11/skystream-plugins/main/repo.json",
+        "https://raw.githubusercontent.com/likhithkrishna1103-tech/Hindmovie/main/repo.json",
+        "https://raw.githubusercontent.com/arranoust/MiraiExt-SkyStream/main/repo.json",
   ]
 }
