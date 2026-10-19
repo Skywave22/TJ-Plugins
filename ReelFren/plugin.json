@@ -1,0 +1,31 @@
+{
+  "packageName": "com.reelfren.skystream",
+  "name": "ReelFren",
+  "version": 1,
+  "baseUrl": "https://www.reelfren.com",
+  "domains": [
+    {
+      "name": "www.reelfren.com (primary)",
+      "url": "https://www.reelfren.com"
+    }
+  ],
+  "description": "Free short dramas (vertical reels) from ReelShort, DramaBox, ShortMax, NetShort, DramaWave, StoryReel, Melolo and 20+ more apps, plus WeTV/iQIYI dramas and anime — with subtitles",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "en",
+    "hi",
+    "id",
+    "es",
+    "pt",
+    "ko",
+    "zh"
+  ],
+  "categories": [
+    "Series",
+    "Drama",
+    "Anime"
+  ],
+  "isAdult": false
+}
