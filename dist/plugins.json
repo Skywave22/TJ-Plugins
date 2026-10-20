@@ -19,6 +19,33 @@
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.movies321uk.skystream.sky"
   },
   {
+    "packageName": "com.allinone.tjplugins",
+    "name": "All-in-one",
+    "version": 1,
+    "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
+    "description": "Every TJ-Plugins source in one: merged home rows, one search across 24 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "hi",
+      "en",
+      "ta",
+      "te",
+      "ml",
+      "ko",
+      "ja",
+      "ur"
+    ],
+    "categories": [
+      "Movies",
+      "Series",
+      "Anime"
+    ],
+    "isAdult": false,
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.allinone.tjplugins.sky"
+  },
+  {
     "packageName": "com.cinefreak.skystream",
     "name": "CineFreak",
     "version": 9,
