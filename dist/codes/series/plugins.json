@@ -128,25 +128,6 @@
   "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hicine.skystream.sky"
  },
  {
-  "packageName": "com.hindidubbed.provider",
-  "name": "Hindi Dubbed",
-  "version": 2,
-  "baseUrl": "https://www.youtube.com",
-  "description": "Hollywood Hindi dubbed, South Indian Hindi dubbed, Bollywood and Hindi cartoon/anime - all from 20 official YouTube channels (Goldmines network, Aditya, Bhavani, Volga, DRJ, Shemaroo, Ultra, Pen, Rajshri, B4U, Pokemon Hindi, Discovery Kids). Full movies appear as single items; web series are grouped with auto-updating episodes. Fully on-device: 720p/1080p fMP4 HLS + merged HLS built in pure JS, with 360p MP4 fallback. v2: reports an error instead of showing a blank dashboard when YouTube returns nothing.",
-  "authors": [
-   "TJ Plugins"
-  ],
-  "languages": [
-   "hi",
-   "en"
-  ],
-  "categories": [
-   "Movie",
-   "TvSeries"
-  ],
-  "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hindidubbed.provider.sky"
- },
- {
   "packageName": "com.kdramamaza.skystream",
   "name": "KDramaMaza",
   "version": 4,
