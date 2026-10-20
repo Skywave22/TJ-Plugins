@@ -23,6 +23,10 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Rebuild All-in-one
+        # embeds the current version of every plugin; bumps AllInOne's version when anything changed
+        run: node tools/build-aio.mjs
+
       - name: Deploy Repository
         run: |
           npm install -g skystream-cli

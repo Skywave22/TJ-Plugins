@@ -2,6 +2,14 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### ⭐ New plugin: All-in-one, 2026-10-20
+
+| Plugin | What's new |
+|---|---|
+| **All-in-one** v1 | 24 TJ-Plugins in one plugin (all except ReelFren). One home page with merged rows (the same title from different sites is one card), one search across all sites, and when you press Play, every working link for that movie or episode from every site that has it. Seasons are matched carefully: per-season posts are mapped to the right season, Hindi serials are matched by air date, and links that some servers return for the wrong episode are left out. |
+| **SSR Movies** v9 | The site moved to `ssrmovies.surf` (`ssrmovies.cz` is only its landing page). Home and search were empty before this fix. |
+| **Movies4u** v2 | The site moved to `new2.movies4u.garden`. Home and search were empty before this fix. |
+
 ### 🆕 New plugin — 2026-10-19
 
 | Plugin | What's new |
