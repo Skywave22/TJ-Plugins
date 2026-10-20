@@ -21,9 +21,9 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
-    "description": "Every TJ-Plugins source in one: merged home rows, one search across 24 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
+    "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
       "TJ-Plugins"
     ],
@@ -243,25 +243,6 @@
     ],
     "isAdult": false,
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hicine.skystream.sky"
-  },
-  {
-    "packageName": "com.hindidubbed.provider",
-    "name": "Hindi Dubbed",
-    "version": 5,
-    "baseUrl": "https://www.youtube.com",
-    "description": "Hindi Dubbed — Hollywood & South Indian Hindi-dubbed movies, Bollywood and Hindi cartoons from 20 official YouTube channels (Goldmines, Aditya, Shemaroo, Ultra, Pen, Rajshri, B4U…). Full movies as single items, web series grouped with episodes. Search finds full movies only.",
-    "authors": [
-      "TJ-Plugins"
-    ],
-    "languages": [
-      "hi",
-      "en"
-    ],
-    "categories": [
-      "Movie",
-      "TvSeries"
-    ],
-    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.hindidubbed.provider.sky"
   },
   {
     "packageName": "com.kdramamaza.skystream",
