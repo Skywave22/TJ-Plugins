@@ -313,9 +313,13 @@
   {
     "packageName": "com.movies4u.skystream",
     "name": "Movies4u",
-    "version": 1,
-    "baseUrl": "https://new1.movies4u.garden",
+    "version": 2,
+    "baseUrl": "https://new2.movies4u.garden",
     "domains": [
+      {
+        "name": "Movies4u (new2.movies4u.garden)",
+        "url": "https://new2.movies4u.garden"
+      },
       {
         "name": "new1.movies4u.garden (primary)",
         "url": "https://new1.movies4u.garden"
@@ -490,9 +494,13 @@
   {
     "packageName": "com.ssr.skystream",
     "name": "SSR Movies",
-    "version": 8,
-    "baseUrl": "https://ssrmovies.games",
+    "version": 9,
+    "baseUrl": "https://ssrmovies.surf",
     "domains": [
+      {
+        "name": "SSRMovies (ssrmovies.surf)",
+        "url": "https://ssrmovies.surf"
+      },
       {
         "name": "SSRMovies (ssrmovies.games)",
         "url": "https://ssrmovies.games"
@@ -506,7 +514,7 @@
         "url": "https://ssrmovies.com"
       }
     ],
-    "description": "SSR Movies (ssrmovies.name) - Hindi dubbed and dual audio movies, Bollywood, Hollywood, web series, TV and WWE shows in 480p to 4K. Daily shows list every episode by date. Streams come from Watch (HLS), HubCloud, GDFlix and Direct-Cloud mirrors resolved to direct files; every link is checked before it is shown.",
+    "description": "SSR Movies (ssrmovies.surf) - Hindi dubbed and dual audio movies, Bollywood, Hollywood, web series, TV and WWE shows in 480p to 4K. Daily shows list every episode by date. Streams come from Watch (HLS), HubCloud, GDFlix and Direct-Cloud mirrors resolved to direct files; every link is checked before it is shown.",
     "authors": [
       "TJ-Plugins"
     ],
