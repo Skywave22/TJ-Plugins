@@ -1,6 +1,6 @@
 /*
  * SSR Movies — SkyStream plugin
- * Site:   https://ssrmovies.games  (.name and .com 302 here)
+ * Site:   https://ssrmovies.surf  (ssrmovies.cz is its landing page)
  * Source: Hindi-dubbed / dual-audio movies, Bollywood, Hollywood, web series, WWE
  *
  * Flow:
@@ -339,7 +339,7 @@
     // Dynamic base URL: the app injects the domain picked in the settings gear.
     var SITE = (typeof manifest !== 'undefined' && manifest.baseUrl)
         ? String(manifest.baseUrl).replace(/\/+$/, '')
-        : 'https://ssrmovies.games';
+        : 'https://ssrmovies.surf';
     if (SITE.slice(-1) === '/') SITE = SITE.slice(0, -1);
     var API = SITE + '/wp-json/wp/v2';
 

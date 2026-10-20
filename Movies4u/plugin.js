@@ -1,6 +1,6 @@
 /*
  * Movies4u — SkyStream plugin (2026-10-10)
- * Site: https://new1.movies4u.garden (WordPress: Bollywood / Hollywood / Hindi dubbed / South /
+ * Site: https://new2.movies4u.garden (WordPress: Bollywood / Hollywood / Hindi dubbed / South /
  * web series / TV shows / K-drama / anime).
  * Flow:
  *   catalog : homepage + /category/<slug>/ cards (<article class="post">)
@@ -336,7 +336,7 @@
 
     var SITE = (typeof manifest !== 'undefined' && manifest.baseUrl)
         ? String(manifest.baseUrl).replace(/\/+$/, '')
-        : 'https://new1.movies4u.garden';
+        : 'https://new2.movies4u.garden';
     var DOMAINS_JSON = 'https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json';
     var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
     var PLACEHOLDER = 'https://placehold.co/400x600.png?text=Movies4u';

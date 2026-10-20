@@ -1,9 +1,13 @@
 {
   "packageName": "com.movies4u.skystream",
   "name": "Movies4u",
-  "version": 1,
-  "baseUrl": "https://new1.movies4u.garden",
+  "version": 2,
+  "baseUrl": "https://new2.movies4u.garden",
   "domains": [
+    {
+      "name": "Movies4u (new2.movies4u.garden)",
+      "url": "https://new2.movies4u.garden"
+    },
     {
       "name": "new1.movies4u.garden (primary)",
       "url": "https://new1.movies4u.garden"
