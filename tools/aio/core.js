@@ -135,7 +135,7 @@ Merger.prototype.add = function (sub, it) {
     if (!p.norm) return null;
     var year = it.year ? +String(it.year).slice(0, 4) || p.year : p.year;
     var sh = p.sh && p.sh >= 2 ? p.sh : null;
-    var nk = (sub.meta.id === 'HindiDubbed' ? 'yt:' : '') + loose(p.norm);   // YouTube videos never merge with site titles
+    var nk = loose(p.norm);
     var groups = this.byNorm[nk] || (this.byNorm[nk] = []);
     var g = null;
     for (var i = 0; i < groups.length && !g; i++) {
@@ -147,7 +147,7 @@ Merger.prototype.add = function (sub, it) {
         g = c;
     }
     if (!g) {
-        g = { yt: sub.meta.id === 'HindiDubbed', norm: p.norm, sh: sh, year: year, type: sh && !isSeries(it.type) ? 'series' : it.type, title: p.clean, poster: it.posterUrl, item: it, tmdb: false, src: [], subs: {} };
+        g = { norm: p.norm, sh: sh, year: year, type: sh && !isSeries(it.type) ? 'series' : it.type, title: p.clean, poster: it.posterUrl, item: it, tmdb: false, src: [], subs: {} };
         groups.push(g);
         this.list.push(g);
     }
@@ -168,21 +168,20 @@ Merger.prototype.add = function (sub, it) {
 // card links carry at most 6 sources (TMDB ones first: they open fastest); the full list stays in
 // memory for this session, and any other site is searched when Play is pressed anyway
 var FULLSRC = {};
-function cardKey(t, y, h, yt) { return (yt ? 'yt:' : '') + loose(parseTitle(t).norm) + '|' + (h || 0) + '|' + (y || 0); }
+function cardKey(t, y, h) { return loose(parseTitle(t).norm) + '|' + (h || 0) + '|' + (y || 0); }
 function cardUrl(g) {
     var src = g.src.slice().sort(function (a, b) { return ((BY_ID[b[0]].meta.tmdb ? 1 : 0) - (BY_ID[a[0]].meta.tmdb ? 1 : 0)); });
-    var key = cardKey(g.title, g.year, g.sh, g.yt), prev = FULLSRC[key] || [];
+    var key = cardKey(g.title, g.year, g.sh), prev = FULLSRC[key] || [];
     prev.forEach(function (x) { if (!src.some(function (y) { return y[0] === x[0]; })) src.push(x); });
     FULLSRC[key] = src;
     var tm = src.filter(function (x) { return BY_ID[x[0]].meta.tmdb; }).slice(0, 2);
     var rest = src.filter(function (x) { return tm.indexOf(x) < 0; })      // then other kinds of sites first
         .sort(function (a, b) { return (BY_ID[a[0]].meta.tmdb ? 1 : 0) - (BY_ID[b[0]].meta.tmdb ? 1 : 0); });
     var o = { t: g.title, y: g.year || 0, k: isSeries(g.type) ? 's' : 'm', h: g.sh || 0, s: tm.concat(rest).slice(0, 6) };
-    if (g.yt) o.yt = 1;
     return 'aio:' + JSON.stringify(o);
 }
 function allSources(a) {
-    var full = FULLSRC[cardKey(a.t, a.y, a.h, a.yt)] || [];
+    var full = FULLSRC[cardKey(a.t, a.y, a.h)] || [];
     var out = (a.s || []).slice();
     full.forEach(function (x) { if (!out.some(function (y) { return y[0] === x[0]; })) out.push(x); });
     return out;
@@ -226,10 +225,9 @@ var ROWS = [
     ['Horror', /^horror( movies)?$/i, ['movies'], null, 30],
     ['Sci-Fi', /^sci(-| )?fi|science fiction/i, ['movies'], null, 30],
     ['Marvel & DC', /marvel|dc universe/i, null, null, 30],
-    ['Hindi Dubbed on YouTube', /./, ['youtube'], null, 40],
     ['WWE', /wwe/i, null, null, 20],
 ];
-function groupOf(s) { return s.meta.id === 'HindiDubbed' ? 'youtube' : s.meta.group; }
+function groupOf(s) { return s.meta.group; }
 
 var HOME = null;
 async function buildHome() {
@@ -255,7 +253,6 @@ async function buildHome() {
     ROWS.forEach(function (R) {
         var lanes = rowsOf.filter(function (x) {
             if (R[2] && R[2].indexOf(groupOf(x.sub)) < 0) return false;
-            if (!R[2] && groupOf(x.sub) === 'youtube') return false;
             return R[1].test(x.name);
         }).map(function (x) {
             return x.groups.filter(function (g) {
@@ -344,7 +341,6 @@ function eligible(primaryId, kind) {
     return SUBS.filter(function (s) {
         if (pg === 'serial') return s.meta.group === 'serial';
         if (s.meta.group === 'serial') return false;
-        if (s.meta.id === 'HindiDubbed' && kind === 's') return false;
         return true;
     });
 }

@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🗑️ Removed — 2026-10-20
+
+| Plugin | Change |
+|---|---|
+| **Hindi Dubbed** (YouTube) | Removed from the repository at the maintainer's request. If you installed it, it stays on your phone until you uninstall it, but it gets no more updates. |
+| **All-in-one** v2 | No longer includes Hindi Dubbed (YouTube): 23 plugins built in, and the "Hindi Dubbed on YouTube" home row is gone. |
+
 ### ⭐ New plugin: All-in-one, 2026-10-20
 
 | Plugin | What's new |

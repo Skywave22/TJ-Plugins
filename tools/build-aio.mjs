@@ -17,7 +17,7 @@ const GROUP = {
   "321MoviesUK": "movies", CineHD: "movies", CineJoy: "movies", Cinezo: "movies", Fmovies: "movies",
   HiCine: "movies", MoviesHubHD: "movies", NetMirror: "movies", RiveStream: "movies", ScreenScape: "movies",
   Vidbox: "movies",
-  CineFreak: "hindi", HindiDubbed: "hindi", KatMovieHD: "hindi", Movies4u: "hindi", SSRMovies: "hindi",
+  CineFreak: "hindi", KatMovieHD: "hindi", Movies4u: "hindi", SSRMovies: "hindi",
   DesiSerialOnline: "serial", DesiSerials: "serial",
   DesiDubAnime: "anime", PikaHD: "anime", RareAnimes: "anime", SubDubAnime: "anime",
   KatDrama: "drama", KDMaza: "drama",
