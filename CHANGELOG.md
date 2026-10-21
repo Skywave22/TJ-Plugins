@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Changed — 2026-10-21 (4)
+
+| Plugin | Change |
+|---|---|
+| **RareAnimes** v8 | Old series now also list the site's **MultiQuality (1080p / 720p / 360p)** player next to the Pixeldrain file, instead of hiding it. The Pixeldrain file is the original TV quality (Doraemon S1/S2: 576p) and is now labelled SD; MultiQuality is the only 720p/1080p version on the site (most likely upscaled from the same original). It is marked "(may not play)" when it can't be checked. |
+| **All-in-one** v10 | Includes the RareAnimes change. |
+
 ### 🔧 Fixed — 2026-10-21 (3)
 
 | Plugin | Change |

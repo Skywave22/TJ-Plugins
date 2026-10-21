@@ -1168,7 +1168,7 @@
         var m = String(name || '').match(/\b(2160|1440|1080|720|576|480|360)p\b/i);
         if (m) return m[1] + 'p';
         var mb = parseFloat(size) * (/GB/i.test(size) ? 1024 : 1);
-        return mb >= 600 ? '1080p' : mb >= 250 ? '720p' : '480p';
+        return mb >= 600 ? '1080p' : mb >= 250 ? '720p' : 'SD';
     }
 
     async function loadStreams(data, cb) {
@@ -1186,7 +1186,7 @@
             });
             var pdLang = {};
             (d.v || []).forEach(function (v) { if (v.z) pdLang[v.l] = 1; });
-            var wmqJobs = (d.v || []).filter(function (v) { return v.m && !v.w && !v.h && !pdLang[v.l]; }).slice(0, 3).map(function (v) {
+            var wmqJobs = (d.v || []).filter(function (v) { return v.m && !v.w && !v.h; }).slice(0, 3).map(function (v) {
                 return wmqStream(v.m).then(function (x) { x.label = v.l; return x; }).catch(function () { return null; });
             });
             var wmqAll = Promise.all(wmqJobs);
@@ -1200,7 +1200,6 @@
             var mfs = (await mfAll).filter(Boolean);
             var mfLang = {};
             mfs.forEach(function (x) { mfLang[x.label] = 1; });
-            wmq = wmq.filter(function (x) { return !mfLang[x.label]; });
             pages = pages.filter(Boolean);
 
             // 2) audio versions the post didn't link (e.g. Tamil/Telugu of a fid-only episode)
