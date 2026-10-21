@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -247,7 +247,7 @@
   {
     "packageName": "com.kdramamaza.skystream",
     "name": "KDramaMaza",
-    "version": 9,
+    "version": 10,
     "baseUrl": "https://kdramasmaza.net",
     "description": "KDramaMaza (kdramasmaza.net) — Korean, Chinese, Turkish & Japanese dramas plus anime in Hindi/Urdu dub. Full episode lists with direct HubCloud and GDFlix (Instant / Drive) files, checked before they are shown.",
     "authors": [
