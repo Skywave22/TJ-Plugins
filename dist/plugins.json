@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -357,7 +357,7 @@
   {
     "packageName": "com.movieshubhd.skystream",
     "name": "MoviesHubHD",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://www.movieshubhd.com",
     "description": "MoviesHubHD (movieshubhd.com) - the site's catalog (Latest Releases, Trending, Hindi Movies, Top Rated Movies & TV, genres) with direct streams from its player network: Hindi + English tracks, multi-audio, up to 4K, with subtitles where available. Hindi first; every link is checked before it is shown.",
     "authors": [
