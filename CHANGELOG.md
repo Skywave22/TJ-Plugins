@@ -2,6 +2,17 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-10-21
+
+All 24 plugins were tested again (home, search, details and playback). These four had problems and are fixed:
+
+| Plugin | Change |
+|---|---|
+| **KDramaMaza** v10 | Videos play again. Its file host GDFlix moved to a new address, so the plugin couldn't get any link ("Could not resolve a direct file"). It now always follows GDFlix to its current address and reads the direct link straight from the file page. |
+| **MoviesHubHD** v2 | Videos play again. Its video servers added a new security step in October, so every server answered "no server has this movie". The plugin now does that step itself. The server list now matches the website: Delta, Zeta, Alfa, Beta, Prime, Gama, Lamda and the new Catflix and Filxer. |
+| **RareAnimes** v5 | The home page shows all 11 rows again (Hindi Anime, Hindi Dubbed, Animated Movies, Netflix, Cartoon Network, Disney, Tamil, Telugu…). The site moved its category pages, so only "Trending" was left. |
+| **All-in-one** v7 | Includes the three fixes above. TV episodes now also get the 4K / HDHub links from the movie sites: these servers used to send the wrong episode and were all hidden, but they now send the right one. A link is only left out if its file name shows a different episode or a whole-season pack. |
+
 ### 🔧 Fixed — 2026-10-20
 
 | Plugin | Change |

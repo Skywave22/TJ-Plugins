@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v3 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v7 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -58,7 +58,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **Cinezo** | v2 | cinezo.gd | Trending, Netflix, Prime, HBO, Disney+ rows; Hindi dubs, multi-audio, up to 4K | hi, en, ta, te |
 | **FMoviess** | v7 | fmoviess.tv | Movies, series and anime | en |
 | **HiCine** | v11 | hicine.sbs | Bollywood and Hollywood, web series, K-drama and anime | hi, en |
-| **MoviesHubHD** | v1 | movieshubhd.com | Latest, Trending, Hindi and Top Rated rows; direct streams with subtitles | hi, en |
+| **MoviesHubHD** | v2 | movieshubhd.com | Latest, Trending, Hindi and Top Rated rows; direct streams with subtitles | hi, en |
 | **NetMirror** | v10 | netmirror.center | Netflix-style catalog: Bollywood, Hollywood, anime, reality TV | en, hi |
 | **RiveStream** | v6 | rivestream.ru | Movies and series, Hindi first | hi, en, ta, te +3 |
 | **ScreenScape** | v2 | screenscape.me | Trending, Top 10, Netflix/Prime/JioHotstar rows; 30+ servers per title | hi, en, ta, te, ko, ja |
@@ -86,7 +86,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 |---|:-:|---|---|---|
 | **DesiDubAnime** | v3 | desidubanime.me | Hindi, Tamil and Telugu dubbed anime | hi, ta, te |
 | **PikaHD** | v4 | pikahd.co | Anime in Hindi dubbed, dual audio and English subbed | hi, en, ja |
-| **RareAnimes** | v4 | rareanimes.mov | Hindi, Tamil, Telugu and Malayalam dubbed anime series and movies | hi, ta, te, ml |
+| **RareAnimes** | v5 | rareanimes.mov | Hindi, Tamil, Telugu and Malayalam dubbed anime series and movies | hi, ta, te, ml |
 | **SubDubAnime** | v6 | subdubanime.site | Hindi and English dubbed anime, up to 1080p | hi, en |
 
 ### 🌸 Asian dramas
@@ -94,7 +94,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | Plugin | Version | Site | What you get | Audio |
 |---|:-:|---|---|---|
 | **KatDrama** | v2 | katdrama.my | Korean and Chinese dramas in Hindi and dual audio | hi, en, ko, zh |
-| **KDramaMaza** | v9 | kdramasmaza.net | Korean, Chinese, Turkish and Japanese dramas, Hindi/Urdu dubbed | hi, ur, en |
+| **KDramaMaza** | v10 | kdramasmaza.net | Korean, Chinese, Turkish and Japanese dramas, Hindi/Urdu dubbed | hi, ur, en |
 
 ### 📱 Short dramas
 
@@ -127,6 +127,7 @@ The plugins also try to work around blocks on their own:
 - **ReelFren:** a few apps (MovieBox, JoyReels, FlexTV, KalosTV, Vigloo) are currently not playing on reelfren.com itself, so the plugin says so instead of showing a broken video.
 - **DesiSerials:** each show lists its latest 180 episodes. Video hosts delete old files, so shows that ended before 2025 often won't play.
 - **RareAnimes:** some older posts only have Mega links, which can't be streamed.
+- **NetMirror:** its video server limits how often one connection may download. If you get "too many requests", wait a minute and press Play again. Links it couldn't check are marked "(may not play)".
 - **GDFlix / HubCloud** files (KatMovieHD, SSR Movies, KDramaMaza, PikaHD, KatDrama, Movies4u) play in the app. Desktop test tools may get a Cloudflare check on them.
 
 Release notes for every version are in **[CHANGELOG.md](CHANGELOG.md)**.
