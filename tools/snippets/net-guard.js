@@ -266,6 +266,7 @@
     function __ngStrong(why) { return why !== 'timed out' && why !== 'connection failed'; }
     function __ngExplain(name, res, t0) {
         if (!res || res.success !== false) return res;
+        if (res.errorCode === 'NEEDS_UPDATE' || res.errorCode === 'CHECK_FAILED') return res;
         var recent = __NG.fails.filter(function (f) { return f.t >= t0 && !__ngIsRelayHost(f.host); });
         if (!recent.length) return res;
         var tip = ' Fix: phone Settings → Private DNS → dns.google (Android), or SkyStream Settings → Accounts, Network & Downloads → DNS over HTTPS → On' +

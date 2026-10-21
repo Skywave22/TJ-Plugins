@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-10-20
+
+| Plugin | Change |
+|---|---|
+| **CineFreak** v10 | Videos play again. On 11–12 Oct CineFreak put a Cloudflare "verify you are human" check in front of its player and its download host (CineCloud). SkyStream 2.9.0 and newer pass that check by themselves, so the plugin now uses the app's check solver, opens the CineCloud file and returns the direct 480p / 720p / 1080p / 4K links (Fast Cloud, Stream, Resumable, Instant). If the check doesn't pass on its own, SkyStream shows it to you once to tick. **Update SkyStream to v2.9.0 or newer**: older versions show a message asking you to. Also fixed: search (the old search index went empty, so search found nothing), episode lists (new page layout, packs like "Episodes 01-12" included) and a fuller home page with a "Latest Uploads" row. |
+| **All-in-one** v3 | Includes CineFreak v10 again. Inside All-in-one, CineFreak never shows a check: if the check doesn't pass by itself, the other sites' links are used. |
+
 ### 🗑️ Removed — 2026-10-20
 
 | Plugin | Change |

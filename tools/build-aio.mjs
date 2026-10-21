@@ -40,7 +40,7 @@ for (const d of dirs) {
   hash.update(d + "\0" + JSON.stringify(man) + "\0" + src + "\0");
   const meta = { id: d, name: man.name, version: man.version, group: GROUP[d] || "movies", tmdb: TMDB.has(d) };
   subs += `\n// ═════════════ ${man.name} v${man.version} (${d}/plugin.js) ═════════════\n` +
-    `__AIO_SUBS.push({ meta: ${JSON.stringify(meta)}, manifest: ${JSON.stringify(man)},\n` +
+    `__AIO_SUBS.push({ meta: ${JSON.stringify(meta)}, manifest: ${JSON.stringify(Object.assign({}, man, { aio: true }))},\n` +
     `make: function (manifest, globalThis, getPreference, setPreference) {\n${src}\n} });\n`;
 }
 const core = fs.readFileSync(path.join(ROOT, "tools", "aio", "core.js"), "utf8");

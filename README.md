@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v2 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v3 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -68,7 +68,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 
 | Plugin | Version | Site | What you get | Audio |
 |---|:-:|---|---|---|
-| **CineFreak** | v9 | cinefreak.ch | Hindi, English and dual-audio movies, web series, K-drama | hi, en, ml |
+| **CineFreak** | v10 | cinefreak.ch | Hindi, English and dual-audio movies, web series, K-drama (needs SkyStream 2.9.0+ to play) | hi, en, ml |
 | **KatMovieHD** | v13 | katmoviehd.top | Hollywood movies and web series in Hindi dubbed / dual audio | hi, en |
 | **Movies4u** | v2 | movies4u.garden | Bollywood, Hollywood, South, web series, TV shows; multi-audio player | hi, en, ta, te +4 |
 | **SSR Movies** | v9 | ssrmovies.surf | Hindi dubbed and dual-audio movies, web series, daily shows | hi, en |

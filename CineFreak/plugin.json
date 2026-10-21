@@ -1,9 +1,9 @@
 {
   "packageName": "com.cinefreak.skystream",
   "name": "CineFreak",
-  "version": 9,
+  "version": 10,
   "baseUrl": "https://cinefreak.ch",
-  "description": "CineFreak — Hindi, English, dual-audio movies, web series & K-Drama. Catalog and search come from the site's own search index (works where the site domain is blocked), live domain auto-detected, direct 480p/720p/1080p files.",
+  "description": "CineFreak — Hindi, English, dual-audio movies, web series & K-Drama. Catalog and search from the site's own index, live domain auto-detected. Plays CineFreak's own 480p/720p/1080p/4K files: SkyStream passes the site's Cloudflare check by itself (needs SkyStream v2.9.0+).",
   "authors": [
     "TJ-Plugins"
   ],

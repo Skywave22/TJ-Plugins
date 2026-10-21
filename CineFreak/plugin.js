@@ -269,6 +269,7 @@
     function __ngStrong(why) { return why !== 'timed out' && why !== 'connection failed'; }
     function __ngExplain(name, res, t0) {
         if (!res || res.success !== false) return res;
+        if (res.errorCode === 'NEEDS_UPDATE' || res.errorCode === 'CHECK_FAILED') return res;
         var recent = __NG.fails.filter(function (f) { return f.t >= t0 && !__ngIsRelayHost(f.host); });
         if (!recent.length) return res;
         var tip = ' Fix: phone Settings → Private DNS → dns.google (Android), or SkyStream Settings → Accounts, Network & Downloads → DNS over HTTPS → On' +
@@ -321,43 +322,25 @@
 
 
     // ═══════════════════════════════════════════════════════════
-    //  CineFreak (cinefreak.net) — SkyStream plugin
+    //  CineFreak (cinefreak.ch) — SkyStream plugin (v10, 2026-10-20)
     //
-    //  WordPress download site with its own streaming backend.
+    //  CATALOG  search.yagaverse.net/api/search (the site's own index; q=* = newest).
+    //  DETAIL   SITE/<slug>/ — episodes and qualities come from the download section:
+    //             series: <div class="cft-it" data-k="es01e05"> (packs: data-k="ps01e01-12")
+    //             movies: <h4 class="movie-title">… 720p [1.1 GB]</h4> + its buttons
+    //           every button links a CineCloud file page (new5.cinecloud.site/f/<code>).
+    //           A hidden <div aria-hidden="true"> block holds decoy links: removed first.
+    //           `const dataset` only has episode names now, plus the player code ("m" / "e0_3").
+    //  STREAMS  Since 2026-10-11/12 both video paths need a Cloudflare Turnstile token:
+    //             1. CineCloud: GET /f/<code>/n -> {n}; POST /f/<code>/unlock ts=&bc=n -> {ok, html}
+    //                (the server buttons: Fast Cloud, Instant, Resumable, Stream Online)
+    //             2. CineFreak player: POST wp-json/cf/v1/pl/<key> op=play&ep=<code>[&ts=]
+    //                -> 401 {need:"ts"} | {state:"ready", url:<player>} | {state:"uploading"}
+    //           Tokens come from SkyStream's solveCaptcha (app v2.9.0+), asked on a page of the
+    //           same host without its own widget, so nothing else spends the single-use token.
     //
-    //  SEARCH   GET /search-api.php?q=<query>&pg=<page>
-    //           -> { results: [ { t: title, l: slug, i: poster,
-    //                c: category, q: quality, tmdb: tmdbId } ],
-    //                total, page, total_pages }
-    //
-    //  DETAIL   GET https://cinefreak.net/<slug>/
-    //           page embeds a minified player dataset:
-    //             const dataset = {"type":"movie","is_combo":false,
-    //               "sources":{"1080p":"cd4a0171","720p":"d23b7aee",...}};
-    //           or for series:
-    //             const dataset={"type":"series","is_combo":!1,
-    //               "seasons":[{ "episodes":[ { "ep_num":"01",
-    //                 "sources":{...} }, ... ] }, ...]};
-    //           (!1 / !0 are minified false / true -> fixed before parse)
-    //
-    //  PREPARE  GET  stream-prepare.php?action=status&r720p=<tok>... -> {state}
-    //           POST stream-prepare.php?action=start&...  (when not "ready")
-    //  PLAYBACK GET https://subtitle.yagaverse.net/stream-api.php
-    //             ?key=pushpa&r480p=<tok>&r720p=<tok>&r1080p=<tok>
-    //             &id=<primary token>
-    //           -> { videoUrl, resolutions: [ { quality, url } ],
-    //                audioTracks, subtitleTracks }
-    //           The URLs are DIRECT files on Cloudflare R2
-    //           (pub-*.r2.dev) — verified HTTP 206 on Range with no
-    //           Referer/Origin needed. User-Agent only.
-    //
-    //  APP CONTRACT (SkyStream engine): every exported function takes a
-    //  callback and MUST resolve exactly once with
-    //      { success: true, data: <payload> }   on success
-    //      { success: false, errorCode, message } on failure
-    //  Returning a raw Map is rejected by the engine
-    //  (JsPluginException UNKNOWN_ERROR) — envelope is mandatory.
-    //  Episode objects use `name` (not `title`) + int season/episode.
+    //  APP CONTRACT: every exported function calls cb exactly once with
+    //      { success: true, data } or { success: false, errorCode, message }.
     // ═══════════════════════════════════════════════════════════
 
     // Dynamic base URL: the app injects the domain the user picked in the
@@ -374,9 +357,7 @@
     // Catalog + search index used by the site itself. It lives on a separate host from the
     // site domain, so home and search keep working where the site domain is blocked.
     const INDEX_API   = "https://search.yagaverse.net/api/search";
-    const STREAM_API = "https://subtitle.yagaverse.net/stream-api.php";
-    const STREAM_KEY = "pushpa";
-
+    
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
     // Plain headers only: spoofed X-Forwarded-For / CF-Connecting-IP / True-Client-IP
@@ -589,13 +570,52 @@
             type: isTv ? "tv" : "movie"
         });
     }
-    async function indexPage(q, pg) {
+    // Search (2026-10-12): the site answers SITE/search-api.php?q=&pg= itself ({results:[{t,l,i,c,q,d}]},
+    // q=* = newest first). Since 2026-10-14 it wants a key in X-CF-ST, from a POST st=1 (kept 5 h).
+    // The old public index (search.yagaverse.net) is empty now and stays only as a fallback.
+    let __stKey = null;
+    async function searchKey(fresh) {
+        if (__stKey !== null && !fresh) return __stKey;
+        try {
+            const r = await withTimeout(http_post(SITE + "/search-api.php", {
+                "User-Agent": UA, "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded",
+                "Origin": SITE, "Referer": SITE + "/fast-search/"
+            }, "st=1"), 10000);
+            __stKey = String((JSON.parse((r && r.body) || "{}") || {}).k || "");
+        } catch (_) { __stKey = ""; }
+        return __stKey;
+    }
+    async function siteSearchPage(q, pg, retried) {
+        await ensureSite();
+        const k = await searchKey(!!retried);
+        const url = SITE + "/search-api.php?q=" + encodeURIComponent(String(q).normalize ? String(q).normalize("NFC") : q) + "&pg=" + pg;
+        const r = await withTimeout(http_get(url, { "User-Agent": UA, "Accept": "application/json", "Referer": SITE + "/fast-search/", "X-CF-ST": k }), 15000);
+        let j = null;
+        try { j = JSON.parse((r && r.body) || "null"); } catch (_) { j = null; }
+        if (j && j.renew && !retried) return siteSearchPage(q, pg, true);
+        if (!j || !Array.isArray(j.results)) throw new Error("site search unavailable (HTTP " + ((r && r.status) || 0) + ")");
+        return j.results.filter(function (x) { return x && x.l; }).map(function (x) {
+            let slug = String(x.l);
+            try { slug = decodeURIComponent(slug); } catch (_) {}
+            return { slug: slug, title: x.t, thumb: x.i, cats: String(x.c || "").split(",").map(function (c) { return c.trim(); }).filter(Boolean) };
+        });
+    }
+    async function yagaPage(q, pg) {
         const url = INDEX_API + "?q=" + encodeURIComponent(q) + "&pg=" + pg;
         const r = await withTimeout(http_get(url, { "User-Agent": UA, "Accept": "application/json", "Origin": SITE, "Referer": SITE + "/" }), 15000);
         let j = null;
         try { j = JSON.parse((r && r.body) || "null"); } catch (_) { j = null; }
         if (!j || !Array.isArray(j.hits)) throw new Error("index unavailable (HTTP " + ((r && r.status) || 0) + ")");
         return j.hits.map(function (h) { return h && h.document; }).filter(Boolean);
+    }
+    /** One page of results: the site's search first, the old public index when that fails or is empty. */
+    async function indexPage(q, pg) {
+        let list = null, err = null;
+        try { list = await siteSearchPage(q, pg); } catch (e) { err = e; }
+        if (list && list.length) return list;
+        try { const y = await yagaPage(q, pg); if (y.length) return y; } catch (e) { err = err || e; }
+        if (list) return list;
+        throw err || new Error("search unavailable");
     }
 
     const INDEX_ROWS = [
@@ -725,15 +745,136 @@
         return null;
     }
 
-    // The player script declares `const dataset = {...};` (older builds were minified:
-    // `const dataset={..."is_combo":!1...}`), so accept both spellings.
+    // The player script declares `const dataset = {...};`. Since 2026-10-11 it only holds episode
+    // names (no file codes); it is used here just to tell movies from series.
     function extractDataset(html) {
-        const m = /const\s+dataset\s*=\s*\{/.exec(html);
+        const m = /(?:const|let|var)\s+dataset\s*=\s*\{/.exec(html);
         if (!m) return null;
         let raw = sliceObject(html, m.index + m[0].length - 1);
         if (!raw) return null;
         raw = raw.replace(/:\s*!0\b/g, ":true").replace(/:\s*!1\b/g, ":false");
         try { return JSON.parse(raw); } catch (e) { return null; }
+    }
+
+    /** Remove every balanced <div ... aria-hidden="true"> block (the page's hidden decoy links). */
+    function stripHiddenBlocks(html) {
+        let out = String(html || "");
+        for (let guard = 0; guard < 50; guard++) {
+            const m = /<div\b[^>]*\baria-hidden="true"[^>]*>/i.exec(out);
+            if (!m) break;
+            const re = /<(\/?)div\b[^>]*>/gi;
+            re.lastIndex = m.index;
+            let depth = 0, end = -1, t;
+            while ((t = re.exec(out)) !== null) {
+                depth += t[1] ? -1 : 1;
+                if (depth === 0) { end = re.lastIndex; break; }
+            }
+            out = out.slice(0, m.index) + (end < 0 ? "" : out.slice(end));
+            if (end < 0) break;
+        }
+        return out;
+    }
+
+    /** The balanced <div>...</div> that starts at html[i]. */
+    function divBlock(html, i) {
+        const re = /<(\/?)div\b[^>]*>/gi;
+        re.lastIndex = i;
+        let depth = 0, t;
+        while ((t = re.exec(html)) !== null) {
+            depth += t[1] ? -1 : 1;
+            if (depth === 0) return html.slice(i, re.lastIndex);
+        }
+        return "";
+    }
+
+    function stripTags(s) { return decodeEntities(String(s || "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim(); }
+
+    const CLOUD_RE = /https?:\/\/[a-z0-9.-]*(?:cinecloud|neodrive)[a-z0-9.-]*\/(?:f|x|d|w|gp)\/[A-Za-z0-9_-]+/i;
+
+    /** Cloud links inside a piece of HTML: [[label, url], ...] (watch link first). */
+    function cloudLinks(html, heading) {
+        const out = [];
+        const re = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+        let m;
+        while ((m = re.exec(html)) !== null) {
+            const attrs = m[1];
+            if (/tabindex="-1"/i.test(attrs)) continue;                 // decoy
+            const hM = attrs.match(/href="([^"]+)"/i);
+            if (!hM || !CLOUD_RE.test(hM[1])) continue;
+            const href = decodeEntities(hM[1]);
+            const watch = /cfs-watch|dlbtn-watch/i.test(attrs) || /\bwatch\b/i.test(stripTags(m[2]));
+            const bM = m[2].match(/<b\b[^>]*>([\s\S]*?)<\/b>/i);
+            const ariaM = attrs.match(/aria-label="([^"]*)"/i);
+            let q = stripTags(bM ? bM[1] : "") || (ariaM ? ariaM[1].replace(/^(Download|Watch)\s*/i, "") : "");
+            if (!/\d{3,4}p/i.test(q)) { const hq = String(heading || "").match(/\b(\d{3,4}p)\b/i); q = hq ? hq[1] : q; }
+            const label = watch ? ("Watch" + (q && /\d{3,4}p/i.test(q) ? " " + q : "")) : (q || "Download");
+            if (!out.some(function (x) { return x[1] === href; })) out.push([label, href]);
+        }
+        out.sort(function (a, b) { return (/^Watch/.test(b[0]) ? 1 : 0) - (/^Watch/.test(a[0]) ? 1 : 0); });
+        return out;
+    }
+
+    /** Series rows: <div class="cft-it" data-k="es01e05"> / packs data-k="ps01e01-12". */
+    function parseSeriesRows(html) {
+        const rows = [];
+        const re = /<div class="cft-it\b[^"]*"\s+data-k="([ep])s(\d+)e(\d+)(?:-(\d+))?"[^>]*>/gi;
+        const marks = [];
+        let m;
+        while ((m = re.exec(html)) !== null) marks.push({ i: m.index, end: re.lastIndex, k: m[1], s: +m[2], e: +m[3], e2: m[4] ? +m[4] : 0 });
+        for (let j = 0; j < marks.length; j++) {
+            const mk = marks[j];
+            const seg = divBlock(html, mk.i) || html.slice(mk.end, j + 1 < marks.length ? marks[j + 1].i : mk.end + 3000);
+            const links = cloudLinks(seg, "");
+            if (!links.length) continue;
+            const nameM = seg.match(/class="cft-info"[^>]*>\s*<b>([\s\S]*?)<\/b>/i);
+            const metas = [];
+            const metaRe = /<span(?![^>]*cft-seen)[^>]*>([^<]{2,60})<\/span>/gi;
+            const mi = seg.indexOf('class="cft-meta"');
+            const metaBlock = (mi < 0 ? "" : seg.slice(mi, seg.indexOf("</div>", mi) > 0 ? seg.indexOf("</div>", mi) : mi + 3000))
+                .replace(/<svg\b[\s\S]*?<\/svg>/gi, "");
+            let mm;
+            while ((mm = metaRe.exec(metaBlock)) !== null) metas.push(stripTags(mm[1]));
+            rows.push({ pack: mk.k === "p", s: mk.s || 1, e: mk.e, e2: mk.e2,
+                        name: stripTags(nameM ? nameM[1] : "") || ("Episode " + mk.e), meta: metas.join(" · "), links: links });
+        }
+        return rows;
+    }
+
+    /** Movie blocks: <h4 class="movie-title">… 720p [1.1 GB]</h4> followed by its buttons. */
+    function parseMovieLinks(html) {
+        const out = [];
+        const re = /<h4 class="movie-title">([\s\S]*?)<\/h4>/gi;
+        const heads = [];
+        let m;
+        while ((m = re.exec(html)) !== null) heads.push({ i: m.index, end: re.lastIndex, t: stripTags(m[1]) });
+        for (let j = 0; j < heads.length; j++) {
+            const seg = html.slice(heads[j].end, j + 1 < heads.length ? heads[j + 1].i : heads[j].end + 4000);
+            const t = heads[j].t;
+            const q = (t.match(/\b(\d{3,4}p)\b/i) || [])[1] || "";
+            const size = (t.match(/\[([\d.]+\s*[GM]B)\]/i) || [])[1] || "";
+            const hevc = /hevc|x265/i.test(t) ? " HEVC" : "";
+            cloudLinks(seg, t).forEach(function (l) {
+                const label = /^Watch/.test(l[0]) ? "Watch " + q : (q + hevc + (size ? " [" + size + "]" : ""));
+                if (!out.some(function (x) { return x[1] === l[1]; })) out.push([label.trim(), l[1]]);
+            });
+        }
+        return out;
+    }
+
+    /** CineFreak's player code ("e<season idx>_<episode idx>") for season S, episode E. */
+    function playCode(data, S, E) {
+        if (!data || !Array.isArray(data.seasons)) return "";
+        for (let si = 0; si < data.seasons.length; si++) {
+            const sn = parseInt((String(data.seasons[si].season_name || "").match(/\d+/) || [String(si + 1)])[0], 10);
+            if (sn !== S && !(data.seasons.length === 1)) continue;
+            const eps = data.seasons[si].episodes || [];
+            for (let ei = 0; ei < eps.length; ei++) {
+                const nums = String(eps[ei].ep_num || "").match(/\d+/g) || [];
+                const a = parseInt(nums[0] || "0", 10), b = parseInt(nums[nums.length - 1] || "0", 10);
+                if (E >= a && E <= b && typeof eps[ei].sources === "string") return eps[ei].sources;
+            }
+        }
+        return "";
     }
 
     async function load(url, cb) {
@@ -743,19 +884,17 @@
             if (!p || !p.slug) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized item url" });
             const slug = String(p.slug);
             await ensureSite();
-            const html = await fetchHtml(SITE + "/" + slug + "/");
+            const rawHtml = await fetchHtml(SITE + "/" + slug + "/");
+            const html = stripHiddenBlocks(rawHtml);
 
             const tM = html.match(/<meta property="og:title" content="([^"]*)"/);
             const title = tM ? cleanTitle(tM[1]) : cleanTitle(slug.replace(/-/g, " "));
-            // og:image on this site is a rank-math SEO overlay URL that
-            // returns 404 HTML (renders as a black square). The real poster
-            // is the first TMDB/cineimg image embedded in the page body.
+            // og:image on this site is a rank-math SEO overlay URL that returns 404 HTML.
+            // The real poster is the first TMDB/cineimg image embedded in the page body.
             let poster = "";
-            const imgScan = /https:\/\/(?:image\.tmdb\.org|cineimg\.xyz)\/[^"'\s)]+\.(?:jpg|jpeg|png|webp)/g;
-            let im, firstImg = null;
-            while ((im = imgScan.exec(html)) !== null) { firstImg = im[0]; break; }
-            if (firstImg) {
-                poster = fixPoster(firstImg);
+            const imgM0 = html.match(/https:\/\/(?:image\.tmdb\.org|cineimg\.xyz)\/[^"'\s)]+\.(?:jpg|jpeg|png|webp)/);
+            if (imgM0) {
+                poster = fixPoster(imgM0[0]);
             } else {
                 const imgM = html.match(/<meta property="og:image" content="([^"]*)"/);
                 if (imgM && imgM[1].indexOf("admin-ajax") < 0) poster = fixPoster(imgM[1]);
@@ -767,35 +906,33 @@
             const year = yM ? parseInt(yM[1], 10) : undefined;
 
             const data = extractDataset(html);
-            const isSeries = !!(data && data.type === "series");
+            const rows = parseSeriesRows(html);
+            const isSeries = rows.length > 0 || !!(data && data.type === "series");
             const episodes = [];
 
-            if (isSeries && Array.isArray(data.seasons) && data.seasons.length) {
-                for (let si = 0; si < data.seasons.length; si++) {
-                    const season = data.seasons[si] || {};
-                    const eps = season.episodes || [];
-                    const sName = String(season.season_name || ("Season " + (si + 1)));
-                    for (let ei = 0; ei < eps.length; ei++) {
-                        const ep = eps[ei] || {};
-                        if (!ep.sources) continue;
-                        const num = parseInt(String(ep.ep_num || (ei + 1)), 10) || (ei + 1);
-                        const epTitle = String(ep.ep_title || ("Episode " + num));
-                        const meta = String(ep.ep_meta || "");
-                        episodes.push(mkEpisode({
-                            name: sName + " · " + epTitle + (meta ? " · " + meta : ""),
-                            // carry the player tokens so playback doesn't need the site again
-                            url: JSON.stringify({ slug: slug, s: si, e: ei, src: ep.sources }),
-                            season: si + 1,
-                            episode: num
-                        }));
-                    }
-                }
+            if (rows.length) {
+                // single episodes win over a pack covering the same numbers
+                const singles = rows.filter(function (r) { return !r.pack; });
+                const keep = rows.filter(function (r) {
+                    if (!r.pack) return true;
+                    return !singles.some(function (x) { return x.s === r.s && x.e >= r.e && x.e <= (r.e2 || r.e); });
+                });
+                keep.sort(function (a, b) { return (a.s - b.s) || (a.e - b.e) || ((a.pack ? 1 : 0) - (b.pack ? 1 : 0)); });
+                keep.forEach(function (r) {
+                    episodes.push(mkEpisode({
+                        name: r.name + (r.meta ? " · " + r.meta : ""),
+                        url: JSON.stringify({ slug: slug, s: r.s, e: r.e, P: playCode(data, r.s, r.e) || undefined, L: r.links }),
+                        season: r.s,
+                        episode: r.e
+                    }));
+                });
             }
             if (!episodes.length) {
-                // movie (or series post without per-episode data): single play-all
+                let links = parseMovieLinks(html);
+                if (!links.length) links = cloudLinks(html, "");
                 episodes.push(mkEpisode({
                     name: title,
-                    url: JSON.stringify({ slug: slug, s: -1, e: -1, src: (data && data.sources) || undefined }),
+                    url: JSON.stringify({ slug: slug, s: -1, e: -1, P: (data && typeof data.sources === "string") ? data.sources : "m", L: links }),
                     season: 1,
                     episode: 1
                 }));
@@ -819,117 +956,431 @@
         }
     }
 
-    // ─────────────────────────── streams ───────────────────────────
+    // ─────────────────────────── Turnstile bypass ───────────────────────────
+    //
+    // Since 2026-10-11/12 CineFreak's player (wp-json/cf/v1/pl/<key>) and its file host CineCloud
+    // (/f/<code>/unlock) only answer after a Cloudflare Turnstile check. SkyStream 2.9+ solves
+    // Turnstile itself (solveCaptcha: a hidden browser page; if the check wants a click it ticks it,
+    // and when a person is waiting the check is shown to them). The token is single-use, so it is
+    // asked for on a page of the same host that has no widget of its own (a page's own widget
+    // would spend the token first).
 
-    function qualityNum(q) {
-        const m = String(q || "").match(/(\d{3,4})/);
-        return m ? parseInt(m[1], 10) : 0;
+    // Inside All-in-one: other sites have sources too, so never put a check sheet in front of the
+    // person there, try one file only, and stay inside its 30 s per-site budget.
+    const IN_AIO = typeof manifest !== "undefined" && !!manifest && manifest.aio === true;
+    const UPDATE_MSG = "CineFreak now asks for a Cloudflare check before every video. Update SkyStream to v2.9.0 or newer, which can pass it.";
+    const COOKIES = {};       // host -> { name: value }
+    const CK_PREF = "tj_cf_cookies";
+    const CK_TTL = 3 * 3600 * 1000;
+
+    function hostOf(u) { const m = String(u || "").match(/^https?:\/\/([^\/?#:]+)/i); return m ? m[1].toLowerCase() : ""; }
+    function rememberCookies(u, res) {
+        if (!res || !res.headers) return;
+        let sc = res.headers["set-cookie"] || res.headers["Set-Cookie"];
+        if (!sc) return;
+        if (!Array.isArray(sc)) sc = String(sc).split(/,(?=\s*[A-Za-z0-9_\-]+=)/);
+        const h = hostOf(u);
+        const jar = COOKIES[h] || (COOKIES[h] = {});
+        sc.forEach(function (c) {
+            const m = String(c).match(/^\s*([^=;\s]+)=([^;]*)/);
+            if (!m) return;
+            if (/max-age=0|expires=thu, 01 jan 1970/i.test(c)) delete jar[m[1]]; else jar[m[1]] = m[2];
+        });
+    }
+    function cookieHeader(u) {
+        const jar = COOKIES[hostOf(u)];
+        if (!jar) return "";
+        return Object.keys(jar).map(function (k) { return k + "=" + jar[k]; }).join("; ");
+    }
+    async function loadSavedCookies() {
+        try {
+            if (typeof getPreference !== "function") return;
+            const saved = JSON.parse((await withTimeout(getPreference(CK_PREF), 1500)) || "null");
+            if (saved && saved.t && Date.now() - saved.t < CK_TTL && saved.c) {
+                Object.keys(saved.c).forEach(function (h) { COOKIES[h] = Object.assign({}, saved.c[h], COOKIES[h] || {}); });
+            }
+        } catch (_) {}
+    }
+    function saveCookies() {
+        try { if (typeof setPreference === "function") setPreference(CK_PREF, JSON.stringify({ t: Date.now(), c: COOKIES })); } catch (_) {}
     }
 
-    const PREPARE_API = "https://subtitle.yagaverse.net/stream-prepare.php";
+    /** GET/POST with this plugin's own cookie jar; never throws. */
+    async function req(method, u, headers, body, ms) {
+        const h = Object.assign({ "User-Agent": UA }, headers || {});
+        const ck = cookieHeader(u);
+        if (ck) h["Cookie"] = h["Cookie"] ? h["Cookie"] + "; " + ck : ck;
+        try {
+            const r = await withTimeout(method === "POST" ? http_post(u, h, body || "") : http_get(u, h), ms || 15000);
+            rememberCookies(u, r);
+            return { status: (r && (r.status || r.statusCode)) || 0, body: (r && r.body) || "", finalUrl: (r && r.finalUrl) || u, headers: (r && r.headers) || {} };
+        } catch (e) { return { status: 0, body: "", finalUrl: u, headers: {} }; }
+    }
 
-    function prepareQuery(sources) {
-        return ["480p", "720p", "1080p"].filter(function (q) { return sources[q]; })
-            .map(function (q) { return "r" + q + "=" + encodeURIComponent(sources[q]); }).join("&");
+    /** A Turnstile token for siteKey, solved on pageUrl by SkyStream. Throws a user-facing reason. */
+    async function turnstileToken(siteKey, pageUrl, ms) {
+        let p = null;
+        // __ssAsync carries this plugin's identity, so SkyStream knows a person is waiting and can
+        // show them the check if it doesn't pass by itself; the global solveCaptcha doesn't.
+        try { if (!IN_AIO && typeof __ssAsync === "function") p = __ssAsync("solve_captcha", { siteKey: siteKey, url: pageUrl }); } catch (_) { p = null; }
+        if (!p) {
+            if (typeof solveCaptcha !== "function") throw new Error(UPDATE_MSG);
+            p = solveCaptcha(siteKey, pageUrl);
+        }
+        let t;
+        try { t = await withTimeout(Promise.resolve(p), ms || 60000); }
+        catch (e) { throw new Error("The Cloudflare check did not pass: " + String((e && e.message) || e)); }
+        if (typeof t !== "string" || t === "mock_captcha_token" || t.length < 40) throw new Error(UPDATE_MSG);
+        return t;
+    }
+
+    /** The video address inside a player page (JW Player setup, <video>/<source>, ?id=, plain links). */
+    function mediaIn(html, pageUrl) {
+        const s = String(html || "").replace(/\\\//g, "/");
+        const found = [];
+        const add = function (u, label) {
+            u = decodeEntities(String(u || "").trim());
+            if (/^\/\//.test(u)) u = "https:" + u;
+            if (/^\//.test(u)) u = cloudOrigin(pageUrl) + u;
+            if (!/^https?:\/\//i.test(u) || found.some(function (x) { return x.url === u; })) return;
+            found.push({ url: u, label: label || "" });
+        };
+        let m;
+        const fileRe = /["']?(?:file|src|source|url|videoUrl|hls|stream)["']?\s*[:=]\s*["']([^"']+\.(?:m3u8|mp4|mkv|webm)(?:\?[^"']*)?)["']/gi;
+        while ((m = fileRe.exec(s)) !== null) add(m[1]);
+        const tagRe = /<(?:source|video)\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi;
+        while ((m = tagRe.exec(s)) !== null) add(m[1]);
+        const qRe = /"(?:label|quality)"\s*:\s*"([^"]+)"[^{}]*?"(?:file|src|url)"\s*:\s*"([^"]+)"|"(?:file|src|url)"\s*:\s*"([^"]+)"[^{}]*?"(?:label|quality)"\s*:\s*"([^"]+)"/gi;
+        while ((m = qRe.exec(s)) !== null) add(m[2] || m[3], m[1] || m[4]);
+        const plainRe = /https?:\/\/[^\s"'<>()]+?\.(?:m3u8|mp4|mkv)(?:\?[^\s"'<>()]*)?/gi;
+        while ((m = plainRe.exec(s)) !== null) add(m[0]);
+        const r2Re = /https?:\/\/[^\s"'<>()]*(?:r2\.dev|r2\.cloudflarestorage\.com|workers\.dev|googleusercontent\.com)[^\s"'<>()]*/gi;
+        while ((m = r2Re.exec(s)) !== null) add(m[0]);
+        const id = (String(pageUrl).match(/[?&](?:id|url|file)=([^&#]+)/) || [])[1];
+        if (id) { try { const d = decodeURIComponent(id); if (/^https?:\/\/.+\.(?:m3u8|mp4|mkv)/i.test(d)) add(d); } catch (_) {} }
+        return found.filter(function (x) {
+            return !/\.(?:jpg|png|webp|vtt|srt)(?:\?|$)/i.test(x.url) && !/thumbnail|poster|preview/i.test(x.url)
+                && !/[?&](?:id|url)=https?(?::|%3A)/i.test(x.url);   // a player wrapper, not the file
+        });
+    }
+    function subsIn(html) {
+        const out = [];
+        const re = /["'](?:file|src)["']\s*:\s*["']([^"']+\.(?:vtt|srt))["'][^}]*?["']label["']\s*:\s*["']([^"']*)["']/gi;
+        let m;
+        while ((m = re.exec(String(html || "").replace(/\\\//g, "/"))) !== null) out.push({ url: m[1], label: m[2] || "Sub", lang: m[2] || "und" });
+        return out;
+    }
+
+    // ─────────────────────────── streams ───────────────────────────
+    //
+    // Route 1 – CineCloud file pages (/f/<code>): after the Turnstile unlock they list the servers
+    //   (Fast Cloud = direct file, Instant / Instant V2 = Google or worker link,
+    //    Cloud [Resumable] = R2 link, Stream Online = /x/<code> iframe with ?id=<file url>).
+    // Route 2 – CineFreak's own player API: POST {op:"play", ep} (+ ts) -> {state:"ready", url}.
+
+    function qualityNum(q) {
+        const m = String(q || "").match(/(\d{3,4})p/i);
+        if (m) return parseInt(m[1], 10);
+        return /\b4k\b|2160/i.test(String(q || "")) ? 2160 : 0;
+    }
+
+    function cloudOrigin(u) { const m = String(u || "").match(/^https?:\/\/[^\/]+/i); return m ? m[0] : "https://new5.cinecloud.site"; }
+    function absUrl(base, href) {
+        href = decodeEntities(String(href || "").trim());
+        if (/^https?:\/\//i.test(href)) return href;
+        if (/^\/\//.test(href)) return "https:" + href;
+        if (/^\//.test(href)) return cloudOrigin(base) + href;
+        return "";
+    }
+    function isWrapper(u) { return /(?:cinecloud|neodrive)[^\/]*\/(?:f|x|d|w|gp|fc|fastdl)\//i.test(u); }
+    function isFileUrl(u) {
+        return /googleusercontent\.com|workers\.dev|r2\.dev|r2\.cloudflarestorage\.com|cloudflarestorage|pixeldrain|\.(?:mkv|mp4|m3u8)(?:[?#]|$)|response-content-disposition/i.test(u)
+            || (/\.dev\//i.test(u) && !/\/\?id=/i.test(u));
+    }
+    function anchors(html, base) {
+        const out = [];
+        const re = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+        let m;
+        while ((m = re.exec(html)) !== null) {
+            const h = m[1].match(/href\s*=\s*["']([^"']+)["']/i);
+            if (!h) continue;
+            const href = absUrl(base, h[1]);
+            if (!href) continue;
+            const cls = (m[1].match(/class\s*=\s*["']([^"']*)["']/i) || [])[1] || "";
+            out.push({ href: href, cls: cls, text: stripTags(m[2]) });
+        }
+        return out;
+    }
+    function pixeldrainDirect(u) {
+        const m = String(u).match(/pixeldrain\.[a-z]+\/(?:u|l|api\/file)\/([A-Za-z0-9]+)/i);
+        return m ? "https://pixeldrain.com/api/file/" + m[1] + "?download" : u;
+    }
+    function iframeTarget(html, pageUrl) {
+        const m = String(html || "").match(/<iframe\b[^>]*\b(?:data-cf-src|data-src|src)\s*=\s*["']([^"']+)["']/i);
+        if (!m) return "";
+        const src = absUrl(pageUrl, m[1]);
+        const id = (src.match(/[?&]id=([^&#]+)/) || [])[1];
+        if (id) { try { const d = decodeURIComponent(id); if (/^https?:\/\//i.test(d)) return d; } catch (_) {} }
+        return isFileUrl(src) ? src : "";
+    }
+    /** A link on an intermediate page (Instant / Resumable) that is the real file. */
+    function fileLinkIn(html, base) {
+        const pick = anchors(html, base).filter(function (a) {
+            return !isWrapper(a.href) && (/download-now|instant-download|btn-instant2|fsl-btn/i.test(a.cls) || isFileUrl(a.href));
+        })[0];
+        if (pick) return pick.href;
+        const m = String(html).match(/https?:\/\/[^\s"'<>]*(?:googleusercontent\.com|r2\.cloudflarestorage\.com|r2\.dev|workers\.dev)[^\s"'<>]*/i);
+        if (m) return decodeEntities(m[0]);
+        const loc = String(html).match(/(?:window\.)?location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i);
+        return loc && !isWrapper(loc[1]) ? loc[1] : "";
+    }
+    function hasServers(html) { return /server-btn|fsl-btn|instant-download|download-now|\/(?:w|gp|d|x)\/[A-Za-z0-9_-]{6,}/i.test(String(html || "")); }
+
+    /** Server buttons (from the file page or its unlock answer) -> [{url, tag}]. */
+    async function serversFrom(html, fUrl, deadline) {
+        const out = [];
+        const add = function (u, tag) {
+            if (!u || !/^https?:\/\//i.test(u) || isWrapper(u)) return;
+            u = pixeldrainDirect(u);
+            if (!out.some(function (x) { return x.url === u; })) out.push({ url: u, tag: tag });
+        };
+        const jobs = [];
+        anchors(html, fUrl).forEach(function (a) {
+            const t = a.text.toLowerCase();
+            if (/telegram|t\.me\/|facebook|whatsapp|\/tutorial|how to|terms-conditions|privacy-policy|\/abuse/i.test(a.href + " " + t)) return;
+            if (/fast cloud|\[fsl\]/i.test(t) || /fsl-btn/i.test(a.cls) || (/\.dev\//i.test(a.href) && !isWrapper(a.href) && !/\/\?id=/i.test(a.href))) {
+                if (!isWrapper(a.href)) { add(a.href, "Fast Cloud"); return; }
+            }
+            if (/pixeldrain/i.test(a.href + " " + t + " " + a.cls)) { add(a.href, "Pixeldrain"); return; }
+            if (/\/x\//i.test(a.href) || /stream online|watch online/i.test(t)) {
+                jobs.push(req("GET", a.href, { "Referer": fUrl }).then(function (pg) {
+                    add(iframeTarget(pg.body, a.href), "Stream");
+                    mediaIn(pg.body, a.href).forEach(function (x) { add(x.url, "Stream"); });
+                }));
+                return;
+            }
+            const tag = (/\/gp\//i.test(a.href) || /instant.*v2/i.test(t) || /btn-instant2/i.test(a.cls)) ? "Instant V2"
+                : (/\/w\//i.test(a.href) || /instant/i.test(t)) ? "Instant"
+                : (/\/d\//i.test(a.href) || /resumable/i.test(t)) ? "Resumable" : "";
+            if (tag) {
+                if (!isWrapper(a.href) && isFileUrl(a.href)) { add(a.href, tag); return; }
+                jobs.push(req("GET", a.href, { "Referer": fUrl }).then(function (pg) {
+                    let u = (pg.finalUrl && pg.finalUrl !== a.href && !isWrapper(pg.finalUrl) && isFileUrl(pg.finalUrl)) ? pg.finalUrl : "";
+                    if (!u) u = fileLinkIn(pg.body, a.href);
+                    add(u, tag);
+                }));
+                return;
+            }
+            if (isFileUrl(a.href) && !isWrapper(a.href)) add(a.href, "Direct");
+        });
+        const left = Math.max(3000, Math.min(20000, deadline - Date.now()));
+        await withTimeout(Promise.all(jobs), left).catch(function () {});
+        return out;
     }
 
     /**
-     * Since Oct 2026 the site only streams files that were "prepared" (copied to its R2
-     * bucket). The web player asks ?action=status first and, when the file is not ready,
-     * POSTs ?action=start and polls. Do the same, within the app's 90 s budget.
-     * Returns "ready", or a user-facing reason why it is not.
+     * One CineCloud file: its page, unlocked with a Turnstile token when the servers are hidden.
+     * Returns { items, size, name, why }.
      */
-    async function ensurePrepared(sources) {
-        const q = prepareQuery(sources);
-        if (!q) return "ready";
-        const status = async function () {
-            try { return await fetchJson(PREPARE_API + "?action=status&" + q, JSON_HEADERS); } catch (e) { return {}; }
-        };
-        let st = await status();
-        if (!st || !st.state) return "ready"; // check unavailable: the web player then just tries to play
-        if (st.state === "ready") return "ready";
-        if (st.state === "unavailable") return st.message || "Streaming is unavailable for this title (download-only).";
-        if (st.state === "limited") return st.message || "CineFreak is rate-limiting stream preparation. Try again shortly.";
-        if (st.state !== "uploading") {
+    async function resolveCloudFile(link, deadline) {
+        const fUrl = link.replace(/\/(?:x|w|d|gp)\//i, "/f/").replace(/[?#].*$/, "");
+        const origin = cloudOrigin(fUrl);
+        const res = { items: [], size: "", name: "", why: "" };
+        const pg = await req("GET", fUrl, { "Referer": SITE + "/", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8" });
+        const sizeM = pg.body.match(/File Size[\s\S]{0,200}?<td[^>]*>([^<]+)<\/td>/i);
+        res.size = sizeM ? stripTags(sizeM[1]) : "";
+        const nameM = pg.body.match(/<h1[^>]*file-title[^>]*>([\s\S]*?)<\/h1>/i);
+        res.name = nameM ? stripTags(nameM[1]) : "";
+        if (pg.status === 403 && /cloudflare/i.test(pg.body) && !/cf-turnstile/i.test(pg.body)) { res.why = "CineCloud blocked this network"; return res; }
+        if (/cannot be found|File not Found/i.test(pg.body)) { res.why = "file removed"; return res; }
+
+        let html = pg.body;
+        const keyM = html.match(/data-sitekey="(0x4[^"]+)"/i);
+        if (keyM && /\/unlock/.test(html)) {
+            const path = fUrl.replace(origin, "");
+            const nonce = await req("GET", fUrl + "/n", { "Referer": fUrl, "Accept": "application/json" });
+            let bc = "";
+            try { bc = String((JSON.parse(nonce.body || "{}") || {}).n || ""); } catch (_) { bc = ""; }
+            let ts;
             try {
-                const r = await withTimeout(http_post(PREPARE_API + "?action=start&" + q, JSON_HEADERS, ""), 15000);
-                st = JSON.parse((r && r.body) || "{}") || {};
-            } catch (e) { st = {}; }
-            if (st.state === "ready") return "ready";
+                ts = await turnstileToken(keyM[1], origin + "/terms-conditions", Math.max(IN_AIO ? 8000 : 15000, deadline - Date.now() - (IN_AIO ? 6000 : 12000)));
+            } catch (e) { res.why = String((e && e.message) || e); return res; }
+            const un = await req("POST", fUrl + "/unlock", {
+                "Referer": fUrl, "Origin": origin, "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded"
+            }, "ts=" + encodeURIComponent(ts) + "&bc=" + encodeURIComponent(bc));
+            let j = null;
+            try { j = JSON.parse(un.body || "{}"); } catch (_) { j = null; }
+            if (!j || !j.ok || !j.html) { res.why = "CineCloud: " + String((j && j.message) || ("unlock failed (HTTP " + un.status + ")")); return res; }
+            html = String(j.html);
+            void path;
+        } else if (!hasServers(html)) {
+            res.why = "no servers on the file page";
         }
-        const deadline = Date.now() + 55000;
-        while (Date.now() < deadline) {
-            await new Promise(function (ok) { setTimeout(ok, 4000); });
-            st = await status();
-            if (st && st.state === "ready") return "ready";
-            if (st && (st.state === "failed" || st.state === "unavailable" || st.state === "error")) break;
-        }
-        const pct = st && st.progress ? " (" + st.progress + "% done)" : "";
-        return "CineFreak is preparing this video for streaming" + pct + ". Try again in a minute.";
+        res.items = await serversFrom(html, fUrl, deadline);
+        if (!res.items.length && !res.why) res.why = "no playable server";
+        return res;
     }
 
-    async function resolveSources(sources) {
-        if (!sources) return [];
-        const params = [];
-        params.push("key=" + encodeURIComponent(STREAM_KEY));
-        const qs = Object.keys(sources);
-        for (const q of qs) {
-            params.push("r" + encodeURIComponent(q) + "=" + encodeURIComponent(sources[q]));
+    /** CineFreak's own player. Returns { items, why }. */
+    async function playRoute(pageHtml, postUrl, ep, deadline) {
+        const out = { items: [], why: "" };
+        const apiM = pageHtml.match(/PLAY_API\s*=\s*"([^"]+)"/);
+        const keyM = pageHtml.match(/TS_SITE_KEY\s*=\s*"([^"]+)"/);
+        if (!apiM || !ep) { out.why = "no player on this page"; return out; }
+        const api = apiM[1].replace(/\\\//g, "/");
+        const hdr = { "Referer": postUrl, "Origin": SITE, "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" };
+        const call = async function (op, ts) {
+            const r = await req("POST", api, hdr, "op=" + op + "&ep=" + encodeURIComponent(ep) + (ts ? "&ts=" + encodeURIComponent(ts) : ""));
+            let j = {};
+            try { j = JSON.parse(r.body || "{}") || {}; } catch (_) { j = {}; }
+            j.__status = r.status;
+            return j;
+        };
+        let st = await call("play");
+        if (st.need === "ts") {
+            if (!keyM) { out.why = "player check key not found"; return out; }
+            let ts;
+            try { ts = await turnstileToken(keyM[1], postUrl, Math.max(IN_AIO ? 8000 : 15000, deadline - Date.now() - (IN_AIO ? 4000 : 15000))); }
+            catch (e) { out.why = String((e && e.message) || e); return out; }
+            st = await call("play", ts);
+            saveCookies();
         }
-        const primary = sources["720p"] || sources["1080p"] || sources["480p"] || sources[qs[0]];
-        if (primary) params.push("id=" + encodeURIComponent(primary));
-        const j = await withTimeout(fetchJson(STREAM_API + "?" + params.join("&")), 25000);
-        if (!j) return [];
-        const out = [];
-        const resolutions = (j.resolutions || []).slice()
-            .sort(function (a, b) { return qualityNum(b.quality) - qualityNum(a.quality); });
-        for (const r of resolutions) {
-            if (!r || !r.url) continue;
-            out.push(mkStream({
-                url: String(r.url),
-                source: "CineFreak · " + String(r.quality || "Auto") + (langOf(r.url) ? " · " + langOf(r.url) : ""),
-                headers: STREAM_HEADERS
-            }));
+        if (st.state && st.state !== "ready" && st.state !== "uploading" && st.state !== "failed" && st.state !== "error") {
+            out.why = st.message || ("CineFreak: " + st.state); return out;
         }
-        if (!out.length && j.videoUrl) {
-            out.push(mkStream({
-                url: String(j.videoUrl),
-                source: "CineFreak",
-                headers: STREAM_HEADERS
-            }));
+        if (st.state !== "ready" && !st.need) {
+            if (st.state !== "uploading") st = await call("prep");
+            while (st.state === "uploading" && Date.now() < deadline - 12000) {
+                await new Promise(function (ok) { setTimeout(ok, 4000); });
+                st = await call("stat");
+            }
+            if (st.state === "uploading") { out.why = "CineFreak is preparing this video (" + (st.progress || 0) + "%). Try again in a minute."; return out; }
         }
-        return out.slice(0, 10);
+        if (st.state !== "ready" || !st.url) { out.why = st.message || (st.need ? "the Cloudflare check was not accepted" : "player gave no address"); return out; }
+        const playerUrl = String(st.url).replace(/\\\//g, "/");
+        const direct = /\.(?:m3u8|mp4|mkv)(?:[?#]|$)/i.test(playerUrl);
+        if (direct) { out.items.push({ url: playerUrl, tag: "Player", referer: SITE + "/" }); return out; }
+        const pg = await req("GET", playerUrl, { "Referer": postUrl, "Accept": "text/html,*/*" });
+        const subs = subsIn(pg.body);
+        mediaIn(pg.body, playerUrl).forEach(function (x) {
+            out.items.push({ url: x.url, tag: "Player" + (x.label ? " " + x.label : ""), referer: cloudOrigin(playerUrl) + "/", subs: subs });
+        });
+        // a player that fetches its source from a JSON endpoint next to it
+        if (!out.items.length) {
+            const apiU = (pg.body.match(/["'](\/[^"']*(?:source|play|stream|video)[^"']*\.(?:json|php)[^"']*|\/api\/[^"']+)["']/i) || [])[1];
+            if (apiU) {
+                const jr = await req("GET", cloudOrigin(playerUrl) + apiU, { "Referer": playerUrl, "Accept": "application/json" });
+                mediaIn(jr.body, playerUrl).forEach(function (x) { out.items.push({ url: x.url, tag: "Player", referer: cloudOrigin(playerUrl) + "/", subs: subs }); });
+            }
+        }
+        if (!out.items.length) { out.why = "player page had no video address"; try { console.log("[CineFreak] player page: " + playerUrl + " :: " + pg.body.slice(0, 1500)); } catch (_) {} }
+        return out;
+    }
+
+    const TAG_RANK = { "Fast Cloud": 0, "Stream": 1, "Player": 1, "Resumable": 2, "Instant": 3, "Instant V2": 4, "Pixeldrain": 5, "Direct": 6 };
+
+    /** Order the file links: 1080p, 720p, 480p, 4K, then the rest; the Watch link last. */
+    function pickOrder(links) {
+        const pref = function (l) {
+            const q = qualityNum(l[0]);
+            if (/^Watch/.test(l[0])) return 50;
+            return q === 1080 ? 0 : q === 720 ? 1 : q === 480 ? 2 : q === 2160 ? 3 : 4;
+        };
+        return links.slice().sort(function (a, b) { return pref(a) - pref(b); });
     }
 
     async function loadStreams(url, cb) {
+        const t0 = Date.now();
+        const deadline = t0 + (IN_AIO ? 28000 : 80000);   // the app gives a function 90 s, All-in-one 30 s
         try {
             let p = null;
             try { p = JSON.parse(url); } catch (e) { p = null; }
             if (!p || !p.slug) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized episode url" });
             const slug = String(p.slug);
+            await loadSavedCookies();
+            await ensureSite();
+            const postUrl = SITE + "/" + slug + "/";
+            const page = await req("GET", postUrl, { "Accept": "text/html,application/xhtml+xml,*/*;q=0.8", "Referer": SITE + "/" }, null, 20000);
+            const html = stripHiddenBlocks(page.body);
 
-            let sources = (p.src && typeof p.src === "object" && Object.keys(p.src).length) ? p.src : null;
-            let data = null;
-            if (!sources) {
-                await ensureSite();
-                const html = await fetchHtml(SITE + "/" + slug + "/");
-                data = extractDataset(html);
-                if (!data) return cb({ success: false, errorCode: "NO_STREAMS", message: "No stream data on this page (download-only post?)" });
+            let links = Array.isArray(p.L) && p.L.length ? p.L : null;
+            let ep = p.P || "";
+            if (!links || !ep) {
+                const rows = parseSeriesRows(html);
+                const old = !Array.isArray(p.L);
+                if (rows.length && p.s >= 0) {
+                    const S = old ? p.s + 1 : p.s, E = old ? p.e + 1 : p.e;
+                    const want = rows.filter(function (r) { return r.s === S && (r.e === E || (r.pack && E >= r.e && E <= r.e2)); });
+                    if (!links) links = (want[0] || rows[0]).links;
+                    if (!ep) ep = playCode(extractDataset(html), S, E);
+                } else {
+                    if (!links) { links = parseMovieLinks(html); if (!links.length) links = cloudLinks(html, ""); }
+                    if (!ep) { const d = extractDataset(html); ep = (d && typeof d.sources === "string") ? d.sources : "m"; }
+                }
             }
-            if (!sources && p.s >= 0 && Array.isArray(data.seasons) && data.seasons[p.s]) {
-                const eps = data.seasons[p.s].episodes || [];
-                const ep = eps[p.e] || eps[0];
-                sources = ep && ep.sources;
+
+            const lang = langOf(slug.replace(/-/g, " "));
+            const why = [];
+            const found = [];   // {url, tag, q, size, referer, subs}
+
+            // Route 1: CineCloud files, best quality first, while time allows
+            const order = pickOrder(links || []);
+            let tried = 0;
+            for (let i = 0; i < order.length && tried < (IN_AIO ? 1 : 2); i++) {
+                if (Date.now() > deadline - (IN_AIO ? 20000 : 25000)) break;
+                if (/^Watch/.test(order[i][0]) && found.length) break;
+                tried++;
+                let r;
+                try { r = await withTimeout(resolveCloudFile(order[i][1], deadline), Math.max(10000, deadline - Date.now() - 5000)); }
+                catch (e) { r = { items: [], why: "timed out" }; }
+                const q = qualityNum(order[i][0]) || qualityNum(r.name);
+                r.items.forEach(function (it) { found.push({ url: it.url, tag: it.tag, q: q, size: (order[i][0].match(/\[([^\]]+)\]/) || [])[1] || r.size }); });
+                if (r.why) why.push(order[i][0] + ": " + r.why);
+                // stop on: old app, blocked host, or a rejected check (no second check sheet for nothing)
+                if (r.why === UPDATE_MSG || /blocked this network|Cloudflare check|CineCloud: /.test(r.why || "")) break;
+                // a second quality costs another check: only while the first one went fast
+                if (found.length && Date.now() - t0 > 30000) break;
             }
-            if (!sources && data) sources = data.sources;
 
-            if (!sources) return cb({ success: false, errorCode: "NO_STREAMS", message: "This post has no online player (download links only)." });
-            const prep = await ensurePrepared(sources);
-            if (prep !== "ready") return cb({ success: false, errorCode: "NOT_READY", message: prep });
+            // Route 2: CineFreak's player
+            if (!found.length && Date.now() < deadline - (IN_AIO ? 8000 : 20000) && why.indexOf(UPDATE_MSG) < 0 && !why.some(function (w) { return w.indexOf(UPDATE_MSG) >= 0; })) {
+                let r;
+                try { r = await withTimeout(playRoute(page.body, postUrl, ep, deadline), Math.max(10000, deadline - Date.now())); }
+                catch (e) { r = { items: [], why: "timed out" }; }
+                r.items.forEach(function (it) { found.push({ url: it.url, tag: it.tag, q: qualityNum(it.tag), referer: it.referer, subs: it.subs }); });
+                if (r.why) why.push("Player: " + r.why);
+            }
 
-            const streams = await resolveSources(sources);
-            if (!streams.length) return cb({ success: false, errorCode: "NO_STREAMS", message: "No playable source right now — try again in a moment." });
-            cb({ success: true, data: streams });
+            const seen = {};
+            const streams = [];
+            found.forEach(function (x) {
+                if (seen[x.url]) return;
+                seen[x.url] = 1;
+                const qLabel = x.q ? (x.q === 2160 ? "4K" : x.q + "p") : "Auto";
+                const headers = { "User-Agent": UA };
+                if (x.referer) headers["Referer"] = x.referer;
+                else if (/cinecloud|neodrive/i.test(x.url)) headers["Referer"] = cloudOrigin(x.url) + "/";
+                const o = {
+                    url: x.url,
+                    source: "CineFreak · " + x.tag + " · " + qLabel + (x.size ? " · " + x.size : "") + (lang ? " · " + lang : ""),
+                    headers: headers
+                };
+                if (x.q) o.quality = x.q;
+                if (x.subs && x.subs.length) o.subtitles = x.subs;
+                const rk = TAG_RANK[x.tag] != null ? TAG_RANK[x.tag] : TAG_RANK[String(x.tag).split(" ")[0]];
+                streams.push({ q: x.q || 0, rank: rk == null ? 9 : rk, s: mkStream(o) });
+            });
+            streams.sort(function (a, b) { return (b.q - a.q) || (a.rank - b.rank); });
+            if (!streams.length) {
+                try { console.log("[CineFreak] no streams: " + why.join(" | ")); } catch (_) {}
+                const upd = why.some(function (w) { return w.indexOf(UPDATE_MSG) >= 0; });
+                if (upd) return cb({ success: false, errorCode: "NEEDS_UPDATE", message: UPDATE_MSG });
+                const checkFail = why.some(function (w) { return /Cloudflare check|not accepted|unlock failed|CineCloud: /i.test(w); });
+                const msg = "No playable CineFreak source right now" + (why.length ? " (" + why.slice(0, 3).join("; ") + ")" : "") + ".";
+                return cb({ success: false, errorCode: checkFail ? "CHECK_FAILED" : "NO_STREAMS", message: msg });
+            }
+            cb({ success: true, data: streams.slice(0, 20).map(function (x) { return x.s; }) });
         } catch (e) {
             cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
         }
