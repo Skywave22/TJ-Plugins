@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 9,
+    "version": 10,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -423,7 +423,7 @@
   {
     "packageName": "com.rareanimes.skystream",
     "name": "RareAnimes",
-    "version": 7,
+    "version": 8,
     "baseUrl": "https://www.rareanimes.mov",
     "description": "RareAnimes / Rare Toons India (rareanimes.mov) - Hindi, Tamil, Telugu and Malayalam dubbed anime, cartoons and animated movies. Every audio language an episode has is listed (Hindi, Tamil, Telugu, Untouched NF/CR), played as direct HD files from the site's StreamBeta servers; each link is checked before it is shown.",
     "authors": [
