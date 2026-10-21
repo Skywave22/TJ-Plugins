@@ -4,7 +4,7 @@
  * Source: Hindi / Tamil / Telugu / Malayalam dubbed anime, cartoons and animated movies
  *
  * Flow:
- *   catalog : HTML — /home/page/N/ (latest), /hindi/category/<slug>/page/N/, /?s=<q>
+ *   catalog : HTML — /home/page/N/ (latest), /category/<slug>/page/N/ (moved from /hindi/category/ in Oct 2026), /?s=<q>
  *   post    : "Episode NN – name" headings, each followed by one line per audio variant
  *             ("Hindi – [WatchMultiQuality] [HubCloud] [WatchNow] [DLBeta]",
  *              "Episode 01 – Untouched NF (Hindi) – [HubCloud] [WatchNow]", …).
@@ -354,16 +354,16 @@
 
     var ROWS = [
         { name: 'Trending',         path: '/home/' },
-        { name: 'Hindi Anime',      path: '/hindi/category/crunchyroll/' },
-        { name: 'Hindi Dubbed',     path: '/hindi/category/hindi-dub/' },
-        { name: 'Animated Movies',  path: '/hindi/category/movies/' },
-        { name: 'Netflix',          path: '/hindi/category/netflix/' },
-        { name: 'Cartoon Network',  path: '/hindi/category/cartoon-network/' },
-        { name: 'Disney / XD',      path: '/hindi/category/disney-xd/' },
-        { name: 'Tamil',            path: '/hindi/category/tamil/' },
-        { name: 'Telugu',           path: '/hindi/category/telugu/' },
-        { name: 'Hindi Subbed',     path: '/hindi/category/hindi-sub/' },
-        { name: 'Completed Series', path: '/hindi/category/completed/' }
+        { name: 'Hindi Anime',      path: '/category/crunchyroll/' },
+        { name: 'Hindi Dubbed',     path: '/category/hindi-dub/' },
+        { name: 'Animated Movies',  path: '/category/movies/' },
+        { name: 'Netflix',          path: '/category/netflix/' },
+        { name: 'Cartoon Network',  path: '/category/cartoon-network/' },
+        { name: 'Disney / XD',      path: '/category/disney-xd/' },
+        { name: 'Tamil',            path: '/category/tamil/' },
+        { name: 'Telugu',           path: '/category/telugu/' },
+        { name: 'Hindi Subbed',     path: '/category/hindi-sub/' },
+        { name: 'Completed Series', path: '/category/completed/' }
     ];
 
     var LANG_NAMES = {
