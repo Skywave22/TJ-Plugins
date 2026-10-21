@@ -606,6 +606,7 @@
         if (l === 'watchnow' || l === 'watch') return 'w';
         if (l === 'hubcloud') return 'h';
         if (/^watchmulti?quality$|^multiquality$/.test(l)) return 'm';
+        if (l === 'mediafire') return 'f';
         return '';
     }
 
@@ -638,7 +639,7 @@
             }
             var v = { l: '', w: '', h: '', m: '' };
             ln.links.forEach(function (k) { var kind = linkKind(k.label); if (kind && !v[kind]) v[kind] = k.url; });
-            if (!v.w && !v.h && !v.m) return;
+            if (!v.w && !v.h && !v.m && !v.f) return;
             var target = cur;
             if (head) target = ep(+head[1], '');
             v.l = variantLabel(ln.text) || 'Hindi';
@@ -758,7 +759,10 @@
         }
         if (!emb) throw new Error('WatchMultiQuality player not found');
         var origin = emb.match(/^https:\/\/[^\/]+/)[0];
-        var e = await withTimeout(get(emb, 'https://codedew.com/'), 12000);
+        var eRaw = await withTimeout(http_get(emb, { 'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8', 'Referer': 'https://codedew.com/' }), 12000);
+        var e = { status: Number((eRaw && (eRaw.status || eRaw.statusCode)) || 0), body: String((eRaw && eRaw.body) || '') };
+        var jar = setCookies(eRaw);
+        var xsrf = decodeURIComponent((jar.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/) || [])[1] || '');
         var cfg = juicyConfig(e.body);
         var file = cfg && cfg.sources && (cfg.sources.file || (cfg.sources[0] && cfg.sources[0].file));
         if (!file) throw new Error('WatchMultiQuality source not found');
@@ -766,7 +770,10 @@
         try {
             var jd = JSON.parse((e.body.match(/window\.juicyData\s*=\s*(\{[\s\S]*?\})\s*;?\s*<\/script>/) || [])[1] || '{}').data;
             if (jd && jd.token && jd.routes && jd.routes.ping && typeof http_post === 'function') {
-                await withTimeout(http_post(origin + jd.routes.ping, { 'User-Agent': UA, 'Content-Type': 'application/json', 'Referer': emb, 'Origin': origin, 'X-Requested-With': 'XMLHttpRequest' },
+                var ph = { 'User-Agent': UA, 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*', 'Referer': emb, 'Origin': origin, 'X-Requested-With': 'XMLHttpRequest' };
+                if (jar) ph['Cookie'] = jar;
+                if (xsrf) ph['X-XSRF-TOKEN'] = xsrf;
+                await withTimeout(http_post(origin + jd.routes.ping, ph,
                     JSON.stringify({ _token: jd.token, __type: 'dawn', pingID: randHex(32) })), 6000);
             }
         } catch (_) {}
@@ -774,9 +781,161 @@
         return { url: file, origin: origin, title: String(cfg.title || ''), qualities: labels };
     }
 
+    // ─────────────── MediaFire (single files, mostly movies) ───────────────
+    // zipper -> (blazer.raretoonsindia.com short link: AdLinkFly, 3 s timer, needs its cookies) -> MediaFire page
+    // -> download*.mediafire.com direct file (supports Range, so it seeks like a normal video).
+    function setCookies(res) {
+        var h = (res && res.headers) || {}, sc = [];
+        Object.keys(h).forEach(function (k) { if (k.toLowerCase() === 'set-cookie') sc = sc.concat(h[k]); });
+        return sc.map(function (c) { return String(c).split(';')[0]; }).filter(Boolean).join('; ');
+    }
+    function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    async function mediafireStream(zipperUrl) {
+        var r = await withTimeout(get(zipperUrl + (zipperUrl.indexOf('ad_done=') < 0 ? '&ad_done=1' : ''), SITE + '/'), 12000);
+        var href = decodeEntities((r.body.match(/data-href="([^"]+)"/) || [])[1] || '');
+        if (!href) throw new Error('MediaFire link not found');
+        href = absUrl(href, 'https://codedew.com/');
+        var mf = /mediafire\.com\//.test(href) ? href : '';
+        if (!mf) {
+            var page = await withTimeout(http_get(href, { 'User-Agent': UA, 'Referer': 'https://codedew.com/' }), 12000);
+            var body = String((page && page.body) || '');
+            var form = body.slice(body.indexOf('id="go-link"'));
+            form = form.slice(0, form.indexOf('</form>'));
+            var fields = [], fr = /name="([^"]+)"[^>]*value="([^"]*)"/g, x;
+            while ((x = fr.exec(form))) fields.push(encodeURIComponent(decodeEntities(x[1])) + '=' + encodeURIComponent(decodeEntities(x[2])));
+            if (!fields.length) throw new Error('short link form not found');
+            var wait = +((body.match(/"counter_value"\s*:\s*"?(\d+)/) || [])[1] || 3);
+            await sleep(Math.min(wait, 8) * 1000 + 700);
+            var origin = href.match(/^https?:\/\/[^\/]+/)[0];
+            var go = await withTimeout(http_post(origin + '/links/go', {
+                'User-Agent': UA, 'Cookie': setCookies(page), 'Referer': href, 'Origin': origin,
+                'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01',
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            }, fields.join('&')), 12000);
+            var j = {};
+            try { j = JSON.parse(String((go && go.body) || '{}')); } catch (_) {}
+            mf = String(j.url || '');
+            if (!/mediafire\.com\//.test(mf)) throw new Error('short link refused');
+        }
+        var p = await withTimeout(get(mf, href), 12000);
+        var direct = decodeEntities((p.body.match(/href="(https:\/\/download[0-9]*\.mediafire\.com\/[^"]+)"/) || [])[1] || '');
+        if (!direct) {
+            var sc = (p.body.match(/data-scrambled-url="([^"]+)"/) || [])[1];
+            if (sc) direct = b64bytes(sc);
+        }
+        if (!/^https:\/\/download/.test(direct)) throw new Error('MediaFire file not available');
+        var name = decodeURIComponent(direct.split('/').pop().replace(/\+/g, ' '));
+        var size = stripTags((p.body.match(/Download\s*\(([\d.]+\s*[KMG]B)\)/i) || [])[1] || '');
+        return { url: direct, name: name, size: size };
+    }
+
+    // ─────────────── Pixeldrain ZIP packs ("ZIP – Pixel") ───────────────
+    // Most series posts also have a season ZIP on pixeldrain. Pixeldrain can serve every file inside
+    // a ZIP on its own (/api/file/<id>/info/zip/<path>), so each episode plays as a normal MKV/MP4.
+    var PD = 'https://pixeldrain.com';
+
+    function pixelZipLinks(content) {
+        var re = /<a\s[^>]*href="(https?:\/\/codedew\.com\/zipper\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, m, out = [], seen = {};
+        while ((m = re.exec(content))) {
+            var label = stripTags(m[2]), u = decodeEntities(m[1]);
+            if (!/zip/i.test(label) || !/pixel/i.test(label) || seen[u]) continue;
+            seen[u] = 1;
+            var before = stripTags(content.slice(Math.max(0, m.index - 300), m.index)).split(/\n/).pop() || '';
+            var lm = (label + ' ' + before).match(WMQ_LANG);
+            out.push({ url: u, lang: lm ? lm[1].charAt(0).toUpperCase() + lm[1].slice(1).toLowerCase() : '' });
+        }
+        return out.slice(0, 3);
+    }
+
+    function pdFileUrl(id, path) {
+        return PD + '/api/file/' + id + '/info/zip/' + path.split('/').map(encodeURIComponent).join('/');
+    }
+
+    async function pixelZip(z) {
+        var id = '';
+        var r = await withTimeout(get(z.url + (z.url.indexOf('ad_done=') < 0 ? '&ad_done=1' : ''), SITE + '/'), 12000);
+        var pick = function (b) {
+            return (String(b || '').match(/watchbeta\/\?url=([A-Za-z0-9]+)/) || String(b || '').match(/pixeldrain\.[a-z]+\/(?:u|api\/file)\/([A-Za-z0-9]+)/) || [])[1] || '';
+        };
+        id = pick(r.body) || pick(r.finalUrl);
+        if (!id) throw new Error('pixeldrain id not found');
+        var ir = await withTimeout(get(PD + '/api/file/' + id + '/info/zip'), 12000);
+        if (ir.status !== 200) throw new Error('pixeldrain ' + ir.status);
+        var info = JSON.parse(ir.body);
+        if (!info || !info.children || (info.properties || []).indexOf('read_individual_files') < 0) throw new Error('zip not readable');
+        var files = [];
+        (function walk(node, prefix) {
+            Object.keys(node.children || {}).forEach(function (k) {
+                var c = node.children[k];
+                if (c && c.children) walk(c, prefix + k + '/');
+                else if (/\.(mkv|mp4|m4v|webm|avi|mov|ts)$/i.test(k)) files.push({ path: prefix + k, name: k, size: (c && c.size) || 0 });
+            });
+        })(info, '');
+        files.sort(function (a, b) { return a.path.localeCompare(b.path, undefined, { numeric: true }); });
+        var lang = z.lang || ((files[0] && files[0].name.match(WMQ_LANG)) || [])[1] || 'Hindi';
+        return { id: id, lang: lang.charAt(0).toUpperCase() + lang.slice(1).toLowerCase(), files: files };
+    }
+
+    function fileEpNo(name) {
+        var n = String(name).replace(/\.[a-z0-9]+$/i, '');
+        var m = n.match(/S\d{1,2}\s*E(\d{1,4})\b/i) || n.match(/\b(?:Episode|Ep)\.?\s*0*(\d{1,4})\b/i) || n.match(/\s-\s0*(\d{1,4})\b/);
+        return m ? +m[1] : 0;
+    }
+
+    function sizeLabel(b) {
+        if (!b) return '';
+        return b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : Math.round(b / 1048576) + ' MB';
+    }
+
+    // Adds a {l, z, zs, zn} variant to each episode (or builds the episode list from the ZIP).
+    function mergePixel(parsed, zips) {
+        zips.forEach(function (zp) {
+            if (!zp || !zp.files.length) return;
+            var vars = zp.files.map(function (f, i) {
+                return { n: fileEpNo(f.name), i: i, f: f, v: { l: zp.lang, w: '', h: '', m: '', z: pdFileUrl(zp.id, f.path), zs: sizeLabel(f.size), zn: f.name } };
+            });
+            if (parsed.episodes.length) {
+                var byN = {};
+                parsed.episodes.forEach(function (e) { byN[e.n] = e; });
+                var hits = vars.filter(function (x) { return x.n && byN[x.n]; }).length;
+                var useNo = hits >= Math.ceil(vars.length / 2);
+                vars.forEach(function (x) {
+                    var e = useNo ? byN[x.n] : parsed.episodes[x.i];
+                    if (!e && x.n && useNo) { e = { n: x.n, name: '', v: [] }; parsed.episodes.push(e); byN[x.n] = e; }
+                    if (e) e.v.push(x.v);
+                });
+                parsed.episodes.sort(function (a, b) { return a.n - b.n; });
+            } else if (vars.length === 1) {
+                parsed.loose.push(vars[0].v);
+            } else if (!parsed.loose.length || parsed.loose.every(function (v) { return !v.w && !v.h; })) {
+                var nums = vars.map(function (x) { return x.n; });
+                var unique = nums.every(function (n, i) { return n && nums.indexOf(n) === i; });
+                var named = {};
+                vars.forEach(function (x) {
+                    var n = unique ? x.n : x.i + 1;
+                    if (!named[n]) { named[n] = { n: n, name: x.n ? '' : x.f.name.replace(/\.[a-z0-9]+$/i, '').replace(/\[[^\]]*\]/g, '').trim(), v: [] }; parsed.episodes.push(named[n]); }
+                    named[n].v.push(x.v);
+                });
+                parsed.episodes.sort(function (a, b) { return a.n - b.n; });
+                parsed.loose = [];
+            }
+        });
+        return parsed;
+    }
+
     // Old posts link list pages (store.animetoonhindi.com/archives/N, one per language) instead of
     // the files: either one zipper per episode ("Doraemon S01E01" on a "… MultiQuality" page) or the
     // host buttons of a single title ([WatchMultiQuality] [HubCloud] [WatchBeta] [Mega]).
+    // which host a list page's episode links go to (from its button label or page title)
+    function listKind(t) {
+        t = String(t || '');
+        if (/hub\s*cloud/i.test(t)) return 'h';
+        if (/watch\s*now|stream\s*beta/i.test(t)) return 'w';
+        if (/multi\s*quality|watch\s*mult/i.test(t)) return 'm';
+        return '';
+    }
+
     async function fromArchives(content) {
         var re = /<a\s[^>]*href="(https?:\/\/store\.animetoonhindi\.com\/archives\/\d+)"[^>]*>([\s\S]*?)<\/a>/gi, m, lists = [], seen = {};
         while ((m = re.exec(content))) {
@@ -785,9 +944,9 @@
             seen[m[1]] = 1;
             var before = stripTags(content.slice(Math.max(0, m.index - 300), m.index)).split(/\n/).pop() || '';
             var lm = (label + ' ' + before).match(WMQ_LANG);
-            lists.push({ url: m[1], lang: lm ? lm[1].charAt(0).toUpperCase() + lm[1].slice(1).toLowerCase() : 'Hindi', multi: /multi|watch/i.test(label) });
+            lists.push({ url: m[1], lang: lm ? lm[1].charAt(0).toUpperCase() + lm[1].slice(1).toLowerCase() : 'Hindi', kind: listKind(label) });
         }
-        lists = lists.slice(0, 6);
+        lists = lists.slice(0, 8);
         var eps = {}, order = [], loose = [];
         var pages = await Promise.all(lists.map(function (l) {
             return withTimeout(get(l.url, SITE + '/'), 12000).then(function (r) { return { l: l, body: r.body }; }).catch(function () { return null; });
@@ -799,17 +958,19 @@
             var ar = /<a\s[^>]*href="(https?:\/\/codedew\.com\/zipper\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, x, links = [];
             while ((x = ar.exec(pg.body))) links.push({ url: decodeEntities(x[1]), text: stripTags(x[2]) });
             var single = { l: pg.l.lang, w: '', h: '', m: '' };
-            var epList = pg.l.multi || /multi\s*quality/i.test(title);
+            var epKind = pg.l.kind || listKind(title);
             links.forEach(function (k) {
                 var kind = linkKind(k.text);
                 if (kind) { if (!single[kind]) single[kind] = k.url; return; }
-                if (!epList) return;
+                if (!epKind) return;
                 var n = +((k.text.match(/S\d{1,2}\s*E(\d{1,4})\b/i) || k.text.match(/\b(?:Episode|Ep)\.?\s*0*(\d{1,4})\b/i) || [])[1] || 0);
                 if (!n) return;
                 if (!eps[n]) { eps[n] = { n: n, name: '', v: [] }; order.push(n); }
-                if (!eps[n].v.some(function (o) { return o.l === pg.l.lang; })) eps[n].v.push({ l: pg.l.lang, w: '', h: '', m: k.url });
+                var have = eps[n].v.filter(function (o) { return o.l === pg.l.lang; })[0];
+                if (!have) { have = { l: pg.l.lang, w: '', h: '', m: '' }; eps[n].v.push(have); }
+                if (!have[epKind]) have[epKind] = k.url;
             });
-            if (single.w || single.h || single.m) loose.push(single);
+            if (single.w || single.h || single.m || single.f) loose.push(single);
         });
         var list = order.map(function (n) { return eps[n]; }).sort(function (a, b) { return a.n - b.n; });
         return { episodes: list, loose: list.length ? [] : loose };
@@ -889,11 +1050,13 @@
             var type = guessType(rawTitle, '');
 
             var idx;
+            var zipJobs = Promise.all(pixelZipLinks(content).map(function (z) { return pixelZip(z).catch(function () { return null; }); }));
             var parsed = parseEpisodes(postLines(content));
             if (!parsed.episodes.length && !parsed.loose.length) {
                 var arc = await fromArchives(content).catch(function () { return null; });
                 if (arc && (arc.episodes.length || arc.loose.length)) parsed = arc;
             }
+            parsed = mergePixel(parsed, await zipJobs);
             var episodes = [];
 
             if (parsed.episodes.length) {
@@ -903,7 +1066,7 @@
                         name: e.name ? ('Episode ' + e.n + ' – ' + e.name) : ('Episode ' + e.n),
                         url: JSON.stringify({ v: e.v, t: rawTitle }),
                         season: seasonNo, episode: e.n, posterUrl: poster,
-                        description: e.v.map(function (v) { return v.l; }).join(' • ')
+                        description: e.v.map(function (v) { return v.l + (v.z ? ' (Pixeldrain)' : ''); }).join(' • ')
                     }));
                 });
             } else if (parsed.loose.length && type === 'series' && parsed.loose.some(function (v) { return v.w; })) {
@@ -1000,6 +1163,14 @@
         return mb >= 900 ? '1080p' : (mb > 0 ? 'HD' : 'Auto');
     }
 
+    // file name if it says (1080p…), else a guess from the size of a ~24 min episode
+    function pdQuality(name, size) {
+        var m = String(name || '').match(/\b(2160|1440|1080|720|576|480|360)p\b/i);
+        if (m) return m[1] + 'p';
+        var mb = parseFloat(size) * (/GB/i.test(size) ? 1024 : 1);
+        return mb >= 600 ? '1080p' : mb >= 250 ? '720p' : '480p';
+    }
+
     async function loadStreams(data, cb) {
         try {
             var d;
@@ -1013,14 +1184,23 @@
                 if (v.w) jobs.push({ label: v.l, task: function () { return fetchStreamBeta(v.w).catch(function (e) { if (v.h) return hubToStreamBeta(v.h).then(fetchStreamBeta); throw e; }); } });
                 else if (v.h) jobs.push({ label: v.l, task: function () { return hubToStreamBeta(v.h).then(fetchStreamBeta); } });
             });
-            var wmqJobs = (d.v || []).filter(function (v) { return v.m && !v.w && !v.h; }).slice(0, 3).map(function (v) {
+            var pdLang = {};
+            (d.v || []).forEach(function (v) { if (v.z) pdLang[v.l] = 1; });
+            var wmqJobs = (d.v || []).filter(function (v) { return v.m && !v.w && !v.h && !pdLang[v.l]; }).slice(0, 3).map(function (v) {
                 return wmqStream(v.m).then(function (x) { x.label = v.l; return x; }).catch(function () { return null; });
             });
             var wmqAll = Promise.all(wmqJobs);
+            var mfAll = Promise.all((d.v || []).filter(function (v) { return v.f; }).slice(0, 3).map(function (v) {
+                return mediafireStream(v.f).then(function (x) { x.label = v.l; return x; }).catch(function () { return null; });
+            }));
             var pages = await Promise.all(jobs.map(function (j) {
                 return j.task().then(function (p) { p.label = j.label; return p; }).catch(function () { return null; });
             }));
             var wmq = (await wmqAll).filter(Boolean);
+            var mfs = (await mfAll).filter(Boolean);
+            var mfLang = {};
+            mfs.forEach(function (x) { mfLang[x.label] = 1; });
+            wmq = wmq.filter(function (x) { return !mfLang[x.label]; });
             pages = pages.filter(Boolean);
 
             // 2) audio versions the post didn't link (e.g. Tamil/Telugu of a fid-only episode)
@@ -1055,6 +1235,16 @@
                     }));
                 });
             });
+            mfs.forEach(function (x) {
+                if (seen[x.url]) return;
+                seen[x.url] = 1;
+                list.push(mkStream({
+                    url: x.url,
+                    source: (/multi[\s._-]*audio/i.test(x.name) ? 'Multi Audio' : (x.label || 'Hindi')) + ' • MediaFire' + (x.size ? ' • ' + x.size : ''),
+                    quality: qualityOf(x.name, x.size),
+                    headers: { 'User-Agent': UA }
+                }));
+            });
             wmq.forEach(function (x) {
                 if (seen[x.url]) return;
                 seen[x.url] = 1;
@@ -1065,9 +1255,23 @@
                     headers: { 'User-Agent': UA, 'Referer': x.origin + '/', 'Origin': x.origin }
                 }));
             });
-            if (!list.length) return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No playable source for this episode right now.' });
+            // Pixeldrain files are not probed: the host ignores Range, so a probe would download the whole
+            // episode. The ZIP was checked when the episode list was built.
+            var pd = [];
+            (d.v || []).forEach(function (v) {
+                if (!v.z || seen[v.z]) return;
+                seen[v.z] = 1;
+                pd.push(mkStream({
+                    url: v.z,
+                    source: (/multi[\s._-]*audio/i.test(v.zn || '') ? 'Multi Audio' : v.l) + ' • Pixeldrain' + (v.zs ? ' • ' + v.zs : ''),
+                    quality: pdQuality(v.zn, v.zs),
+                    headers: { 'User-Agent': UA }
+                }));
+            });
+            if (!list.length && !pd.length) return cb({ success: false, errorCode: 'NO_STREAMS', message: 'No playable source for this episode right now.' });
 
-            var verified = await verifyStreams(list, 2);
+            var verified = list.length ? await verifyStreams(list, 2) : [];
+            verified = pd.concat(verified);
             if (!verified.length) return cb({ success: false, errorCode: 'NO_STREAMS', message: 'All servers for this episode are down right now.' });
             cb({ success: true, data: verified });
         } catch (e) {

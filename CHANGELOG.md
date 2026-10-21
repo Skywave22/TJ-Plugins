@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-10-21 (3)
+
+| Plugin | Change |
+|---|---|
+| **RareAnimes** v7 | Doraemon Seasons 1 and 2 (and most other older series) now really play. v6 found their episodes, but the only source was the site's WatchMultiQuality player, which refuses apps, so the video failed. The plugin now uses the season's **Pixeldrain pack**: Pixeldrain serves each episode inside the pack as its own video, so every episode plays directly (Doraemon S1: 52 of 52 episodes, with Hindi, Tamil and Telugu audio in the same file). 37 of 40 packs checked are still online. Old movies with a **MediaFire** link now play from MediaFire. Episode lists that use HubCloud / WatchNow list pages are read correctly (e.g. Hotel Transylvania The Series). WatchMultiQuality is only shown when there is nothing else, still marked "(may not play)". |
+| **All-in-one** v9 | Includes the RareAnimes fix. |
+
 ### 🔧 Fixed — 2026-10-21 (2)
 
 | Plugin | Change |

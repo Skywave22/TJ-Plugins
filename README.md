@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v8 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v9 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -86,7 +86,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 |---|:-:|---|---|---|
 | **DesiDubAnime** | v3 | desidubanime.me | Hindi, Tamil and Telugu dubbed anime | hi, ta, te |
 | **PikaHD** | v4 | pikahd.co | Anime in Hindi dubbed, dual audio and English subbed | hi, en, ja |
-| **RareAnimes** | v6 | rareanimes.mov | Hindi, Tamil, Telugu and Malayalam dubbed anime series and movies | hi, ta, te, ml |
+| **RareAnimes** | v7 | rareanimes.mov | Hindi, Tamil, Telugu and Malayalam dubbed anime series and movies | hi, ta, te, ml |
 | **SubDubAnime** | v6 | subdubanime.site | Hindi and English dubbed anime, up to 1080p | hi, en |
 
 ### 🌸 Asian dramas
@@ -126,7 +126,7 @@ The plugins also try to work around blocks on their own:
 - **Sites change.** If a plugin suddenly shows nothing, the site has usually moved or is down. Check for an update in Extensions.
 - **ReelFren:** a few apps (MovieBox, JoyReels, FlexTV, KalosTV, Vigloo) are currently not playing on reelfren.com itself, so the plugin says so instead of showing a broken video.
 - **DesiSerials:** each show lists its latest 180 episodes. Video hosts delete old files, so shows that ended before 2025 often won't play.
-- **RareAnimes:** a few older posts only have Mega or ZIP download links, which can't be streamed. Many older episodes play through the site's WatchMultiQuality player, which some networks block.
+- **RareAnimes:** most series play from the site's Pixeldrain season packs (one file per episode). A few older posts only have Mega links, which can't be streamed. Posts whose only link is the site's WatchMultiQuality player show it as "(may not play)": that player often refuses apps.
 - **NetMirror:** its video server limits how often one connection may download. If you get "too many requests", wait a minute and press Play again. Links it couldn't check are marked "(may not play)".
 - **GDFlix / HubCloud** files (KatMovieHD, SSR Movies, KDramaMaza, PikaHD, KatDrama, Movies4u) play in the app. Desktop test tools may get a Cloudflare check on them.
 
