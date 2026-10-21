@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-10-21 (2)
+
+| Plugin | Change |
+|---|---|
+| **RareAnimes** v6 | Older series work again, including **Doraemon Seasons 1 and 2**, Naruto, Shin-chan, Ben 10, Oggy and Tom & Jerry. About two thirds of the site's posts used to show "no playable link", because the only links that still work on them are on a separate list page and play through the WatchMultiQuality player. The plugin now opens those list pages, finds each episode and plays it in 1080p, 720p or 360p. Old movies that link HubCloud play through it (Doraemon movies in Hindi, Tamil and Telugu). "All Seasons" and "Complete Series" posts now show every season in one place (Doraemon All Seasons: 848 episodes). Search now finds every post, not just the newest 9: "Doraemon" gives 68 results with Seasons 1–22 in order. Posts that only have Mega or ZIP downloads still can't be streamed (the old DLBeta files were deleted by the host). |
+| **All-in-one** v8 | Includes the RareAnimes fix. |
+
 ### 🔧 Fixed — 2026-10-21
 
 All 24 plugins were tested again (home, search, details and playback). These four had problems and are fixed:
