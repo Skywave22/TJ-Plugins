@@ -30,7 +30,7 @@
 
 ## ⭐ All-in-one
 
-**Can't decide which plugin to open? Install All-in-one.** It has 23 of the plugins below built in (everything except ReelFren) and combines them:
+**Can't decide which plugin to open? Install All-in-one.** It has 23 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
 
 | | |
 |---|---|
@@ -58,6 +58,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **Cinezo** | v2 | cinezo.gd | Trending, Netflix, Prime, HBO, Disney+ rows; Hindi dubs, multi-audio, up to 4K | hi, en, ta, te |
 | **FMoviess** | v7 | fmoviess.tv | Movies, series and anime | en |
 | **HiCine** | v11 | hicine.sbs | Bollywood and Hollywood, web series, K-drama and anime | hi, en |
+| **HiStream** 🆕 | v1 | histream.lol | Trending, Bollywood, Hindi series, Anime and 9 platform rows (Netflix, Prime, JioHotstar, ZEE5, SonyLIV…); Hindi first, up to 4K | hi, en, ta, te, ko, ja |
 | **MoviesHubHD** | v2 | movieshubhd.com | Latest, Trending, Hindi and Top Rated rows; direct streams with subtitles | hi, en |
 | **NetMirror** | v10 | netmirror.center | Netflix-style catalog: Bollywood, Hollywood, anime, reality TV | en, hi |
 | **RiveStream** | v6 | rivestream.ru | Movies and series, Hindi first | hi, en, ta, te +3 |

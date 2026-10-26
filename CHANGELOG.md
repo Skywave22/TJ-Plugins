@@ -2,6 +2,12 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🆕 New — 2026-10-21
+
+| Plugin | What it is |
+|---|---|
+| **HiStream** v1 | [histream.lol](https://histream.lol): the site's catalog with the same rows (Trending, Popular series and movies, Bollywood, Hindi series, Anime, Top rated) and its "Browse by platform" rows: Netflix, Prime Video, JioHotstar, ZEE5, SonyLIV, Apple TV+, MX Player, Hoichoi and Lionsgate Play, newest first. Plays from the site's own player servers: Hindi first, then English, Tamil and more, up to 4K, every link checked before it is shown. The catalog comes through HiStream's own server, so it also works where TMDB is blocked. Not added to All-in-one: its servers are already there through ScreenScape. |
+
 ### 🔧 Changed — 2026-10-21 (4)
 
 | Plugin | Change |

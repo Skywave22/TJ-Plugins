@@ -1,0 +1,23 @@
+{
+  "packageName": "com.histream.skystream",
+  "name": "HiStream",
+  "version": 1,
+  "baseUrl": "https://histream.lol",
+  "description": "HiStream (histream.lol) - the site's catalog (Trending, Popular series & movies, Bollywood, Hindi series, Anime, and every platform row: Netflix, Prime Video, JioHotstar, ZEE5, SonyLIV, Apple TV+, MX Player, Hoichoi, Lionsgate Play) with its player's servers: Hindi first, then English, Tamil and more, up to 4K. Every link is checked before it is shown.",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "hi",
+    "en",
+    "ta",
+    "te",
+    "ko",
+    "ja"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries",
+    "Anime"
+  ]
+}
