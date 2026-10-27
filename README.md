@@ -4,7 +4,7 @@
 
 **Movies, TV series, anime, Asian dramas and short dramas for [SkyStream](https://github.com/akashdh11/skystream).**
 
-![Plugins](https://img.shields.io/badge/plugins-25-6f42c1)
+![Plugins](https://img.shields.io/badge/plugins-26-6f42c1)
 ![Author](https://img.shields.io/badge/author-TJ--Plugins-0a7cff)
 [![Build](https://github.com/Skywave22/TJ-Plugins/actions/workflows/build.yml/badge.svg)](https://github.com/Skywave22/TJ-Plugins/actions/workflows/build.yml)
 
@@ -30,17 +30,17 @@
 
 ## ⭐ All-in-one
 
-**Can't decide which plugin to open? Install All-in-one.** It has 23 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
+**Can't decide which plugin to open? Install All-in-one.** It has 24 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
 
 | | |
 |---|---|
 | 🏠 **One home page** | Trending, Latest Movies and Series, Hindi, Hindi Dubbed, Netflix, Prime, K-Drama, Anime, Hindi Serials and more, filled from every site. The same title from different sites is one card. |
-| 🔎 **One search** | Searches all 23 sites at once (about 2 seconds) and merges the results. |
+| 🔎 **One search** | Searches all 24 sites at once (about 2 seconds) and merges the results. |
 | ▶️ **Every link** | When you press Play, it finds the same movie or episode on **every site that has it** and lists all working links together, 1080p and Hindi first. A popular movie often gets 50 to 70 links from 10+ sites. Collecting them takes 10 to 40 seconds. |
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v10 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v11 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -64,6 +64,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **RiveStream** | v6 | rivestream.ru | Movies and series, Hindi first | hi, en, ta, te +3 |
 | **ScreenScape** | v2 | screenscape.me | Trending, Top 10, Netflix/Prime/JioHotstar rows; 30+ servers per title | hi, en, ta, te, ko, ja |
 | **Vidbox** | v5 | vidbox.vc | Movies and series, Hindi first | hi, en, ta, te +3 |
+| **ZXCStream** 🆕 | v1 | zxcstream.com | Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24 rows; 5 ad-free servers, Hindi/Tamil/Telugu dubs, subtitles | en, hi, ta, te |
 
 ### 🇮🇳 Bollywood & Hindi dubbed
 

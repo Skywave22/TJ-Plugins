@@ -16,14 +16,14 @@ const SKIP = new Set(["AllInOne", "ReelFren", "HiStream", "tools", "relay", "dis
 const GROUP = {
   "321MoviesUK": "movies", CineHD: "movies", CineJoy: "movies", Cinezo: "movies", Fmovies: "movies",
   HiCine: "movies", MoviesHubHD: "movies", NetMirror: "movies", RiveStream: "movies", ScreenScape: "movies",
-  Vidbox: "movies",
+  Vidbox: "movies", ZXCStream: "movies",
   CineFreak: "hindi", KatMovieHD: "hindi", Movies4u: "hindi", SSRMovies: "hindi",
   DesiSerialOnline: "serial", DesiSerials: "serial",
   DesiDubAnime: "anime", PikaHD: "anime", RareAnimes: "anime", SubDubAnime: "anime",
   KatDrama: "drama", KDMaza: "drama",
 };
 // plugins with a TMDB catalog: clean titles, posters and cast, so preferred for the details page
-const TMDB = new Set(["Cinezo", "ScreenScape", "CineHD", "CineJoy", "Fmovies", "RiveStream", "Vidbox", "321MoviesUK", "MoviesHubHD"]);
+const TMDB = new Set(["Cinezo", "ScreenScape", "CineHD", "CineJoy", "Fmovies", "RiveStream", "Vidbox", "321MoviesUK", "MoviesHubHD", "ZXCStream"]);
 
 const dirs = fs.readdirSync(ROOT, { withFileTypes: true })
   .filter((d) => d.isDirectory() && !d.name.startsWith(".") && !SKIP.has(d.name))

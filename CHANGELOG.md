@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🆕 New — 2026-10-28
+
+| Plugin | What it is |
+|---|---|
+| **ZXCStream** v1 | [zxcstream.com](https://zxcstream.com): the site's catalog with the same rows (Top 10 today / movies / TV, Trending, Popular) and its provider rows: Netflix, HBO, Disney+, Apple TV+, Marvel Studios, Amazon MGM, A24, Blumhouse and Shudder. Plays from the site's ad-free **Main Server** (vidstuck) and all five of its servers: Orion (with **Hindi, Tamil and Telugu dubs** when the title has them), Andromeda, Atlas, Daedalus and Ursa. Hindi dub first, subtitles in up to 25 languages, every link checked before it is shown. |
+| **All-in-one** v11 | Now includes ZXCStream (24 sites). |
+
 ### 🆕 New — 2026-10-21
 
 | Plugin | What it is |
