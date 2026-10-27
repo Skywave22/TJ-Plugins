@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 10,
+    "version": 11,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -627,5 +627,27 @@
       "TvSeries"
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.vidbox.plugin.sky"
+  },
+  {
+    "packageName": "com.zxcstream.skystream",
+    "name": "ZXCStream",
+    "version": 1,
+    "baseUrl": "https://vidstuck.cc",
+    "description": "ZXCStream (zxcstream.com) - the site's catalog (Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24, Blumhouse...) with its ad-free Main Server (vidstuck): Orion (Hindi / Tamil / Telugu dubs), Andromeda, Atlas, Daedalus and Ursa, with subtitles. Hindi dub first; every link is checked before it is shown.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "en",
+      "hi",
+      "ta",
+      "te"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries",
+      "Anime"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.zxcstream.skystream.sky"
   }
 ]
