@@ -1,0 +1,37 @@
+{
+  "packageName": "com.net79.skystream",
+  "name": "Net79",
+  "version": 1,
+  "baseUrl": "https://net79.cc",
+  "domains": [
+    {
+      "name": "net79.cc (primary)",
+      "url": "https://net79.cc"
+    },
+    {
+      "name": "net27.cc",
+      "url": "https://net27.cc"
+    },
+    {
+      "name": "netmirrors.vip",
+      "url": "https://netmirrors.vip"
+    },
+    {
+      "name": "net77.cc",
+      "url": "https://net77.cc"
+    }
+  ],
+  "description": "Net79 (net79.cc, the NetMirror web site) - its catalog (Trending, Netflix, Prime Video, Crunchyroll anime, K-Drama, Hindi Dubbed, Tamil, Telugu...) and its MovieBox streams: direct MP4 360p-1080p with subtitles and every audio language the site has (Hindi, English, Tamil, Telugu dubs...). Each quality also plays through the site's own video proxy.",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "en",
+    "hi"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries",
+    "Anime"
+  ]
+}

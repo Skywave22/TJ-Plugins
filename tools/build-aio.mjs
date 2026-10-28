@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(ROOT, "AllInOne");
-const SKIP = new Set(["AllInOne", "ReelFren", "HiStream", "tools", "relay", "dist", "node_modules"]);
+// Net79: kept out until playback is confirmed on a phone (its video CDN cannot be reached from CI/test servers)
+const SKIP = new Set(["AllInOne", "ReelFren", "HiStream", "Net79", "tools", "relay", "dist", "node_modules"]);
 
 // home/search grouping of every plugin; plugins not listed default to "movies"
 const GROUP = {

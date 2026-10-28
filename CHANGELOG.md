@@ -2,6 +2,12 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🆕 New — 2026-10-28 (2)
+
+| Plugin | What it is |
+|---|---|
+| **Net79** v1 | [net79.cc](https://net79.cc), the NetMirror web site (backup domains net27.cc, netmirrors.vip, net77.cc). The site's catalog with the same rows: Top 10 Today, New Releases, Popular on Netflix, Netflix Series, Prime Video, Anime, Latest Movies, Latest Series, Hindi Dubbed, Korean Dramas, Action, Comedies. Plays the site's MovieBox files: MP4 in 1080p / 720p / 480p / 360p with file sizes, subtitles in many languages, and every audio language the site has for the title (Hindi, English, Original, Tamil, Telugu…). Each link is also offered through the site's own video proxy ("· Proxy"), for networks where the direct link is refused. Not in All-in-one yet: it joins once playback is confirmed on phones. |
+
 ### 🔧 Fixed — 2026-10-28
 
 | Plugin | Change |
