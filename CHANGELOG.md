@@ -2,6 +2,14 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🆕 New — 2026-10-28 (3)
+
+| Plugin | What it is |
+|---|---|
+| **Net77** v1 | [net77.cc](https://net77.cc), the original NetMirror (net79.cc was a different site). Both catalogs of the site: the 16 Netflix rows (New on Netflix, Top Searches, Bollywood Movies, US TV Shows Dubbed in Hindi, South Indian Cinema, Asian Movies & TV…) and 5 JioHotstar rows, plus search across both. Full details: description, cast, genres, runtime, every season and episode with thumbnails, "More like this". Plays the site's own HLS in 1080p / 720p / 480p. Titles with several audio languages get one link per language (Hindi first, then English, Tamil, Telugu, Malayalam, Kannada, Korean, Japanese…), each labelled like "Net77 · Hindi [1080p]"; English subtitles where the site has them. Every play opens a fresh NetMirror session (the site only allows a few minutes per session), and the video server is found automatically - including servers the site hides behind its relays. In tests 44 of 44 sampled titles from the home rows played at full length. Not inside All-in-one yet: it joins once playback is confirmed on phones. |
+
+**Removed:** **Net79** - net79.cc is not the original NetMirror and its links mostly failed. Uninstall Net79 and install Net77.
+
 ### 🔧 Fixed — 2026-10-28 (2)
 
 | Plugin | Change |

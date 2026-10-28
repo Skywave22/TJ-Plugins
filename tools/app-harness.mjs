@@ -15,7 +15,8 @@
  *  - Wraps the plugin in the app's namespaced installer (manifest/http_get/
  *    http_post as closure constants). Like the app, http_get does NOT unwrap a
  *    `{ headers: {...} }` object — such headers are reported and dropped.
- *  - HTTP: 15 s timeouts, 8 MB body cap, redirects followed, default app UA.
+ *  - HTTP: 15 s timeouts, 8 MB body cap, redirects followed for GET/HEAD only (Dart HttpClient
+ *    does not follow a POST 301/302 - the plugin gets the redirect and its Set-Cookie), default app UA.
  *  - Invokes functions the way the app's worker does, with a 90 s timeout,
  *    and requires the `{ success: true, data }` envelope.
  *  - Validates every returned field against the Dart `fromJson` casts
@@ -118,7 +119,7 @@ async function curlHttp(method, url, headers, body) {
   const os = await import("node:os");
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hc-"));
   const hf = path.join(tmp, "h"), bf = path.join(tmp, "b");
-  const args = ["-s", "-L", "--max-redirs", "10", "-m", "15", "-X", method, "-D", hf, "-o", bf, "-w", "%{http_code} %{url_effective}", "--max-filesize", String(MAX_BODY)];
+  const args = ["-s", ...((method === "GET" || method === "HEAD") ? ["-L"] : []), "--max-redirs", "10", "-m", "15", "-X", method, "-D", hf, "-o", bf, "-w", "%{http_code} %{url_effective}", "--max-filesize", String(MAX_BODY)];
   for (const [k, v] of Object.entries(headers)) args.push("-H", `${k}: ${v}`);
   if (body != null) args.push("--data-binary", "@-");
   args.push(url);
@@ -175,7 +176,7 @@ async function doHttp(req) {
     }
     const res = await axios.request({
       url, method, headers, data: req.body ?? undefined, responseType: "arraybuffer", decompress: true,
-      timeout: 15000, maxContentLength: MAX_BODY, maxRedirects: 10, validateStatus: () => true,
+      timeout: 15000, maxContentLength: MAX_BODY, maxRedirects: (method === "GET" || method === "HEAD") ? 10 : 0, validateStatus: () => true,
       transformResponse: (x) => x,
     });
     const body = Buffer.from(res.data || []).toString("utf8");
