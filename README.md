@@ -60,7 +60,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **HiCine** | v11 | hicine.sbs | Bollywood and Hollywood, web series, K-drama and anime | hi, en |
 | **HiStream** 🆕 | v1 | histream.lol | Trending, Bollywood, Hindi series, Anime and 9 platform rows (Netflix, Prime, JioHotstar, ZEE5, SonyLIV…); Hindi first, up to 4K | hi, en, ta, te, ko, ja |
 | **MoviesHubHD** | v2 | movieshubhd.com | Latest, Trending, Hindi and Top Rated rows; direct streams with subtitles | hi, en |
-| **Net79** 🆕 | v1 | net79.cc | NetMirror web: Top 10, Netflix, Prime, Anime, K-Drama, Hindi Dubbed rows; MP4 up to 1080p with Hindi, English, Tamil and Telugu dubs | en, hi |
+| **Net79** 🆕 | v2 | net79.cc | NetMirror web: Top 10, Netflix, Prime, Anime, K-Drama, Hindi Dubbed rows; MP4 up to 1080p with Hindi, English, Tamil and Telugu dubs | en, hi |
 | **NetMirror** | v10 | netmirror.center | Netflix-style catalog: Bollywood, Hollywood, anime, reality TV | en, hi |
 | **RiveStream** | v6 | rivestream.ru | Movies and series, Hindi first | hi, en, ta, te +3 |
 | **ScreenScape** | v2 | screenscape.me | Trending, Top 10, Netflix/Prime/JioHotstar rows; 30+ servers per title | hi, en, ta, te, ko, ja |

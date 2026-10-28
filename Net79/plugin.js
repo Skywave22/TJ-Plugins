@@ -424,7 +424,7 @@
     // Same rows as net79.cc's home page (its discover calls), plus its
     // server-rendered "explore" grids (MovieBox catalog, newest first).
     const ROWS = [
-        { name: "Top 10 Today",            path: "/api/catalog/trending?window=day", top: 10 },
+        { name: "Top 10 Today",            path: "/api/catalog/trending?window=day", top: 10, fetch: 20 },
         { name: "New Releases",            path: "/api/catalog/discover?type=movie&sort=release&year_from=2025&year_to=2026" },
         { name: "Popular on Netflix",      path: "/api/catalog/discover?platform=Netflix&type=movie" },
         { name: "Netflix Series",          path: "/api/catalog/discover?platform=Netflix&type=tv" },
@@ -466,6 +466,54 @@
         return out;
     }
 
+    // ── availability: net79's rows are TMDB lists, and about 1 title in 5 is not on its
+    // servers yet ("We couldn't find this title on NetMirror yet"). /api/variants-tmdb maps a
+    // title to MovieBox without making video links ({ok:true, variants:[]} = not there), so
+    // the home rows are checked with it, within a time budget, visible titles first. Answers
+    // are remembered on the phone (available 3 days, missing 12 hours), so every home load
+    // gets cleaner and faster.
+    const AV_KEY = "net79_avail_v1";
+    let AV = null;
+    async function avLoad() {
+        if (AV) return AV;
+        let v = null;
+        try { if (typeof getPreference === "function") v = await withTimeout(Promise.resolve(getPreference(AV_KEY)), 1500); } catch (_) {}
+        try { AV = (v && JSON.parse(v)) || {}; } catch (_) { AV = {}; }
+        return AV;
+    }
+    function avFresh(e) { return e && (Date.now() - e[1]) < (e[0] ? 3 * 86400000 : 12 * 3600000); }
+    function avSave() {
+        try {
+            Object.keys(AV).forEach(function (k) { if (!avFresh(AV[k])) delete AV[k]; });
+            if (typeof setPreference === "function") setPreference(AV_KEY, JSON.stringify(AV));
+        } catch (_) {}
+    }
+    function avKey(it) { const p = parseUrl(it && it.url); return p && p.k === "t" ? p.type + ":" + p.id : null; }
+    async function checkAvail(rows, budgetMs) {
+        await avLoad();
+        // interleave the rows so the first cards of every row are checked first
+        const todo = [], seen = {};
+        const longest = Math.max.apply(null, rows.map(function (r) { return r.length; }).concat([0]));
+        for (let i = 0; i < longest; i++) rows.forEach(function (r) {
+            const k = avKey(r[i]);
+            if (k && !seen[k] && !avFresh(AV[k])) { seen[k] = 1; todo.push(k); }
+        });
+        const deadline = Date.now() + budgetMs;
+        let next = 0, changed = false;
+        async function worker() {
+            while (next < todo.length && Date.now() < deadline) {
+                const k = todo[next++], parts = k.split(":");
+                const j = await api("/api/variants-tmdb/" + parts[0] + "/" + parts[1] + "?se=1&ep=1", Math.max(1000, Math.min(8000, deadline - Date.now())));
+                if (j && j.ok === true) { AV[k] = [j.defaultSubjectId || (j.variants || []).length ? 1 : 0, Date.now()]; changed = true; }
+            }
+        }
+        const workers = [];
+        for (let w = 0; w < 8; w++) workers.push(worker());
+        await withTimeout(Promise.all(workers), budgetMs + 1500).catch(function () {});
+        if (changed) avSave();
+    }
+    function isMissing(it) { const k = avKey(it); return !!(k && AV && AV[k] && avFresh(AV[k]) && !AV[k][0]); }
+
     async function getHome(cb) {
         try {
             const lists = await Promise.all(ROWS.map(function (row) {
@@ -475,16 +523,19 @@
                 }
                 const path = row.path + (/discover\?/.test(row.path) ? "&region=IN" : ""); // as the site asks
                 return api(path).then(function (j) {
-                    return ((j && j.items) || []).filter(function (r) { return r && (r.poster || r.backdrop); }).slice(0, row.top || 40).map(function (r) {
+                    return ((j && j.items) || []).filter(function (r) { return r && (r.poster || r.backdrop); }).slice(0, row.fetch || 40).map(function (r) {
                         const it = tmdbItem(r);
                         if (it && row.anime && it.type === "series") it.type = "anime";
                         return it;
                     }).filter(Boolean);
                 });
             }));
+            // hide titles net79 does not have (checked with a 6 s budget; unchecked ones stay)
+            await checkAvail(lists.filter(function (l, i) { return !ROWS[i].explore; }), 6000);
             const data = {}, shown = {};
             ROWS.forEach(function (row, i) {
-                let list = lists[i] || [];
+                let list = (lists[i] || []).filter(function (it) { return !isMissing(it); });
+                if (row.top) list = list.slice(0, row.top);
                 // the explore grids all open with the same newest titles: show each title once
                 if (row.explore) {
                     list = list.filter(function (it) { if (shown[it.url]) return false; shown[it.url] = 1; return true; });
@@ -510,15 +561,25 @@
             const total = Math.min(Number((first && first.totalPages) || 1), 5), more = [];
             for (let pg = 2; pg <= total; pg++) more.push(sp(pg));
             const pages = [first].concat(await Promise.all(more));
-            const seen = {}, out = [];
+            const seen = {}, out = [], soon = [];
             pages.forEach(function (j) {
                 ((j && j.items) || []).forEach(function (r) {
-                    if (r && r.cta && /coming soon/i.test(r.cta)) return; // not on the site yet
                     const it = tmdbItem(r);
-                    if (it && !seen[it.url]) { seen[it.url] = 1; out.push(it); }
+                    if (!it || seen[it.url]) return;
+                    seen[it.url] = 1;
+                    out.push(it);
+                    // "Coming Soon" = not in the site's index yet, but many of them already play
+                    // (the server finds them live): keep only the ones it really has
+                    if (r.cta && /coming soon/i.test(r.cta)) soon.push(it);
                 });
             });
-            cb({ success: true, data: out });
+            if (soon.length) await checkAvail([soon.slice(0, 40)], 5000);
+            const keep = out.filter(function (it) {
+                if (soon.indexOf(it) < 0) return true;
+                const k = avKey(it);
+                return !!(k && AV && AV[k] && avFresh(AV[k]) && AV[k][0]);
+            });
+            cb({ success: true, data: keep });
         } catch (e) {
             cb({ success: false, errorCode: "SEARCH_ERROR", message: String((e && e.message) || e) });
         }
@@ -697,31 +758,87 @@
     function withQ(st, q) { try { if (st && st.quality == null) st.quality = q; } catch (_) {} return st; }
     function qLabel(r) { r = Number(r) || 0; return r >= 2160 ? "4K" : r ? r + "p" : "Auto"; }
 
-    // one MovieBox answer -> stream entries
-    function streamsFrom(j, lang, primary) {
+    // one MovieBox answer -> its files (built into links once the play mode is known)
+    function filesFrom(j, lang, primary) {
         if (!j || !j.ok || j.mode !== "proxy") return [];
         const files = (j.streams || []).filter(function (s) { return s && s.url; })
             .sort(function (a, b) { return Number(b.resolution) - Number(a.resolution); });
         if (!files.length && j.mp4) files.push({ url: j.mp4, resolution: Number(j.resolution) || 0 });
         const subs = subsOf(j);
-        const out = [];
         // dubs: the 360p file is left out when better ones exist (keeps the list short)
         const pick = primary ? files.slice(0, 4) : files.filter(function (f, i) { return i === 0 || Number(f.resolution) >= 480; }).slice(0, 2);
-        pick.forEach(function (f) {
-            const q = qLabel(f.resolution);
-            const size = Number(f.size) ? " · " + (Number(f.size) / 1073741824).toFixed(2) + " GB" : "";
-            const o = { url: f.url, source: "Net79 " + lang + " [" + q + "]" + size, quality: q, headers: DIRECT_HEADERS };
-            if (subs.length) o.subtitles = subs;
-            out.push(withQ(mkStream(o), q));
+        return pick.map(function (f, i) {
+            return { url: f.url, proxy: proxied(f.url, j), q: qLabel(f.resolution), size: Number(f.size) || 0,
+                subs: subs, lang: lang, primary: primary, rank: i };
         });
-        // the site's own video proxy: the two best qualities for the main audio, the best one for dubs
-        pick.slice(0, primary ? 2 : 1).forEach(function (f) {
-            const q = qLabel(f.resolution);
-            const o = { url: proxied(f.url, j), source: "Net79 " + lang + " [" + q + "] · Proxy", quality: q, headers: PROXY_HEADERS };
-            if (subs.length) o.subtitles = subs;
-            out.push(withQ(mkStream(o), q));
+    }
+    function linkOf(e, viaProxy, headers) {
+        const size = !viaProxy && e.size ? " · " + (e.size / 1073741824).toFixed(2) + " GB" : "";
+        const o = { url: viaProxy ? e.proxy : e.url, source: "Net79 " + e.lang + " [" + e.q + "]" + (viaProxy ? " · Proxy" : size),
+            quality: e.q, headers: headers };
+        if (e.subs.length) o.subtitles = e.subs;
+        return withQ(mkStream(o), e.q);
+    }
+
+    // ── play mode, tested from the phone itself ──
+    // MovieBox's file CDN refuses some networks / regions (429), some Referers (426), and
+    // net79's own proxy (a Cloudflare Worker) is refused wherever the CDN refuses that
+    // Cloudflare location. Instead of listing links that cannot play, one file is asked for
+    // its first 2 bytes - directly (two header sets) and through the proxy - and only the
+    // kind that answers is listed. The answer is reused for 20 minutes.
+    const DIRECT_TRIES = [
+        { name: "direct", headers: DIRECT_HEADERS },
+        { name: "direct (no referer)", headers: { "User-Agent": UA } }
+    ];
+    let PLAY_MODE = null;
+    async function probe(url, headers) {
+        const get = __ngRawGet || http_get;
+        try {
+            const r = await withTimeout(Promise.resolve(get(url, Object.assign({}, headers, { "Range": "bytes=0-1" }))), 9000);
+            const st = Number((r && (r.status || r.statusCode)) || 0);
+            const body = String((r && r.body) || "").slice(0, 300);
+            if (st === 200 || st === 206) {
+                return /^\s*<(!doctype|html|head|body)/i.test(body) ? { ok: false, st: "HTML page instead of video" } : { ok: true, st: String(st) };
+            }
+            if (st === 0) {
+                const err = String((r && r.error) || "");
+                if (/too ?large|exceed/i.test(err)) return { ok: true, st: "200" }; // the file itself (app refuses bodies > 8 MB)
+                if (/host lookup|ENOTFOUND|getaddrinfo|No address|refused|reset/i.test(err)) return { ok: false, st: "blocked (" + err.slice(0, 40) + ")" };
+                return { ok: false, unknown: true, st: err ? err.slice(0, 40) : "no answer" };
+            }
+            return { ok: false, st: "HTTP " + st };
+        } catch (_) { return { ok: false, unknown: true, st: "timed out" }; }
+    }
+    async function playMode(sample) {
+        if (PLAY_MODE && Date.now() - PLAY_MODE.t < 20 * 60000) return PLAY_MODE;
+        const notes = [];
+        const proxyP = probe(sample.proxy, PROXY_HEADERS);
+        let direct = null, directUnknown = false;
+        for (let i = 0; i < DIRECT_TRIES.length; i++) {
+            const r = await probe(sample.url, DIRECT_TRIES[i].headers);
+            notes.push(DIRECT_TRIES[i].name + ": " + r.st);
+            if (r.ok) { direct = DIRECT_TRIES[i].headers; break; }
+            if (r.unknown) directUnknown = true;
+        }
+        const pr = await proxyP;
+        notes.push("proxy: " + pr.st);
+        const mode = { direct: direct, directUnknown: !direct && directUnknown, proxy: pr.ok, proxyUnknown: !!pr.unknown, notes: notes, t: Date.now() };
+        if (mode.direct || mode.proxy) PLAY_MODE = mode; // only a working answer is reused
+        return mode;
+    }
+    function buildLinks(files, m) {
+        const directAll = !!m.direct || (m.directUnknown && !m.proxy);
+        const directHeaders = m.direct || DIRECT_HEADERS;
+        const proxyAll = !m.direct && (m.proxy || m.proxyUnknown);
+        const proxyBackup = !!m.direct && (m.proxy || m.proxyUnknown);
+        const main = [], backup = [];
+        files.forEach(function (e) {
+            if (directAll) main.push(linkOf(e, false, directHeaders));
+            else if (m.directUnknown && e.rank === 0) backup.push(linkOf(e, false, directHeaders));
+            if (proxyAll) main.push(linkOf(e, true, PROXY_HEADERS));
+            else if (proxyBackup && e.rank < (e.primary ? 2 : 1)) backup.push(linkOf(e, true, PROXY_HEADERS));
         });
-        return out;
+        return main.concat(backup);
     }
 
     const LANGS = { en: "English", hi: "Hindi", ko: "Korean", ja: "Japanese", zh: "Chinese", cn: "Chinese", ta: "Tamil", te: "Telugu",
@@ -739,11 +856,23 @@
         return l.replace(/\s+dub$/i, "").replace(/^original audio$/i, "Original");
     }
 
+    // the site's player asks again (up to 3x) when an answer has no video; one retry here,
+    // except when the title is simply not on the site
+    async function embedRetry(path) {
+        let j = await api(path, 40000);
+        if (!j || (!j.ok && !j.noSource) || (j.ok && j.mode !== "proxy" && !j.noSource && !/couldn.t find|no longer available|not .*released/i.test(j.error || ""))) {
+            await new Promise(function (r) { setTimeout(r, 1200); });
+            const k = await api(path + (path.indexOf("?") >= 0 ? "&" : "?") + "fresh=1", 40000);
+            if (k && k.ok && k.mode === "proxy") j = k; else if (!j) j = k;
+        }
+        return j;
+    }
+
     async function streamsTmdb(p) {
         const se = p.type === "tv" ? (p.s || 1) : 1, ep = p.type === "tv" ? (p.e || 1) : 1;
         const base = "/api/embed-tmdb/" + p.id + "?type=" + p.type + "&se=" + se + "&ep=" + ep;
         const first = await Promise.all([
-            api(base, 40000),
+            embedRetry(base),
             api("/api/variants-tmdb/" + p.type + "/" + p.id + "?se=" + se + "&ep=" + ep, 20000),
             api("/api/catalog/title/" + p.type + "/" + p.id, 15000)
         ]);
@@ -767,13 +896,13 @@
             return api(base + "&dub=" + encodeURIComponent(v.dubSubjectId) + "&dubdp=" + encodeURIComponent(v.detailPath || ""), 40000);
         }));
         if (!mainLang && dubs.length) mainLang = "Default";
-        let out = streamsFrom(main, mainLang ? "· " + mainLang : "", true);
+        let out = filesFrom(main, mainLang ? "· " + mainLang : "", true);
         const seenSid = {}; seenSid[mainSid] = 1;
         dubRes.forEach(function (j, i) {
             // when a dub is missing for this episode the server falls back to the default audio
             if (!j || !j.ok || seenSid[String(j.subjectId)] || String(j.subjectId) !== String(dubs[i].dubSubjectId)) return;
             seenSid[String(j.subjectId)] = 1;
-            out = out.concat(streamsFrom(j, "· " + cleanLang(dubs[i].language), false));
+            out = out.concat(filesFrom(j, "· " + cleanLang(dubs[i].language), false));
         });
         return { list: out, err: main && main.error };
     }
@@ -784,7 +913,7 @@
             return "/api/embed-direct/" + encodeURIComponent(sid) + "?type=" + (p.type === "tv" ? "tv" : "movie") +
                 (p.type === "tv" ? "&se=" + se + "&ep=" + ep : "") + (dp ? "&dp=" + encodeURIComponent(dp) : "");
         }
-        const main = await api(path(p.sid, p.dp), 40000);
+        const main = await embedRetry(path(p.sid, p.dp));
         const dubsAll = ((main && main.dubs) || []).map(function (d) {
             return { sid: String(d.subjectId), lang: d.lanName || d.lanCode || "", dp: d.detailPath || "", original: !!d.original };
         });
@@ -795,8 +924,8 @@
         const dubRes = await Promise.all(dubs.map(function (d) { return api(path(d.sid, d.dp), 40000); }));
         let mainLang = cleanLang(mainD && mainD.lang);
         if (!mainLang && dubs.length) mainLang = "Default";
-        let out = streamsFrom(main, mainLang ? "· " + mainLang : "", true);
-        dubRes.forEach(function (j, i) { out = out.concat(streamsFrom(j, "· " + cleanLang(dubs[i].lang), false)); });
+        let out = filesFrom(main, mainLang ? "· " + mainLang : "", true);
+        dubRes.forEach(function (j, i) { out = out.concat(filesFrom(j, "· " + cleanLang(dubs[i].lang), false)); });
         return { list: out, err: main && main.error };
     }
 
@@ -810,10 +939,17 @@
             const r = p.k === "n" ? await streamsNative(p) : await streamsTmdb(p);
             if (!r.list.length) {
                 return cb({ success: false, errorCode: "NO_STREAMS",
-                    message: r.err ? String(r.err) : ("net79.cc has no video for this " + (p.type === "tv" ? "episode" : "movie") + " right now.") });
+                    message: r.err ? "Net79: " + String(r.err) : ("net79.cc has no video for this " + (p.type === "tv" ? "episode" : "movie") + " right now.") });
             }
-            STREAM_CACHE[ckey] = { t: Date.now(), data: r.list };
-            cb({ success: true, data: r.list });
+            const mode = await playMode(r.list[0]);
+            if (!mode.direct && !mode.proxy && !mode.directUnknown && !mode.proxyUnknown) {
+                return cb({ success: false, errorCode: "HOSTS_BLOCKED",
+                    message: "Net79 found this " + (p.type === "tv" ? "episode" : "movie") + ", but its video server (MovieBox CDN) refuses to send it to your network - " +
+                        mode.notes.join(", ") + ". The net79.cc website has the same problem on this network. Try another plugin for this title, or a VPN." });
+            }
+            const links = buildLinks(r.list, mode);
+            STREAM_CACHE[ckey] = { t: Date.now(), data: links };
+            cb({ success: true, data: links });
         } catch (e) {
             cb({ success: false, errorCode: "STREAM_ERROR", message: String((e && e.message) || e) });
         }

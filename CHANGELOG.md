@@ -2,6 +2,12 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-10-28 (2)
+
+| Plugin | Change |
+|---|---|
+| **Net79** v2 | **"No links found":** about 1 title in 5 in net79's rows (TMDB lists) is not on its servers yet. The home rows now hide those titles: each one is checked with the site's mapping API, and the answers are remembered on the phone, so the rows get cleaner and faster with every visit. Search now also finds titles the site marks "Coming Soon" that already play (Verity, Forgotten Island…) and hides the ones it doesn't have. When the server has no answer it is asked once more, as the site's player does. **"All links failed":** before listing links, the plugin now asks the video server (MovieBox CDN) for 2 bytes of the file from your phone: directly (with and without a Referer) and through net79's own proxy. Only the kind that answers is listed (with the Referer that worked). If the server refuses both, you get a message with the exact answers (e.g. "direct: HTTP 429, proxy: HTTP 429") instead of a list of links that all fail. |
+
 ### 🆕 New — 2026-10-28 (2)
 
 | Plugin | What it is |
