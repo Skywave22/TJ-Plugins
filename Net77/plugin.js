@@ -384,16 +384,23 @@
 
     // ── catalogs ──
     const OTT = {
-        nf: { name: "Netflix", search: "/search.php", post: "/post.php", episodes: "/episodes.php", playlist: "/playlist.php",
+        nf: { name: "Netflix", tag: "Netflix", search: "/search.php", post: "/post.php", episodes: "/episodes.php", playlist: "/playlist.php",
               poster: function (id) { return "https://imgcdn.kim/poster/v/" + id + ".jpg"; },
               banner: function (id) { return "https://imgcdn.kim/poster/h/" + id + ".jpg"; },
               still:  function (id) { return "https://imgcdn.kim/epimg/150/" + id + ".jpg"; } },
-        hs: { name: "JioHotstar", search: "/mobile/hs/search.php", post: "/mobile/hs/post.php", episodes: "/mobile/hs/episodes.php", playlist: "/mobile/hs/playlist.php",
+        pv: { name: "Prime Video", tag: "Prime", search: "/mobile/pv/search.php", post: "/mobile/pv/post.php", episodes: "/mobile/pv/episodes.php", playlist: "/mobile/pv/playlist.php",
+              // Prime's portrait posters are 1-4 MB, so cards use the site's own small 341px art
+              poster: function (id) { return "https://imgcdn.kim/pv/341/" + id + ".jpg"; },
+              bigPoster: function (id) { return "https://imgcdn.kim/pv/v/" + id + ".jpg"; },
+              banner: function (id) { return "https://imgcdn.kim/pv/1920/" + id + ".jpg"; },
+              still:  function (id) { return "https://imgcdn.kim/pvepimg/150/" + id + ".jpg"; } },
+        hs: { name: "JioHotstar", tag: "Hotstar", search: "/mobile/hs/search.php", post: "/mobile/hs/post.php", episodes: "/mobile/hs/episodes.php", playlist: "/mobile/hs/playlist.php",
               poster: function (id) { return "https://imgcdn.kim/hs/v/" + id + ".jpg"; },
               banner: function (id) { return "https://imgcdn.kim/hs/h/" + id + ".jpg"; },
               still:  function (id) { return "https://imgcdn.kim/hsepimg/150/" + id + ".jpg"; } }
     };
-    // item url = JSON { o: "nf"|"hs", id, t?: title }  ·  episode url adds { ep: episodeId, s, e }
+    const OTT_ORDER = ["nf", "pv", "hs"];
+    // item url = JSON { o: "nf"|"pv"|"hs", id, t?: title }  ·  episode url adds { ep: episodeId, s, e, y: year, k: "m"|"s" }
     function parseUrl(url) {
         const p = parseJson(url);
         if (p && p.id && OTT[p.o]) return p;
@@ -411,7 +418,13 @@
         const m = String(raw).match(/t_hash_t=([^;,\s]+)/i);
         return m ? m[1] : "";
     }
-    async function newSession() {
+    let SESSION_P = null;
+    function newSession() {
+        if (SESSION_P) return SESSION_P;
+        SESSION_P = openSession().then(function (v) { SESSION_P = null; return v; }, function (e) { SESSION_P = null; throw e; });
+        return SESSION_P;
+    }
+    async function openSession() {
         for (let i = 0; i < 2; i++) {
             try {
                 const res = await withTimeout(Promise.resolve(http_post(APP + "/verify.php", {
@@ -476,31 +489,104 @@
         }
         return out;
     }
-    const ROW_ORDER = [/^new on netflix/i, /^top searches/i, /^only on netflix/i, /bollywood/i, /dubbed in hindi/i, /^hotstar · latest/i,
+    // Netflix rows in this order (the rest after them, in the site's order)
+    const NF_ORDER = [/^new on netflix/i, /^top searches/i, /^only on netflix/i, /bollywood/i, /dubbed in hindi/i,
         /k-drama/i, /^anime/i, /us tv shows$/i, /bingeworthy/i, /exciting tv/i, /critically/i, /crime/i, /real life/i, /asian/i, /epic/i, /documentar/i];
-    function rowRank(name) {
-        for (let i = 0; i < ROW_ORDER.length; i++) if (ROW_ORDER[i].test(name)) return i;
-        return ROW_ORDER.length + (/^hotstar/i.test(name) ? 1 : 0);
+    function nfRank(name) {
+        for (let i = 0; i < NF_ORDER.length; i++) if (NF_ORDER[i].test(name)) return i;
+        return NF_ORDER.length;
     }
+    function rowLabel(o, name) {
+        if (o === "nf") return /netflix/i.test(name) ? name : "Netflix · " + name;
+        return (o === "pv" ? "Prime Video · " : "Hotstar · ") + name;
+    }
+    // first row of each catalog: Netflix "New on Netflix", Prime "Latest Movies", Hotstar "Latest Releases"
+    const HEAD_ROW = { nf: /^new on netflix/i, pv: /^latest movies/i, hs: /^latest releases/i };
+    // inside All-in-one: only these rows, with titles filled in (All-in-one merges cards by title)
+    const AIO_ROWS = { nf: [/^new on netflix/i, /^bollywood movies/i], pv: [/^latest movies/i], hs: [/^latest releases/i] };
+    const IN_AIO = typeof manifest !== "undefined" && !!(manifest && manifest.aio);
+
+    // id -> { t, y, k } from post.php, kept on the phone so the All-in-one rows fill fast
+    let TITLES = null;
+    async function titleCache() {
+        if (TITLES) return TITLES;
+        TITLES = {};
+        try {
+            if (typeof getPreference === "function") {
+                const v = parseJson(await withTimeout(Promise.resolve(getPreference("net77_titles")), 1500));
+                if (v && typeof v === "object") TITLES = v;
+            }
+        } catch (_) {}
+        return TITLES;
+    }
+    function saveTitles() {
+        try {
+            if (typeof setPreference !== "function") return;
+            const keys = Object.keys(TITLES);
+            if (keys.length > 900) keys.slice(0, keys.length - 900).forEach(function (k) { delete TITLES[k]; });
+            setPreference("net77_titles", JSON.stringify(TITLES));
+        } catch (_) {}
+    }
+    async function withTitles(o, items) {
+        const cache = await titleCache();
+        const todo = items.filter(function (it) { const p = parseUrl(it.url); return p && !cache[o + ":" + p.id]; });
+        for (let i = 0; i < todo.length; i += 10) {
+            await Promise.all(todo.slice(i, i + 10).map(async function (it) {
+                const p = parseUrl(it.url);
+                try {
+                    const d = await appJson(OTT[o].post + "?id=" + encodeURIComponent(p.id) + "&t=" + unix(), o, 10000);
+                    if (d && d.status === "y" && d.title) cache[o + ":" + p.id] = { t: clean(d.title), y: num(d.year), k: (d.episodes || []).filter(Boolean).length ? "s" : "m" };
+                } catch (_) {}
+            }));
+        }
+        if (todo.length) saveTitles();
+        return items.map(function (it) {
+            const p = parseUrl(it.url), c = p && cache[o + ":" + p.id];
+            if (!c) return null;
+            return mkItem({ title: c.t, url: itemUrl(o, p.id, c.t), posterUrl: it.posterUrl, type: c.k === "s" ? "series" : "movie", year: c.y || undefined });
+        }).filter(Boolean);
+    }
+
     async function getHome(cb) {
         try {
             await session();
-            const pages = await Promise.all([
-                appGet("/mobile/home?app=1", "nf", 25000, true).catch(function () { return ""; }),
-                appGet("/mobile/home?app=1", "hs", 25000, true).catch(function () { return ""; })
-            ]);
-            const rows = parseRows(pages[0], "nf", "").concat(parseRows(pages[1], "hs", "Hotstar · "));
-            if (!rows.length) return cb({ success: false, errorCode: "HOME_ERROR", message: "NetMirror's home page came back empty - try again in a minute." });
-            rows.sort(function (a, b) { return rowRank(a.name) - rowRank(b.name); });
+            const pages = await Promise.all(OTT_ORDER.map(function (o) {
+                return appGet("/mobile/home?app=1", o, 25000, true).catch(function () { return ""; });
+            }));
+            const byOtt = {};
+            OTT_ORDER.forEach(function (o, i) { byOtt[o] = parseRows(pages[i], o, ""); });
+            byOtt.nf.sort(function (a, b) { return nfRank(a.name) - nfRank(b.name); });
             const data = {};
-            rows.forEach(function (r) { if (!data[r.name]) data[r.name] = r.items.slice(0, 40); });
+            if (IN_AIO) {
+                for (const o of OTT_ORDER) {
+                    for (const re of AIO_ROWS[o]) {
+                        const r = byOtt[o].filter(function (x) { return re.test(x.name); })[0];
+                        if (!r) continue;
+                        const items = await withTitles(o, r.items.slice(0, 20));
+                        if (items.length) data[rowLabel(o, r.name)] = items;
+                    }
+                }
+            } else {
+                // 1st row Netflix, 2nd Prime Video, 3rd Hotstar, then the rest of each catalog
+                const heads = [], rest = [];
+                OTT_ORDER.forEach(function (o) {
+                    const h = byOtt[o].filter(function (x) { return HEAD_ROW[o].test(x.name); })[0] || byOtt[o][0];
+                    if (h) heads.push({ o: o, r: h });
+                    byOtt[o].forEach(function (x) { if (x !== h) rest.push({ o: o, r: x }); });
+                });
+                heads.concat(rest).forEach(function (x) {
+                    const name = rowLabel(x.o, x.r.name);
+                    if (!data[name]) data[name] = x.r.items.slice(0, 40);
+                });
+            }
+            if (!Object.keys(data).length) return cb({ success: false, errorCode: "HOME_ERROR", message: "NetMirror's home page came back empty - try again in a minute." });
             cb({ success: true, data: data });
         } catch (e) {
             cb({ success: false, errorCode: "HOME_ERROR", message: String((e && e.message) || e) });
         }
     }
 
-    // ── search: Netflix catalog (public on net77) + JioHotstar ──
+    // ── search: Netflix (public on net77), Prime Video and JioHotstar ──
     async function searchOtt(o, q) {
         try {
             let body = "";
@@ -515,7 +601,7 @@
                 const id = clean(r.id);
                 if (!id) return null;
                 return mkItem({ title: clean(r.t) || "Untitled", url: itemUrl(o, id, clean(r.t)), posterUrl: OTT[o].poster(id),
-                    type: "movie", year: num(r.y) || undefined });
+                    type: /series/i.test(String(r.r || "")) ? "series" : "movie", year: num(r.y) || undefined });
             }).filter(Boolean);
         } catch (_) { return []; }
     }
@@ -523,31 +609,31 @@
         try {
             const q = String(query || "").trim();
             if (!q) return cb({ success: true, data: [] });
-            const res = await Promise.all([searchOtt("nf", q), searchOtt("hs", q)]);
-            cb({ success: true, data: res[0].concat(res[1]) });
+            const res = await Promise.all(OTT_ORDER.map(function (o) { return searchOtt(o, q); }));
+            cb({ success: true, data: [].concat.apply([], res) });
         } catch (e) {
             cb({ success: false, errorCode: "SEARCH_ERROR", message: String((e && e.message) || e) });
         }
     }
 
     // ── details ──
-    function epOf(o, seriesId, title, ep) {
+    function epOf(o, seriesId, title, ep, year) {
         const s = num(String(ep.s || "").replace(/\D/g, "")) || 1;
         const e = num(String(ep.ep || "").replace(/\D/g, "")) || 1;
         return mkEpisode({
             name: clean(ep.t) || ("Episode " + e),
-            url: JSON.stringify({ o: o, id: String(seriesId), ep: String(ep.id), t: title, s: s, e: e }),
+            url: JSON.stringify({ o: o, id: String(seriesId), ep: String(ep.id), t: title, s: s, e: e, y: year || 0, k: "s" }),
             season: s, episode: e,
             posterUrl: OTT[o].still(ep.id),
             description: clean(ep.ep_desc),
             runtime: num(String(ep.time || "").replace(/\D/g, "")) || null
         });
     }
-    async function seasonEpisodes(o, seriesId, seasonId, startPage, title) {
+    async function seasonEpisodes(o, seriesId, seasonId, startPage, title, year) {
         const list = [];
         for (let pg = startPage, n = 0; n < 30; pg++, n++) {
             const j = await appJson(OTT[o].episodes + "?s=" + encodeURIComponent(seasonId) + "&series=" + encodeURIComponent(seriesId) + "&t=" + unix() + "&page=" + pg, o, 15000);
-            ((j && j.episodes) || []).forEach(function (ep) { if (ep && ep.id) list.push(epOf(o, seriesId, title, ep)); });
+            ((j && j.episodes) || []).forEach(function (ep) { if (ep && ep.id) list.push(epOf(o, seriesId, title, ep, year)); });
             if (!j || Number(j.nextPageShow || 0) !== 1) break;
         }
         return list;
@@ -571,7 +657,7 @@
             const common = {
                 title: title,
                 url: itemUrl(o, p.id, title),
-                posterUrl: cfg.poster(p.id),
+                posterUrl: (cfg.bigPoster || cfg.poster)(p.id),
                 bannerUrl: cfg.banner(p.id),
                 year: num(d.year),
                 description: clean(d.desc || d.m_desc),
@@ -587,17 +673,18 @@
             if (!eps.length) {
                 common.type = "movie";
                 common.duration = runtimeMin(d.runtime);
-                common.episodes = [mkEpisode({ name: "Full Movie", url: JSON.stringify({ o: o, id: String(p.id), ep: String(p.id), t: title }),
+                common.episodes = [mkEpisode({ name: "Full Movie", url: JSON.stringify({ o: o, id: String(p.id), ep: String(p.id), t: title, y: num(d.year) || 0, k: "m" }),
                     season: 1, episode: 1, posterUrl: cfg.banner(p.id), description: common.description, runtime: common.duration })];
                 return cb({ success: true, data: mkItem(common) });
             }
             // post.php lists one season (usually the newest) page 1; the rest come from episodes.php
-            let all = eps.map(function (ep) { return epOf(o, p.id, title, ep); });
+            const yr = num(d.year);
+            let all = eps.map(function (ep) { return epOf(o, p.id, title, ep, yr); });
             const seasons = (d.season || []).filter(function (s) { return s && s.id; });
             const shownSeason = String(eps[0].s || "").replace(/\D/g, "");
             const jobs = [];
-            if (Number(d.nextPageShow || 0) === 1 && d.nextPageSeason) jobs.push(seasonEpisodes(o, p.id, d.nextPageSeason, 2, title));
-            seasons.forEach(function (s) { if (String(s.s) !== shownSeason) jobs.push(seasonEpisodes(o, p.id, s.id, 1, title)); });
+            if (Number(d.nextPageShow || 0) === 1 && d.nextPageSeason) jobs.push(seasonEpisodes(o, p.id, d.nextPageSeason, 2, title, yr));
+            seasons.forEach(function (s) { if (String(s.s) !== shownSeason) jobs.push(seasonEpisodes(o, p.id, s.id, 1, title, yr)); });
             for (let i = 0; i < jobs.length; i += 6) {
                 (await Promise.all(jobs.slice(i, i + 6))).forEach(function (l) { all = all.concat(l); });
             }
@@ -638,7 +725,7 @@
             if (/^#EXT-X-MEDIA:/.test(l) && /TYPE=AUDIO/.test(l)) {
                 const a = attrs(l.slice(13));
                 const m = splitCdnUrl(a.URI);
-                if (m) out.audio.push({ lang: String(a.LANGUAGE || "und").toLowerCase(), name: clean(String(a.NAME || "").replace(/^\d+\.\s*/, "")) || a.LANGUAGE,
+                if (m) out.audio.push({ lang: String(a.LANGUAGE || "und").toLowerCase(), name: clean(String(a.NAME || "").replace(/^\d+\.\s*/, "").replace(/^\[\d+\]\s*/, "")) || a.LANGUAGE,
                     host: m[1], path: m[2], query: m[3] || "", def: /YES/i.test(a.DEFAULT || "") });
             } else if (/^#EXT-X-STREAM-INF:/.test(l)) {
                 const a = attrs(l.slice(18));
@@ -706,7 +793,33 @@
     // looked for on these. Seeded with servers NetMirror used in October 2026; every
     // server the plugin finds later is added and kept (app preference "net77_hosts").
     const SEED_HOSTS = ["makhi1.top/s22.freecdn41.top", "makhi4.top/s22.freecdn41.top", "s21.freecdn4.top",
-        "s0022.freecdn4.top/s21.freecdn4.top", "s23.nm-cdn9.top", "s35.freecdn34.top"];
+        "s0022.freecdn4.top/s21.freecdn4.top", "makhi12.top/s15.freecdn4.top", "s23.nm-cdn9.top", "s35.freecdn34.top"];
+    // NetMirror's relays (makhiN.top/<server>) forward to any of its servers; the server's
+    // number (s15, s22...) is stable while its domain changes (s15.nm-cdn2.top is now s15.freecdn4.top)
+    const RELAYS = ["makhi1.top", "makhi4.top"];
+    // server number -> its live domains (checked 2026-10-28; old names like s26.nm-cdn5.top are gone)
+    const SERVER_MAP = {
+        s10: ["s10.freecdn43.top", "s10.nm-cdn7.top"], s11: ["s11.nm-cdn8.top"], s12: ["s12.freecdn38.top", "s12.freecdn39.top"],
+        s13: ["s13.freecdn2.top"], s14: ["s14.freecdn2.top"], s15: ["s15.freecdn4.top", "s15.freecdn13.top"], s20: ["s20.freecdn1.top"],
+        s21: ["s21.freecdn4.top"], s22: ["s22.freecdn41.top"], s23: ["s23.nm-cdn9.top"], s24: ["s24.freecdn3.top"], s25: ["s25.nm-cdn6.top"],
+        s26: ["s26.freecdn49.top", "s26.freecdn51.top"], s30: ["s30.freecdn31.top", "s30.freecdn35.top"],
+        s35: ["s35.freecdn34.top", "s35.freecdn31.top"], s36: ["s36.freecdn34.top"]
+    };
+    function bareOf(h) { return String(h || "").slice(String(h || "").lastIndexOf("/") + 1); }
+    function serverNo(h) { const m = bareOf(h).match(/^(s\d+)\./i); return m ? m[1].toLowerCase() : ""; }
+    function expandHosts(list, known) {
+        const out = [];
+        const add = function (h) { if (h && out.indexOf(h) < 0) out.push(h); };
+        list.forEach(function (h) { hostVariants(h).forEach(add); });
+        list.forEach(function (h) {
+            hostVariants(h).forEach(function (v) { const b = bareOf(v); if (b) RELAYS.forEach(function (r) { add(r + "/" + b); }); });
+            const no = serverNo(h);
+            if (!no) return;
+            (known || []).forEach(function (k) { if (serverNo(k) === no) { add(k); const b = bareOf(k); add(b); RELAYS.forEach(function (r) { add(r + "/" + b); }); } });
+            (SERVER_MAP[no] || [no + ".freecdn4.top"]).forEach(function (b) { add(b); RELAYS.forEach(function (r) { add(r + "/" + b); }); });
+        });
+        return out;
+    }
     let KNOWN_HOSTS = null;
     async function knownHosts() {
         if (KNOWN_HOSTS) return KNOWN_HOSTS;
@@ -740,7 +853,8 @@
     async function liveHost(sm, o) {
         const v = sm.master.video[0];
         const probePath = v.path + v.query;
-        let cands = hostVariants(v.host).concat(sm.master.audio.length ? hostVariants(sm.master.audio[0].host) : []);
+        const known0 = await knownHosts();
+        let cands = expandHosts([v.host].concat(sm.master.audio.length ? [sm.master.audio[0].host] : []).filter(Boolean), known0);
         async function tryList(list) {
             const seen = {}, uniq = list.filter(function (h) { if (!h || seen[h]) return false; seen[h] = 1; return true; });
             if (!uniq.length) return null;
@@ -759,7 +873,7 @@
             const extra = [], seen = [];
             hint.audio.concat(hint.video).forEach(function (x) {
                 if (x.host) seen.push(x.host);
-                if (x.host && x.path.indexOf("/" + PROMO_ID + "/") < 0) hostVariants(x.host).forEach(function (h) { extra.push(h); });
+                if (x.host && x.path.indexOf("/" + PROMO_ID + "/") < 0) expandHosts([x.host], known0).forEach(function (h) { extra.push(h); });
             });
             const fresh = extra.filter(function (h) { return tried.indexOf(h) < 0; });
             host = await tryList(fresh);
@@ -769,11 +883,117 @@
         } catch (_) {}
         // the playlist named no usable server: look for the title on the servers seen before
         try {
-            const known = (await knownHosts()).filter(function (h) { return tried.indexOf(h) < 0; }).slice(0, 12);
+            const pool = (await knownHosts()).slice(0, 12);
+            Object.keys(SERVER_MAP).forEach(function (k) { SERVER_MAP[k].forEach(function (b) { pool.push(RELAYS[0] + "/" + b); }); });
+            const known = pool.filter(function (h, i) { return tried.indexOf(h) < 0 && pool.indexOf(h) === i; });
             host = await tryList(known);
             if (host) learnHosts([host]);
         } catch (_) {}
         return host;
+    }
+
+    // links of one catalog entry. opts: { langs: max languages, quals: max qualities per extra language }
+    async function streamsFor(p, o, epId, opts) {
+        const tag = OTT[o].tag;
+        const sm = await signedMaster(p, o, epId);
+        if (sm.err) return { err: sm.err, code: "NO_STREAMS" };
+        const host = await liveHost(sm, o);
+        if (!host) {
+            return { code: "HOSTS_BLOCKED", err: sm.master.video[0].host
+                ? "found this video, but its NetMirror server (" + sm.master.video[0].host + ") did not answer. The server may be down, or blocked on your network - try again later"
+                : "found this video, but NetMirror did not say which server holds it and it was not on any server seen so far. Try again in a few minutes, or play another title first" };
+        }
+        const v = sm.master.video[0];
+        // which qualities this title has on that server
+        const QS = ["1080p", "720p", "480p"];
+        const have = await Promise.all(QS.map(function (q) {
+            return qPath(v.path, q) === v.path ? Promise.resolve(true) : isPlaylist("https://" + host + qPath(v.path, q) + v.query);
+        }));
+        const quals = QS.filter(function (q, i) { return have[i]; });
+        if (!quals.length) quals.push((v.path.match(/\/(\d{3,4}p)\.m3u8$/) || [0, "720p"])[1]);
+
+        const subs = (((sm.item && sm.item.tracks) || []).filter(function (t) { return t && /caption|subtitle/i.test(t.kind || "") && t.file; }))
+            .slice(0, 10).map(function (t) {
+                const f = String(t.file).replace(/\\/g, "");
+                return { url: /^\/\//.test(f) ? "https:" + f : (/^https?:/.test(f) ? f : "https://subs.nfmirrorcdn.top" + f), label: clean(t.label) || "English", lang: /english|^en/i.test(t.label || "") ? "en" : undefined };
+            });
+        const out = [];
+        const vidUrl = function (q) { return "https://" + host + qPath(v.path, q) + v.query; };
+        if (!sm.master.audio.length) {
+            // audio is inside the video: the video playlist itself is the link
+            quals.slice(0, opts.quals || 3).forEach(function (q) {
+                const st = { url: vidUrl(q), source: tag + " [" + q + "]", quality: q, headers: { "User-Agent": UA, "Referer": PLAY_REFERER } };
+                if (subs.length) st.subtitles = subs;
+                out.push(mkStream(st));
+            });
+        } else {
+            // separate audio tracks: one link per language, each a small master playlist with
+            // that language as the only audio. "Origin" makes the app route the playlists
+            // through its local proxy, which adds the Referer to every request.
+            const byLang = {};
+            sm.master.audio.forEach(function (a) { if (!byLang[a.lang]) byLang[a.lang] = a; });
+            const langs = LANG_ORDER.filter(function (l) { return byLang[l]; });
+            sm.master.audio.forEach(function (a) { if (a.def && langs.indexOf(a.lang) < 0) langs.push(a.lang); });
+            if (!langs.length) langs.push(sm.master.audio[0].lang);
+            langs.slice(0, opts.langs || 5).forEach(function (l, li) {
+                const a = byLang[l];
+                const name = LANG_NAME[l] || a.name || l;
+                quals.filter(function (q, qi) { return li === 0 ? qi < (opts.quals || 3) : qi < Math.min(2, opts.quals || 3); }).forEach(function (q) {
+                    const res = q === "1080p" ? "1920x1080" : q === "720p" ? "1280x720" : "854x480";
+                    const bw = q === "1080p" ? 3000000 : q === "720p" ? 1500000 : 800000;
+                    const m3u8 = "#EXTM3U\n#EXT-X-VERSION:3\n" +
+                        "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",LANGUAGE=\"" + l + "\",NAME=\"" + name + "\",DEFAULT=YES,AUTOSELECT=YES,URI=\"https://" + host + a.path + a.query + "\"\n" +
+                        "#EXT-X-STREAM-INF:BANDWIDTH=" + bw + ",RESOLUTION=" + res + ",AUDIO=\"aud\"\n" + vidUrl(q) + "\n";
+                    const st = { url: "magic_m3u8:" + b64(m3u8), source: tag + " · " + name + " [" + q + "]", quality: q,
+                        headers: { "User-Agent": UA, "Referer": PLAY_REFERER, "Origin": APP } };
+                    if (subs.length) st.subtitles = subs;
+                    out.push(mkStream(st));
+                });
+            });
+        }
+        return out.length ? { data: out } : { err: "no playable quality for this video", code: "NO_STREAMS" };
+    }
+
+    // ── the same movie / episode in the other catalogs ──
+    function normT(t) {
+        return clean(t).toLowerCase().replace(/&/g, " and ").replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
+            .replace(/[^a-z0-9]+/g, " ").replace(/\b(the|a|an)\b/g, " ").replace(/\s+/g, " ").trim();
+    }
+    async function episodeIn(o, seriesId, d, S, E) {
+        const has = function (list) {
+            const hit = (list || []).filter(function (ep) {
+                return ep && ep.id && (num(String(ep.s || "").replace(/\D/g, "")) || 1) === S && num(String(ep.ep || "").replace(/\D/g, "")) === E;
+            })[0];
+            return hit ? String(hit.id) : null;
+        };
+        let id = has(d.episodes);
+        if (id) return id;
+        const season = (d.season || []).filter(function (x) { return x && x.id && num(x.s) === S; })[0];
+        if (!season) return null;
+        for (let pg = 1; pg <= 6; pg++) {
+            const j = await appJson(OTT[o].episodes + "?s=" + encodeURIComponent(season.id) + "&series=" + encodeURIComponent(seriesId) + "&t=" + unix() + "&page=" + pg, o, 12000);
+            id = has(j && j.episodes);
+            if (id) return id;
+            if (!j || Number(j.nextPageShow || 0) !== 1) break;
+        }
+        return null;
+    }
+    async function findOn(o, want) {
+        const key = normT(want.t);
+        if (!key) return null;
+        const hits = (await searchOtt(o, want.t)).filter(function (h) { return normT(h.title) === key; }).slice(0, 3);
+        for (const h of hits) {
+            const hp = parseUrl(h.url);
+            const d = await appJson(OTT[o].post + "?id=" + encodeURIComponent(hp.id) + "&t=" + unix(), o, 12000).catch(function () { return null; });
+            if (!d || d.status !== "y") continue;
+            const y = num(d.year), isS = (d.episodes || []).filter(Boolean).length > 0;
+            if (isS !== (want.k === "s")) continue;
+            if (want.y && y && Math.abs(want.y - y) > 1) continue;
+            if (!isS) return { o: o, id: hp.id, ep: hp.id, t: clean(d.title) };
+            const ep = await episodeIn(o, hp.id, d, want.s, want.e);
+            if (ep) return { o: o, id: hp.id, ep: ep, t: clean(d.title) };
+        }
+        return null;
     }
 
     async function loadStreams(url, cb) {
@@ -785,64 +1005,27 @@
             const hit = STREAM_CACHE[ckey];
             if (hit && Date.now() - hit.t < 20 * 60000) return cb({ success: true, data: hit.data });
 
-            const sm = await signedMaster(p, o, epId);
-            if (sm.err) return cb({ success: false, errorCode: "NO_STREAMS", message: "Net77: " + sm.err + "." });
-            const host = await liveHost(sm, o);
-            if (!host) {
-                return cb({ success: false, errorCode: "HOSTS_BLOCKED", message: sm.master.video[0].host
-                    ? "Net77 found this video, but its NetMirror server (" + sm.master.video[0].host + ") did not answer. The server may be down, or blocked on your network - try again later."
-                    : "Net77 found this video, but NetMirror did not say which server holds it and it was not on any server seen so far. Try again in a few minutes, or play another title first." });
+            const kind = p.k === "s" || (p.k !== "m" && p.ep && p.ep !== p.id) ? "s" : "m";
+            const want = { t: p.t, y: num(p.y) || 0, k: kind, s: num(p.s) || 1, e: num(p.e) || 1 };
+            const t0 = Date.now();
+            // this catalog's links, and in parallel the same title on the other two catalogs
+            const main = streamsFor(p, o, epId, { langs: 5 }).catch(function (e) { return { err: String((e && e.message) || e), code: "STREAM_ERROR" }; });
+            const others = OTT_ORDER.filter(function (x) { return x !== o; }).map(function (o2) {
+                if (!want.t) return Promise.resolve(null);
+                const lane = findOn(o2, want).then(function (m) { return m ? streamsFor(m, o2, m.ep, { langs: 3, quals: 2 }) : null; })
+                    .catch(function () { return null; });
+                return withTimeout(lane, 24000).catch(function () { return null; });
+            });
+            const first = await main;
+            // don't let the extra catalogs hold the main links back for long
+            const rest = await withTimeout(Promise.all(others), Math.max(3000, 26000 - (Date.now() - t0))).catch(function () { return []; });
+            let out = (first && first.data) || [];
+            const extra = {};
+            OTT_ORDER.filter(function (x) { return x !== o; }).forEach(function (o2, i) { extra[o2] = rest[i]; });
+            OTT_ORDER.forEach(function (o2) { if (o2 !== o && extra[o2] && extra[o2].data) out = out.concat(extra[o2].data); });
+            if (!out.length) {
+                return cb({ success: false, errorCode: (first && first.code) || "NO_STREAMS", message: "Net77 (" + OTT[o].tag + "): " + ((first && first.err) || "no links") + "." });
             }
-            const v = sm.master.video[0];
-            // which qualities this title has on that server
-            const QS = ["1080p", "720p", "480p"];
-            const have = await Promise.all(QS.map(function (q) {
-                return qPath(v.path, q) === v.path ? Promise.resolve(true) : isPlaylist("https://" + host + qPath(v.path, q) + v.query);
-            }));
-            const quals = QS.filter(function (q, i) { return have[i]; });
-            if (!quals.length) quals.push((v.path.match(/\/(\d{3,4}p)\.m3u8$/) || [0, "720p"])[1]);
-
-            const subs = (((sm.item && sm.item.tracks) || []).filter(function (t) { return t && /caption|subtitle/i.test(t.kind || "") && t.file; }))
-                .slice(0, 10).map(function (t) {
-                    const f = String(t.file).replace(/\\/g, "");
-                    return { url: /^\/\//.test(f) ? "https:" + f : (/^https?:/.test(f) ? f : "https://subs.nfmirrorcdn.top" + f), label: clean(t.label) || "English", lang: /english/i.test(t.label || "") ? "en" : undefined };
-                });
-            const out = [];
-            const vidUrl = function (q) { return "https://" + host + qPath(v.path, q) + v.query; };
-            if (!sm.master.audio.length) {
-                // audio is inside the video: the video playlist itself is the link
-                quals.forEach(function (q) {
-                    const st = { url: vidUrl(q), source: "Net77 [" + q + "]", quality: q, headers: { "User-Agent": UA, "Referer": PLAY_REFERER } };
-                    if (subs.length) st.subtitles = subs;
-                    out.push(mkStream(st));
-                });
-            } else {
-                // separate audio tracks: one link per language, each a small master playlist with
-                // that language as the only audio. "Origin" makes the app route the playlists
-                // through its local proxy, which adds the Referer to every request.
-                const byLang = {};
-                sm.master.audio.forEach(function (a) { if (!byLang[a.lang]) byLang[a.lang] = a; });
-                const langs = LANG_ORDER.filter(function (l) { return byLang[l]; });
-                sm.master.audio.forEach(function (a) { if (a.def && langs.indexOf(a.lang) < 0) langs.push(a.lang); });
-                if (!langs.length) langs.push(sm.master.audio[0].lang);
-                langs.slice(0, 5).forEach(function (l, li) {
-                    const a = byLang[l];
-                    const aHost = host; // audio lives on the same server as the video
-                    const name = LANG_NAME[l] || a.name || l;
-                    quals.filter(function (q, qi) { return li === 0 || qi < 2; }).forEach(function (q) {
-                        const res = q === "1080p" ? "1920x1080" : q === "720p" ? "1280x720" : "854x480";
-                        const bw = q === "1080p" ? 3000000 : q === "720p" ? 1500000 : 800000;
-                        const m3u8 = "#EXTM3U\n#EXT-X-VERSION:3\n" +
-                            "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",LANGUAGE=\"" + l + "\",NAME=\"" + name + "\",DEFAULT=YES,AUTOSELECT=YES,URI=\"https://" + aHost + a.path + a.query + "\"\n" +
-                            "#EXT-X-STREAM-INF:BANDWIDTH=" + bw + ",RESOLUTION=" + res + ",AUDIO=\"aud\"\n" + vidUrl(q) + "\n";
-                        const st = { url: "magic_m3u8:" + b64(m3u8), source: "Net77 · " + name + " [" + q + "]", quality: q,
-                            headers: { "User-Agent": UA, "Referer": PLAY_REFERER, "Origin": APP } };
-                        if (subs.length) st.subtitles = subs;
-                        out.push(mkStream(st));
-                    });
-                });
-            }
-            if (!out.length) return cb({ success: false, errorCode: "NO_STREAMS", message: "Net77: no playable quality for this video." });
             STREAM_CACHE[ckey] = { t: Date.now(), data: out };
             cb({ success: true, data: out });
         } catch (e) {

@@ -30,12 +30,12 @@
 
 ## ⭐ All-in-one
 
-**Can't decide which plugin to open? Install All-in-one.** It has 24 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape, and the new Net77, which joins once its playback is confirmed on phones) and combines them:
+**Can't decide which plugin to open? Install All-in-one.** It has 25 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
 
 | | |
 |---|---|
 | 🏠 **One home page** | Trending, Latest Movies and Series, Hindi, Hindi Dubbed, Netflix, Prime, K-Drama, Anime, Hindi Serials and more, filled from every site. The same title from different sites is one card. |
-| 🔎 **One search** | Searches all 24 sites at once (about 2 seconds) and merges the results. |
+| 🔎 **One search** | Searches all 25 sites at once (about 2 seconds) and merges the results. |
 | ▶️ **Every link** | When you press Play, it finds the same movie or episode on **every site that has it** and lists all working links together, 1080p and Hindi first. A popular movie often gets 50 to 70 links from 10+ sites. Collecting them takes 10 to 40 seconds. |
 
 | Plugin | Version | What you get | Audio |
@@ -60,7 +60,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **HiCine** | v11 | hicine.sbs | Bollywood and Hollywood, web series, K-drama and anime | hi, en |
 | **HiStream** 🆕 | v1 | histream.lol | Trending, Bollywood, Hindi series, Anime and 9 platform rows (Netflix, Prime, JioHotstar, ZEE5, SonyLIV…); Hindi first, up to 4K | hi, en, ta, te, ko, ja |
 | **MoviesHubHD** | v2 | movieshubhd.com | Latest, Trending, Hindi and Top Rated rows; direct streams with subtitles | hi, en |
-| **Net77** 🆕 | v1 | net77.cc | The original NetMirror: Netflix and JioHotstar rows (Bollywood, US shows dubbed in Hindi, K-Drama, South Indian, anime…); 1080p HLS in every audio language of the title, English subtitles | hi, en, ta, te, ko, ja +more |
+| **Net77** 🆕 | v2 | net77.cc | The original NetMirror: Netflix, Prime Video and JioHotstar rows (in that order); links from all three for the same title; 1080p HLS in every audio language of the title, English subtitles | hi, en, ta, te, ko, ja +more |
 | **NetMirror** | v10 | netmirror.center | Netflix-style catalog: Bollywood, Hollywood, anime, reality TV | en, hi |
 | **RiveStream** | v6 | rivestream.ru | Movies and series, Hindi first | hi, en, ta, te +3 |
 | **ScreenScape** | v2 | screenscape.me | Trending, Top 10, Netflix/Prime/JioHotstar rows; 30+ servers per title | hi, en, ta, te, ko, ja |

@@ -10,14 +10,13 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(ROOT, "AllInOne");
-// Net77: kept out until playback is confirmed on a phone
-const SKIP = new Set(["AllInOne", "ReelFren", "HiStream", "Net77", "tools", "relay", "dist", "node_modules"]);
+const SKIP = new Set(["AllInOne", "ReelFren", "HiStream", "tools", "relay", "dist", "node_modules"]);
 
 // home/search grouping of every plugin; plugins not listed default to "movies"
 const GROUP = {
   "321MoviesUK": "movies", CineHD: "movies", CineJoy: "movies", Cinezo: "movies", Fmovies: "movies",
   HiCine: "movies", MoviesHubHD: "movies", NetMirror: "movies", RiveStream: "movies", ScreenScape: "movies",
-  Vidbox: "movies", ZXCStream: "movies",
+  Vidbox: "movies", ZXCStream: "movies", Net77: "movies",
   CineFreak: "hindi", KatMovieHD: "hindi", Movies4u: "hindi", SSRMovies: "hindi",
   DesiSerialOnline: "serial", DesiSerials: "serial",
   DesiDubAnime: "anime", PikaHD: "anime", RareAnimes: "anime", SubDubAnime: "anime",

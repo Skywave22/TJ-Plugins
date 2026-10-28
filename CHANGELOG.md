@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### ✨ Updated — 2026-10-28 (4)
+
+| Plugin | Change |
+|---|---|
+| **Net77** v2 | **Prime Video added.** Home now starts with one row from each service - 1st Netflix (New on Netflix), 2nd Prime Video (Latest Movies), 3rd JioHotstar (Latest Releases) - followed by the rest of the Netflix rows, then the 15 other Prime Video rows, then the other Hotstar rows. Search covers all three. **Links from all three:** when you press Play, Net77 also finds the same movie or episode on the other two services (same name, same year, same season/episode) and adds their links, labelled "Netflix · Hindi [1080p]", "Prime · English [720p]", "Hotstar · Tamil [1080p]". Videos on NetMirror servers that changed their names or now sit behind the site's relays are found automatically (fixes "server did not answer" on some titles such as Black Clover and Awarapan 2). |
+| **All-in-one** | **Net77 joins All-in-one** (now 25 sites): its Netflix, Prime Video and JioHotstar titles fill those rows, and its links are added when you press Play. |
+
 ### 🆕 New — 2026-10-28 (3)
 
 | Plugin | What it is |

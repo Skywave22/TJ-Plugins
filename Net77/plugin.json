@@ -1,7 +1,7 @@
 {
   "packageName": "com.net77.skystream",
   "name": "Net77",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://net77.cc",
   "domains": [
     {
@@ -9,7 +9,7 @@
       "url": "https://net77.cc"
     }
   ],
-  "description": "Net77 (net77.cc, the original NetMirror) - Netflix and JioHotstar catalogs: Hollywood, Bollywood, Hindi dubbed, K-Drama, anime and more. 1080p / 720p / 480p HLS in every audio language the title has (Hindi, English, Tamil, Telugu, Korean, Japanese...) with English subtitles.",
+  "description": "Net77 (net77.cc, the original NetMirror) - Netflix, Prime Video and JioHotstar catalogs: Hollywood, Bollywood, Hindi dubbed, K-Drama, anime and more. 1080p / 720p / 480p HLS in every audio language the title has (Hindi, English, Tamil, Telugu, Korean, Japanese...) with English subtitles.",
   "authors": [
     "TJ-Plugins"
   ],
