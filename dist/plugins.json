@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 12,
+    "version": 13,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -400,7 +400,7 @@
   {
     "packageName": "com.net77.skystream",
     "name": "Net77",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://net77.cc",
     "domains": [
       {
@@ -408,7 +408,7 @@
         "url": "https://net77.cc"
       }
     ],
-    "description": "Net77 (net77.cc, the original NetMirror) - Netflix and JioHotstar catalogs: Hollywood, Bollywood, Hindi dubbed, K-Drama, anime and more. 1080p / 720p / 480p HLS in every audio language the title has (Hindi, English, Tamil, Telugu, Korean, Japanese...) with English subtitles.",
+    "description": "Net77 (net77.cc, the original NetMirror) - Netflix, Prime Video and JioHotstar catalogs: Hollywood, Bollywood, Hindi dubbed, K-Drama, anime and more. 1080p / 720p / 480p HLS in every audio language the title has (Hindi, English, Tamil, Telugu, Korean, Japanese...) with English subtitles.",
     "authors": [
       "TJ-Plugins"
     ],
