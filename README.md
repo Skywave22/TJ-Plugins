@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v11 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v12 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -64,7 +64,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **RiveStream** | v6 | rivestream.ru | Movies and series, Hindi first | hi, en, ta, te +3 |
 | **ScreenScape** | v2 | screenscape.me | Trending, Top 10, Netflix/Prime/JioHotstar rows; 30+ servers per title | hi, en, ta, te, ko, ja |
 | **Vidbox** | v5 | vidbox.vc | Movies and series, Hindi first | hi, en, ta, te +3 |
-| **ZXCStream** 🆕 | v1 | zxcstream.com | Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24 rows; 5 ad-free servers, Hindi/Tamil/Telugu dubs, subtitles | en, hi, ta, te |
+| **ZXCStream** 🆕 | v2 | zxcstream.com | Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24 rows; ad-free servers with Hindi dub, up to 1080p | en, hi |
 
 ### 🇮🇳 Bollywood & Hindi dubbed
 

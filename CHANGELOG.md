@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-10-28
+
+| Plugin | Change |
+|---|---|
+| **ZXCStream** v2 | Links play again instead of most servers failing. ZXCStream's server (vidstuck) allows only about 20 requests per 10 seconds per user. v1 used about 26 for one title, so the app's link check and the player then got "too many requests" and server after server failed. v2 needs about 9: one token per server (the Hindi dub reuses Orion's), Andromeda only when Orion has nothing (it is the same file), no double checks of vidstuck links, a 15-minute cache per episode, and it slows itself down when episodes are opened one after another. Ursa was removed (its video segments are refused at the source), as were the Tamil/Telugu dubs and the subtitle list (two more requests each; the player's own subtitle search still works). Links now open directly in the player, without the app's proxy, and the Orion links show their real quality (1080p / 480p). Daedalus (H.264) is listed right after Orion, for phones that can't play Orion's HEVC video. |
+| **All-in-one** v12 | Includes the ZXCStream fix. |
+
 ### 🆕 New — 2026-10-28
 
 | Plugin | What it is |

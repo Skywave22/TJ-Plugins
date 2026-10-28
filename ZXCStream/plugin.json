@@ -1,17 +1,15 @@
 {
   "packageName": "com.zxcstream.skystream",
   "name": "ZXCStream",
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://vidstuck.cc",
-  "description": "ZXCStream (zxcstream.com) - the site's catalog (Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24, Blumhouse...) with its ad-free Main Server (vidstuck): Orion (Hindi / Tamil / Telugu dubs), Andromeda, Atlas, Daedalus and Ursa, with subtitles. Hindi dub first; every link is checked before it is shown.",
+  "description": "ZXCStream (zxcstream.com) - the site's catalog (Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24, Blumhouse...) with its ad-free Main Server (vidstuck): Orion (original audio + Hindi dub, up to 1080p), Daedalus and Atlas, with subtitles. Kept under the server's rate limit so the links play.",
   "authors": [
     "TJ-Plugins"
   ],
   "languages": [
     "en",
-    "hi",
-    "ta",
-    "te"
+    "hi"
   ],
   "categories": [
     "Movie",
