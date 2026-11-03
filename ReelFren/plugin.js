@@ -3,7 +3,8 @@
  * Site: https://www.reelfren.com — free short dramas (vertical "reels") collected from ~40 apps:
  * ReelShort, DramaBox, ShortMax, NetShort, DramaWave, StoryReel, VibeShort, Melolo, FlareFlow, ...
  * plus WeTV / iQIYI dramas and anime. (The bare domain reelfren.com sits behind a Cloudflare
- * challenge; www.reelfren.com and api.reelfren.com don't.)
+ * challenge; since Nov 2026 api.reelfren.com does too, so the API is called on
+ * www.reelfren.com / proxy.reelfren.com when api.reelfren.com refuses.)
  * Flow:
  *   catalog : api.reelfren.com/api/home?provider=P&category=C&offset=N&lang=en   (one row per app)
  *   search  : api.reelfren.com/api/search?provider=P&q=Q&lang=en&offset=0      (apps in parallel)
@@ -412,10 +413,41 @@
         var r = await withTimeout(http_get(url, h), ms || 15000);
         return { status: Number((r && (r.status || r.statusCode)) || 0), body: String((r && r.body) || '') };
     }
+    // The API answers on three hosts. api.reelfren.com went behind a Cloudflare challenge
+    // (Nov 2026), so a host that answers 403/challenge/no connection/non-JSON is skipped and
+    // the next one is tried; the host that worked is remembered for later calls. A real
+    // provider error (e.g. 502) is the same on every host and is not retried.
+    var API_HOSTS = ['https://www.reelfren.com', 'https://proxy.reelfren.com', API];
+    var apiPick = 0;
+    async function getJsonOnce(url, ms) {
+        var r, e;
+        try { r = await fetchRaw(url, { 'Accept': 'application/json' }, ms); }
+        catch (x) { e = new Error(String((x && x.message) || x || 'no connection')); e.hostIssue = true; throw e; }
+        var body = String(r.body || '');
+        if (r.status !== 200) {
+            e = new Error('HTTP ' + (r.status || 'no connection'));
+            e.hostIssue = !r.status || r.status === 403 || r.status === 429 || r.status === 451 || /Just a moment|cf-mitigated|challenge-platform/i.test(body);
+            throw e;
+        }
+        try { return JSON.parse(body); } catch (x) { e = new Error('bad answer'); e.hostIssue = true; throw e; }
+    }
     async function getJson(url, ms) {
-        var r = await fetchRaw(url, { 'Accept': 'application/json' }, ms);
-        if (r.status !== 200) throw new Error('HTTP ' + (r.status || 'no connection'));
-        return JSON.parse(r.body);
+        var hi = -1;
+        API_HOSTS.forEach(function (h, i) { if (hi < 0 && url.indexOf(h + '/api/') === 0) hi = i; });
+        if (hi < 0) return getJsonOnce(url, ms);
+        var path = url.slice(API_HOSTS[hi].length);
+        var order = [hi === API_HOSTS.length - 1 ? apiPick : hi];   // api.reelfren.com = 'any host'; www/proxy asked for explicitly go first
+        for (var k = 0; k < API_HOSTS.length; k++) if (order.indexOf(k) < 0) order.push(k);
+        var err, t0 = Date.now();
+        for (var n = 0; n < order.length; n++) {
+            if (n > 0 && Date.now() - t0 > (ms || 15000) * 0.6) break;   // slow provider, not a host problem
+            try {
+                var j = await getJsonOnce(API_HOSTS[order[n]] + path, ms);
+                if (hi === API_HOSTS.length - 1 || order[n] !== hi) apiPick = order[n];
+                return j;
+            } catch (e) { err = e; if (!e.hostIssue) throw e; }
+        }
+        throw err;
     }
     function qs(o) {
         return Object.keys(o).filter(function (k) { return o[k] !== undefined && o[k] !== null && o[k] !== ''; })
@@ -424,7 +456,7 @@
     function asset(u) {   // same rule as the site's backendApiAssetUrl()
         u = String(u || '');
         if (u.indexOf('/api/proxy/') === 0) return PROXY + u;
-        if (u.indexOf('/api/') === 0) return API + u;
+        if (u.indexOf('/api/') === 0) return API_HOSTS[apiPick] + u;
         if (u.indexOf('//') === 0) return 'https:' + u;
         return u;
     }
@@ -454,6 +486,7 @@
     // Item url: SITE/drama/<provider>/<id-slug>?lang=en#{"t":title,"c":cover,"n":episodes}
     function toItem(d) {
         if (!d || !d.id || !d.provider) return null;
+        if (/测试|測試/.test(String(d.title || ''))) return null;   // apps' internal test entries (never play)
         var title = cleanTitle(d.title);
         var meta = { t: title, c: d.cover || '' };
         if (d.episodes) meta.n = d.episodes;
@@ -653,7 +686,7 @@
             var ep = it.ep || 1;
             // api.reelfren.com server 1, the website's copy and server 2 at the same time (a provider
             // that is down takes ~13 s to fail); server 1 answers are preferred when both arrive
-            var tries = [[API, '1'], [SITE, '1'], [API, '2']];
+            var tries = [[API_HOSTS[0], '1'], [API_HOSTS[1], '1'], [API_HOSTS[0], '2']];
             var lastErr = '';
             var info = await new Promise(function (resolve) {
                 var left = tries.length, got = [];

@@ -662,7 +662,7 @@
     // Since Oct 2026 every API call needs a fresh nonce (?_n=<16 random bytes, base64url>) and
     // answers {v:2, n, d}: d = base64url(iv[12] | AES-256-GCM ciphertext | tag[16]),
     // key = SHA-256("<n>|" + VN_SECRET). Decrypted with the pure-JS SHA-256/AES below.
-    const VN_SECRET = "F9k2mR8vL4qP7wY1zN0fG3bS6tH5jC8d_x4R7vN2mP9qL1";
+    const VN_SECRET = "K3p8vQ2mX9rL5wZ0fN7bG1sH4tJ6dC9_y8S3wM1nQ5pL2"; // rotated Nov 2026
 
     function utf8Decode(bytes) {
         let out = "", i = 0;

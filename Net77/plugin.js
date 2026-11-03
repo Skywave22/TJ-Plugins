@@ -440,6 +440,75 @@
         }
         throw new Error("Could not open a NetMirror session (net52.cc/verify.php gave no cookie). The site may be down - try again in a minute.");
     }
+    // ── verified app session (Netflix) ──
+    // Since Nov 2026 NetMirror only plays Netflix for a session that went through the app's
+    // "ads" check: GET /mobile/home?app=1 (data-addhash) -> open the userver link -> POST
+    // /mobile/verify2.php until it says "All Done" (~30-50 s). The cookie then lasts ~15 h,
+    // so it is saved (app preference "net77_vsess") and reused for 12 h; opening a Netflix
+    // title starts the check in the background so playing is usually instant.
+    const APP_UA2 = "Mozilla/5.0 (Linux; Android 13; Pixel 5 Build/TQ3A.230901.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/149.0.7827.91 Safari/537.36 /OS.Gatu v3.0";
+    const APP_XRW = "app.netmirror.netmirrornew";
+    const VSESS_TTL = 12 * 3600000;
+    let VSESS = null, VSESS_P = null;
+    function pause(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function cookieVal(headers, name) {
+        if (!headers) return "";
+        let raw = headers["set-cookie"] || headers["Set-Cookie"] || "";
+        if (Array.isArray(raw)) raw = raw.join("; ");
+        const m = String(raw).match(new RegExp(name + "=([^;,\\s]+)", "i"));
+        return m ? m[1] : "";
+    }
+    async function savedVSess() {
+        if (VSESS && Date.now() - VSESS.t < VSESS_TTL) return VSESS;
+        try {
+            if (typeof getPreference === "function") {
+                const v = parseJson(await withTimeout(Promise.resolve(getPreference("net77_vsess")), 1500));
+                if (v && v.h && Date.now() - v.t < VSESS_TTL) { VSESS = v; return v; }
+            }
+        } catch (_) {}
+        return null;
+    }
+    function dropVSess() {
+        VSESS = null;
+        try { if (typeof setPreference === "function") setPreference("net77_vsess", ""); } catch (_) {}
+    }
+    async function openVSess() {
+        const hx = { "User-Agent": APP_UA2, "X-Requested-With": APP_XRW };
+        const home = await withTimeout(Promise.resolve(http_get(APP + "/mobile/home?app=1", hx)), 15000);
+        const html = String((home && home.body) || "");
+        const am = html.match(/data-addhash\s*=\s*["']([^"']+)["']/i);
+        if (!am) throw new Error("NetMirror's app page gave no check code");
+        const addhash = am[1];
+        const ck = cookieVal(home.headers, "addhash");
+        const sub = (html.match(/Vsite2\s*=\s*["']([a-z0-9-]+)["']/i) || [])[1] || "userver";
+        const qn = (html.match(/Qury\s*=\s*["']([A-Za-z0-9_]+)["']/i) || [])[1] || "ffr455";
+        const dom = APP.replace(/^https?:\/\//, "");
+        try { await withTimeout(Promise.resolve(http_get("https://" + sub + "." + dom + "/?" + qn + "=" + encodeURIComponent(addhash) + "&a=y&t=" + Math.random(), hx)), 12000); } catch (_) {}
+        const vh = { "User-Agent": APP_UA2, "X-Requested-With": "XMLHttpRequest", "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": APP, "Referer": APP + "/mobile/home?app=1", "Cookie": ck ? "addhash=" + ck : "" };
+        const t0 = Date.now();
+        while (Date.now() - t0 < 75000) {
+            await pause(5000);
+            let r = null;
+            try { r = await withTimeout(Promise.resolve(http_post(APP + "/mobile/verify2.php", vh, "verify=" + encodeURIComponent(addhash))), 12000); } catch (_) { continue; }
+            const j = parseJson(r && r.body);
+            if (j && j.statusup === "All Done") {
+                const h = cookieVal(r.headers, "t_hash_t");
+                if (!h) throw new Error("NetMirror's check finished without a session");
+                VSESS = { h: h, t: Date.now() };
+                try { if (typeof setPreference === "function") setPreference("net77_vsess", JSON.stringify(VSESS)); } catch (_) {}
+                return VSESS;
+            }
+        }
+        throw new Error("NetMirror's app check did not finish in time");
+    }
+    async function vSession() {
+        const v = await savedVSess();
+        if (v) return v;
+        if (!VSESS_P) VSESS_P = openVSess().then(function (x) { VSESS_P = null; return x; }, function (e) { VSESS_P = null; throw e; });
+        return VSESS_P;
+    }
+
     // details/home/search are fine with a session up to ~1 hour old; playing needs a fresh one
     async function session(maxAgeMs) {
         if (SESSION && Date.now() - SESSION.t < (maxAgeMs || 3600000)) return SESSION;
@@ -648,6 +717,7 @@
             const p = parseUrl(url);
             if (!p) return cb({ success: false, errorCode: "PARSE_ERROR", message: "Unknown Net77 link - open the title again from Net77's home or search." });
             const o = p.o, cfg = OTT[o];
+            if (o === "nf") vSession().catch(function () {});   // start Netflix's session check early
             const d = await appJson(cfg.post + "?id=" + encodeURIComponent(p.id) + "&t=" + unix(), o, 25000);
             if (!d || d.status !== "y" || !d.title) {
                 return cb({ success: false, errorCode: "NOT_FOUND", message: "NetMirror has no details for this title right now" + (d && d.error ? " (" + d.error + ")" : "") + "." });
@@ -761,7 +831,37 @@
         deu: "German", ita: "Italian", por: "Portuguese", ara: "Arabic", tur: "Turkish", tha: "Thai", ind: "Indonesian", zho: "Chinese", chi: "Chinese" };
 
     // one signed playlist + master, with a fresh session; null result => {err}
+    // Netflix: playlist + master through the verified app session (see vSession)
+    async function signedMasterApp(p, o, epId) {
+        let last = "";
+        for (let attempt = 0; attempt < 2; attempt++) {
+            let vs;
+            try { vs = await vSession(); } catch (e) { return { err: "Net77 could not open a Netflix session (" + String((e && e.message) || e) + ")" }; }
+            const cookie = "t_hash_t=" + vs.h + "; ott=" + o + "; hd=on";
+            const hx = { "User-Agent": APP_UA2, "X-Requested-With": APP_XRW, "Referer": APP + "/mobile/home?app=1", "Cookie": cookie };
+            const pr = await withTimeout(Promise.resolve(http_get(APP + "/mobile/playlist.php?id=" + encodeURIComponent(epId) + "&t=" + encodeURIComponent(p.t || "") + "&tm=" + unix(), hx)), 20000).catch(function () { return null; });
+            let pl = parseJson(pr && pr.body);
+            if (pl && !Array.isArray(pl)) pl = [pl];
+            const item = pl && pl[0];
+            const sources = (item && item.sources) || [];
+            if (!sources.length) { last = "NetMirror returned no video for this " + (p.ep && p.ep !== p.id ? "episode" : "title") + (pr ? " (HTTP " + pr.status + ")" : ""); continue; }
+            const file = String(sources[0].file || "");
+            if (/in=unknown/i.test(file)) { last = "NetMirror did not accept the session"; dropVSess(); continue; }
+            const mUrl = /^https?:/.test(file) ? file : APP + file;
+            const mr = await withTimeout(Promise.resolve(http_get(mUrl, hx)), 20000).catch(function () { return null; });
+            const master = parseMaster(mr && mr.body);
+            if (!master.video.length) {
+                if (mr && Number(mr.status) === 200 && /#EXTM3U/.test(String(mr.body || ""))) return { err: "NetMirror has no video for this " + (p.ep && p.ep !== p.id ? "episode" : "title") + " yet (it is listed, but the video has not been added - often a 'coming soon' title)" };
+                last = "NetMirror's playlist was empty" + (mr ? " (HTTP " + mr.status + ")" : ""); dropVSess(); continue;
+            }
+            if (master.video[0].path.indexOf("/" + PROMO_ID + "/") >= 0) { last = "NetMirror sent its promo clip instead of the video (session refused)"; dropVSess(); continue; }
+            return { item: item, master: master, file: file, cookie: cookie };
+        }
+        return { err: last };
+    }
+
     async function signedMaster(p, o, epId) {
+        if (o === "nf") return signedMasterApp(p, o, epId);
         const cfg = OTT[o];
         let last = "";
         for (let attempt = 0; attempt < 2; attempt++) {

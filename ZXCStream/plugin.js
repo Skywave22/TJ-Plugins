@@ -626,7 +626,7 @@
     // ─── vidstuck.cc = zxcstream.com's "Main Server" (its own ad-free player) ───
     // zxcstream.com/watch/<type>/<id> embeds vidstuck.cc/embed/... Its player asks the
     // vidstuck backend two things per server:
-    //   POST /backend/qwerty {id,type,server[,s,e]}            -> { ts, token }
+    //   POST /backend/raider {id,type,server[,s,e]}   (renamed from /backend/qwerty, Nov 2026)            -> { ts, token }
     //   GET  /backend/servers/<server>?id&type&server&ts&token&title&year&date[...]
     // Field names are obfuscated (map below, from their bundle) and every link comes back
     // CryptoJS-AES encrypted with a fixed passphrase. The backend wants a browser
@@ -644,11 +644,12 @@
     // 403 to every video segment, so it is left out.
     const VS = "https://vidstuck.cc";
     const VS_PASS = "7f4c9e2a81d63b05c4f7a9e8126d3b50e1a8c7f23d9465ab0c6e9f1d4a7b832c";
+    // Field names as in vidstuck's player bundle (Nov 2026: every name lost one character).
     const F = {
-        id: "a7f39c821d604e5b91e547b", type: "c81b306d28147a35632e816b", path: "6b491e258d392e7561a9384c",
-        s: "d8427b5c38a2f957c3613e85b", e: "91c6ea753d1f785c92346b713d", ts: "61d9a5274c8e3b2f38c291e6",
-        token: "c492f7a183d01e436c538a716d", title: "5e28c9147a06d1e29f3674b392a1", year: "b731e6c94f8675f8341c306e",
-        date: "e164931a39e5814b3027", latest: "e9543416ad739e5814b3027", imdb: "f35a81943265e871c4933a725f"
+        id: "a7f39c821d604e5b91e57b", type: "c81306d28147a35632e816b", path: "6b491e258392e7561a9384c",
+        s: "d8427b5c382f957c3613e85b", e: "91c6ea75d1f785c92346b713d", ts: "61d9a5274c8e3b2f38291e6",
+        token: "c492f7a183d01e36c538a716d", title: "5e28c9147a06de29f3674b392a1", year: "b731e6c94f867f8341c306e",
+        date: "e16493139e5814b3027", latest: "e953416ad739e5814b3027", imdb: "f35a8194265e871c4933a725f"
     };
     const SV = {
         orion:     { id: "orion",     name: "Orion" },
@@ -791,7 +792,7 @@
         if (c && Date.now() - c.t < 4 * 60000) return c.tk;
         const body = {}; body[F.id] = String(p.id); body[F.type] = p.type; body[F.path] = path;
         if (p.type === "tv") { body[F.s] = Number(p.s) || 1; body[F.e] = Number(p.e) || 1; }
-        const r = await vsReq("POST", VS + "/backend/qwerty", JSON.stringify(body));
+        const r = await vsReq("POST", VS + "/backend/raider", JSON.stringify(body));
         if (!r || Number(r.status) >= 400 || !r.body) return null;
         let tk = null;
         try { tk = JSON.parse(r.body); } catch (_) {}

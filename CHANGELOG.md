@@ -2,6 +2,20 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-03 (2)
+
+Every plugin was re-checked in the app harness (home, search, details, streams, links probed). These were broken and are fixed:
+
+| Plugin | Change |
+|---|---|
+| **Net77** v3 | **Netflix plays again.** NetMirror stopped playing Netflix titles for normal sessions (every Netflix link came back empty). Net77 now opens the same verified session the NetMirror app uses. The first Netflix play after installing (or every 12 hours) takes about 40 seconds while the session is checked; after that Netflix links start at once. Opening any Netflix title starts the check in the background, so it is usually ready before you press Play. Prime Video and JioHotstar are unchanged. Tested: Jawan (Extended Cut) 1080p/720p/480p, The Great Indian Kapil Show S1E1. |
+| **MoviesHubHD** v3 | **Streams are back.** VidNest changed its secret key, so every title said "No MoviesHubHD server has this right now". Updated - Resident Evil 14 links, Dead-End Job S1E1 10 links. |
+| **ReelFren** v2 | **Home and search work again.** ReelFren's API address (api.reelfren.com) now asks for a Cloudflare check; the plugin now uses the website's own copy of the API (with the proxy as backup) and switches automatically if one stops answering. Also hides the apps' internal "test" entries that never play. |
+| **ZXCStream** v3 | **Streams are back.** Its video source (vidstuck) renamed its API and every field name; updated. Resident Evil 3 links, The Gilded Age S1E1 3 links. |
+| **All-in-one** | Rebuilt with the fixed Net77, MoviesHubHD and ZXCStream. |
+
+**Still not working (site-side, nothing to fix in the plugin):** DesiSerialOnline (desiserialonline.su is overloaded and not answering), CineFreak (needs SkyStream v2.9.0+ for its Cloudflare check), 321MoviesUK (site offline), Movies4u (domain retired). NetMirror's "NM Hub" links may be rate-limited by its server; "NM Direct" links play.
+
 ### 🆕 New — 2026-11-03
 
 | Plugin | What it is |
