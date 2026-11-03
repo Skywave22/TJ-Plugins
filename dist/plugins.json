@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 14,
+    "version": 15,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -404,7 +404,7 @@
   {
     "packageName": "com.movieshubhd.skystream",
     "name": "MoviesHubHD",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://www.movieshubhd.com",
     "description": "MoviesHubHD (movieshubhd.com) - the site's catalog (Latest Releases, Trending, Hindi Movies, Top Rated Movies & TV, genres) with direct streams from its player network: Hindi + English tracks, multi-audio, up to 4K, with subtitles where available. Hindi first; every link is checked before it is shown.",
     "authors": [
@@ -423,7 +423,7 @@
   {
     "packageName": "com.net77.skystream",
     "name": "Net77",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://net77.cc",
     "domains": [
       {
@@ -519,7 +519,7 @@
   {
     "packageName": "com.reelfren.skystream",
     "name": "ReelFren",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://www.reelfren.com",
     "domains": [
       {
@@ -680,7 +680,7 @@
   {
     "packageName": "com.zxcstream.skystream",
     "name": "ZXCStream",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://vidstuck.cc",
     "description": "ZXCStream (zxcstream.com) - the site's catalog (Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24, Blumhouse...) with its ad-free Main Server (vidstuck): Orion (original audio + Hindi dub, up to 1080p), Daedalus and Atlas, with subtitles. Kept under the server's rate limit so the links play.",
     "authors": [
