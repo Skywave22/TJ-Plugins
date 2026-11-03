@@ -23,7 +23,7 @@ const GROUP = {
   KatDrama: "drama", KDMaza: "drama",
 };
 // plugins with a TMDB catalog: clean titles, posters and cast, so preferred for the details page
-const TMDB = new Set(["Cinezo", "ScreenScape", "CineHD", "CineJoy", "Fmovies", "RiveStream", "Vidbox", "321MoviesUK", "MoviesHubHD", "ZXCStream"]);
+const TMDB = new Set(["Cinezo", "Bingr", "ScreenScape", "CineHD", "CineJoy", "Fmovies", "RiveStream", "Vidbox", "321MoviesUK", "MoviesHubHD", "ZXCStream"]);
 
 const dirs = fs.readdirSync(ROOT, { withFileTypes: true })
   .filter((d) => d.isDirectory() && !d.name.startsWith(".") && !SKIP.has(d.name))

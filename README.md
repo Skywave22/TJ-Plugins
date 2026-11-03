@@ -35,7 +35,7 @@
 | | |
 |---|---|
 | 🏠 **One home page** | Trending, Latest Movies and Series, Hindi, Hindi Dubbed, Netflix, Prime, K-Drama, Anime, Hindi Serials and more, filled from every site. The same title from different sites is one card. |
-| 🔎 **One search** | Searches all 25 sites at once (about 2 seconds) and merges the results. |
+| 🔎 **One search** | Searches all 26 sites at once (about 2 seconds) and merges the results. |
 | ▶️ **Every link** | When you press Play, it finds the same movie or episode on **every site that has it** and lists all working links together, 1080p and Hindi first. A popular movie often gets 50 to 70 links from 10+ sites. Collecting them takes 10 to 40 seconds. |
 
 | Plugin | Version | What you get | Audio |
@@ -53,6 +53,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | Plugin | Version | Site | What you get | Audio |
 |---|:-:|---|---|---|
 | **321Movies UK** | v5 | 321movies.co.uk | Movies and series from a TMDB catalog | en, hi |
+| **Bingr** 🆕 | v1 | bingr.one | Trending, Popular, Top Rated, Action, Horror, Anime, Hindi rows; all of its servers: Prism multi-audio (Hindi, Telugu, Tamil, English, French…) up to 1080p, Edge, Nimbus, Citadel (Hindi/Tamil/Telugu/Kannada dubs); subtitles in up to 20 languages | hi, en, ta, te, kn +more |
 | **CineHD** | v11 | cinehd.vc | Movies and series, many servers per title, Hindi servers | en |
 | **CineJoy** | v6 | cinejoy.pk | Movies and series with Netflix and Prime rows | en |
 | **Cinezo** | v2 | cinezo.gd | Trending, Netflix, Prime, HBO, Disney+ rows; Hindi dubs, multi-audio, up to 4K | hi, en, ta, te |

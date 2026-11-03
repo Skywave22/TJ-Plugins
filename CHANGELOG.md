@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🆕 New — 2026-11-03
+
+| Plugin | What it is |
+|---|---|
+| **Bingr** v1 | [bingr.one](https://bingr.one/home) - movies, TV shows and anime with the site's home rows (Trending, Popular Movies, Popular TV Shows, Blockbuster Action, Top Rated Movies / TV / Anime, Hindi Movies, Horror, Crime & Thriller, Sci-Fi & Fantasy, Action Anime, Romance, Comedy) and search. Full details from TMDB: description, cast, trailer, every season and episode with thumbnails, recommendations. Streams from **all** of the site's servers: **Prism** (multi-audio - Hindi, Original, Telugu, Tamil, French, Russian, Portuguese… up to 1080p), **Edge** (1080p), **Nimbus** and **Citadel** (Hindi, Tamil, Telugu, Kannada and English dubs in 720p / 480p). Hindi links first; subtitles in up to 20 languages; every link (and its first quality level) is checked before it is shown. In tests: Inception 14 links, Breaking Bad S1E1 10, Jawan 9, Demon Slayer S1E1 9 (Hindi dub + Japanese). Also inside All-in-one. |
+| **All-in-one** | **Bingr joins All-in-one** (now 26 sites). |
+
 ### ✨ Updated — 2026-10-28 (4)
 
 | Plugin | Change |

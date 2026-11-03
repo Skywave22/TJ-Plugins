@@ -1,0 +1,22 @@
+{
+  "packageName": "com.bingr.skystream",
+  "name": "Bingr",
+  "version": 1,
+  "baseUrl": "https://bingr.one",
+  "description": "Bingr (bingr.one) - movies, TV shows and anime with the site's home rows (Trending, Popular, Top Rated, Action, Horror, Crime & Thriller, Sci-Fi, Romance, Comedy, Anime, Hindi). Streams from all of its servers: Prism (multi-audio: Hindi, Telugu, Tamil, English, French and more, up to 1080p), Edge, Nimbus and Citadel (Hindi/Tamil/Kannada/Telugu dubs), with up to 20 subtitle languages. Hindi first; every link is checked before it is shown.",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "hi",
+    "en",
+    "ta",
+    "te",
+    "kn"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries",
+    "Anime"
+  ]
+}
