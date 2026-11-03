@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 13,
+    "version": 14,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -44,6 +44,29 @@
     ],
     "isAdult": false,
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.allinone.tjplugins.sky"
+  },
+  {
+    "packageName": "com.bingr.skystream",
+    "name": "Bingr",
+    "version": 1,
+    "baseUrl": "https://bingr.one",
+    "description": "Bingr (bingr.one) - movies, TV shows and anime with the site's home rows (Trending, Popular, Top Rated, Action, Horror, Crime & Thriller, Sci-Fi, Romance, Comedy, Anime, Hindi). Streams from all of its servers: Prism (multi-audio: Hindi, Telugu, Tamil, English, French and more, up to 1080p), Edge, Nimbus and Citadel (Hindi/Tamil/Kannada/Telugu dubs), with up to 20 subtitle languages. Hindi first; every link is checked before it is shown.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "hi",
+      "en",
+      "ta",
+      "te",
+      "kn"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries",
+      "Anime"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.bingr.skystream.sky"
   },
   {
     "packageName": "com.cinefreak.skystream",
