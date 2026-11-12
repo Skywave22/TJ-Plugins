@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🆕 New — 2026-11-04
+
+| Plugin | What it is |
+|---|---|
+| **AniHype** v1 | [anihype.sbs](https://anihype.sbs/index.php) - anime with the site's own rows (Trending, Airing now, Latest releases, Most popular, Highest rated, Top rated this year, Coming soon, Movies, Action, Fantasy, Romance, Comedy, Sci-Fi, All-time favourites), search and episode titles + thumbnails. Every one of its six servers is turned into a direct link: **TryEmbed** (Japanese with English subtitles and English Dub, 1080p), **Katana** (English Sub, 1080p), **Uqload** (one stream with Japanese and English audio), **Orion** (Japanese, English, Hindi, Tamil, Telugu, Malayalam, Kannada, French; HEVC, so it needs a phone/TV that plays HEVC) and **Mikaza** (Hindi Dub). Usually 5-13 links per episode; every link is checked before it is shown. |
+| **All-in-one** v16 | **AniHype joins All-in-one** (now 27 sites) - anime episodes get AniHype's Sub, Dub and Hindi links next to the other sites. |
+
 ### 🔧 Fixed — 2026-11-03 (2)
 
 Every plugin was re-checked in the app harness (home, search, details, streams, links probed). These were broken and are fixed:

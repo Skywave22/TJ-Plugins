@@ -19,7 +19,7 @@ const GROUP = {
   Vidbox: "movies", ZXCStream: "movies", Net77: "movies",
   CineFreak: "hindi", KatMovieHD: "hindi", Movies4u: "hindi", SSRMovies: "hindi",
   DesiSerialOnline: "serial", DesiSerials: "serial",
-  DesiDubAnime: "anime", PikaHD: "anime", RareAnimes: "anime", SubDubAnime: "anime",
+  AniHype: "anime", DesiDubAnime: "anime", PikaHD: "anime", RareAnimes: "anime", SubDubAnime: "anime",
   KatDrama: "drama", KDMaza: "drama",
 };
 // plugins with a TMDB catalog: clean titles, posters and cast, so preferred for the details page

@@ -1,0 +1,21 @@
+{
+  "packageName": "com.anihype.skystream",
+  "name": "AniHype",
+  "version": 1,
+  "baseUrl": "https://anihype.sbs",
+  "description": "AniHype (anihype.sbs) - anime with the site's rows (Trending, Airing now, Latest releases, Most popular, Highest rated, Top rated this year, Coming soon, Movies, Action, Fantasy, Romance, Comedy, Sci-Fi, All-time favourites), search and episode titles. Streams from all six of its servers: TryEmbed (Sub + English Dub, 1080p), Katana (Sub, 1080p), Uqload (Japanese + English audio), Orion (Japanese, English, Hindi, Tamil, Telugu, Malayalam, Kannada, French - HEVC) and Mikaza (Hindi Dub), with English subtitles. Every link is checked before it is shown.",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "ja",
+    "en",
+    "hi",
+    "ta",
+    "te"
+  ],
+  "categories": [
+    "Anime",
+    "AnimeMovie"
+  ]
+}
