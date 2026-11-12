@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v21 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v22 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -90,7 +90,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 |---|:-:|---|---|---|
 | **AniHype** 🆕 | v1 | anihype.sbs | Trending, Airing now, Latest releases, Top rated, Movies and genre rows, episode titles; all six of its servers: TryEmbed Sub + English Dub (1080p), Katana Sub (1080p), Uqload (Japanese + English audio), Orion (Japanese, English, Hindi, Tamil, Telugu, Malayalam, Kannada, French - HEVC) and Mikaza Hindi Dub | ja, en, hi, ta, te |
 | **DesiDubAnime** | v3 | desidubanime.me | Hindi, Tamil and Telugu dubbed anime | hi, ta, te |
-| **PikaHD** | v4 | pikahd.co | Anime in Hindi dubbed, dual audio and English subbed | hi, en, ja |
+| **PikaHD** | v5 | pikahd.co | Anime in Hindi dubbed, dual audio and English subbed | hi, en, ja |
 | **RareAnimes** | v9 | rareanimes.mov | Hindi, Tamil, Telugu and Malayalam dubbed anime series and movies | hi, ta, te, ml |
 | **SubDubAnime** | v7 | subdubanime.site | Hindi and English dubbed anime, up to 1080p | hi, en |
 
@@ -98,7 +98,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 
 | Plugin | Version | Site | What you get | Audio |
 |---|:-:|---|---|---|
-| **KatDrama** | v2 | katdrama.my | Korean and Chinese dramas in Hindi and dual audio | hi, en, ko, zh |
+| **KatDrama** | v3 | katdrama.my | Korean and Chinese dramas in Hindi and dual audio | hi, en, ko, zh |
 | **KDramaMaza** | v11 | kdramasmaza.net | Korean, Chinese, Turkish and Japanese dramas, Hindi/Urdu dubbed | hi, ur, en |
 
 ### 📱 Short dramas

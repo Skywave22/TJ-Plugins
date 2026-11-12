@@ -741,7 +741,8 @@
     // (fastdl-*.pages.dev/?url=<direct Google file URL>) that the player can't play: unwrap it.
     async function unwrapInstant(u) {
         try {
-            var r = await withTimeout(http_get(u, { 'User-Agent': UA, 'Range': 'bytes=0-0' }), 12000);
+            // without the GDFlix page as Referer busycdn sends the visitor to an ad page instead of the file
+            var r = await withTimeout(http_get(u, { 'User-Agent': UA, 'Range': 'bytes=0-0', 'Referer': 'https://' + GDFLIX_HOST + '/' }), 12000);
             var fu = String((r && r.finalUrl) || '');
             var m = fu.match(/[?&]url=([^&#]+)/);
             if (m) { var inner = decodeURIComponent(m[1]); if (/^https?:\/\//i.test(inner)) return inner; }
@@ -993,6 +994,10 @@
         var out = [];
         var re = /<a[^>]+href=["'](?:https?:\/\/links\.kmhd\.(?:me|eu))?\/file\/([A-Za-z0-9_-]+)["'][^>]*>([\s\S]*?)<\/a>/gi, m;
         while ((m = re.exec(html))) out.push({ id: m[1], label: stripTags(m[2]).replace(/\s+/g, ' ').trim(), at: m.index });
+        // older posts (e.g. Jujutsu Kaisen S1): per-episode GDFlix links through gd.kmhd.me / gdlink.dev -> "g:<id>"
+        var gre = /<a[^>]+href=["']https?:\/\/(?:gd\.kmhd\.(?:me|eu)|gdlink\.dev|(?:new\d*\.)?gdflix\.[a-z]+)\/file\/([A-Za-z0-9]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        while ((m = gre.exec(html))) out.push({ id: 'g:' + m[1], label: stripTags(m[2]).replace(/\s+/g, ' ').trim(), at: m.index });
+        out.sort(function (a, b) { return a.at - b.at; });
         return out;
     }
 
@@ -1142,6 +1147,16 @@
 
     async function streamsForFile(fileId, label, codes) {
         var out = [];
+        if (/^g:/.test(String(fileId))) {   // a GDFlix file linked directly by the post
+            var gq = qualityFromText(label) || '';
+            var gg = await resolveGdflix('https://' + GDFLIX_HOST + '/file/' + String(fileId).slice(2));
+            (gg.instant || []).forEach(function (u) { out.push({ url: u, source: 'GDFlix Instant' + (gq ? ' • ' + gq : ''), headers: { 'User-Agent': UA }, rank: 2 }); });
+            (gg.urls || []).forEach(function (u) {
+                if (/drive\.google\.com\/open/.test(u)) return;
+                out.push({ url: u, source: 'GDFlix' + (gq ? ' • ' + gq : ''), headers: { 'User-Agent': UA }, rank: 3 });
+            });
+            return out;
+        }
         var mirrors = {};
         var res = await Promise.all(codes.map(function (c) {
             return touchMe(fileId, c).then(function (l) { return [c, l]; }, function () { return [c, null]; });

@@ -743,7 +743,8 @@
     // (fastdl-*.pages.dev/?url=<direct Google file URL>) that the player can't play: unwrap it.
     async function unwrapInstant(u) {
         try {
-            var r = await withTimeout(http_get(u, { 'User-Agent': UA, 'Range': 'bytes=0-0' }), 12000);
+            // without the GDFlix page as Referer busycdn sends the visitor to an ad page instead of the file
+            var r = await withTimeout(http_get(u, { 'User-Agent': UA, 'Range': 'bytes=0-0', 'Referer': 'https://' + GDFLIX_HOST + '/' }), 12000);
             var fu = String((r && r.finalUrl) || '');
             var m = fu.match(/[?&]url=([^&#]+)/);
             if (m) { var inner = decodeURIComponent(m[1]); if (/^https?:\/\//i.test(inner)) return inner; }

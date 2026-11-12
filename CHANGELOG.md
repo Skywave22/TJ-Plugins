@@ -2,6 +2,14 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-04 (8)
+
+| Plugin | Change |
+|---|---|
+| **PikaHD** v5 | Older posts with per-episode GDFlix links now list their episodes (Jujutsu Kaisen Season 1 showed only Seasons 2-3, and Season 2 was missing 5 episodes). |
+| **PikaHD** v5, **KatDrama** v3 | "GDFlix Instant" links play again - they were opening an ad page instead of the file (e.g. Squid Game S3E1 on KatDrama: 1 link → 6). |
+| **All-in-one** v22 | Rebuilt with PikaHD v5 and KatDrama v3. |
+
 ### 🔧 Fixed — 2026-11-04 (7)
 
 | Plugin | Change |

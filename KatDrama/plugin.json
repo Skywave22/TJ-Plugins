@@ -1,7 +1,7 @@
 {
   "packageName": "com.katdrama.skystream",
   "name": "KatDrama",
-  "version": 2,
+  "version": 3,
   "baseUrl": "https://new.katdrama.my",
   "domains": [
     {
