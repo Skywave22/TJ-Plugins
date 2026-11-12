@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-04 (4)
+
+| Plugin | Change |
+|---|---|
+| **KDramaMaza** v11 | Cards no longer show the upload date as the release year (e.g. "100 Days My Prince" showed 2026 instead of 2018). |
+| **All-in-one** v19 | Rebuilt with KDramaMaza v11. |
+
 ### ✨ Updated — 2026-11-04 (3)
 
 | Plugin | Change |

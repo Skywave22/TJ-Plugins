@@ -445,7 +445,7 @@
             posterUrl: thumb,
             bannerUrl: thumb,
             type: "tv",
-            year: yearOf(p.date),
+            // no year: the post date is the upload date, not the release year ("100 Days My Prince" 2018 posted 2026)
             description: [metaLine(parseTitle(p.title && p.title.rendered)), stripTags(p.excerpt && p.excerpt.rendered).slice(0, 300)].filter(Boolean).join("\n\n")
         });
     }
@@ -761,7 +761,6 @@
                 posterUrl: poster,
                 bannerUrl: poster,
                 type: "tv",
-                year: yearOf((html.match(/datePublished["']?\s*[:=]\s*["'](\d{4})/) || [])[1]),
                 description: [desc, metaLine(pt)].filter(Boolean).join("\n\n"),
                 episodes: episodes
             });

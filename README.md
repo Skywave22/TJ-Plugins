@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v18 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v19 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -99,7 +99,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | Plugin | Version | Site | What you get | Audio |
 |---|:-:|---|---|---|
 | **KatDrama** | v2 | katdrama.my | Korean and Chinese dramas in Hindi and dual audio | hi, en, ko, zh |
-| **KDramaMaza** | v10 | kdramasmaza.net | Korean, Chinese, Turkish and Japanese dramas, Hindi/Urdu dubbed | hi, ur, en |
+| **KDramaMaza** | v11 | kdramasmaza.net | Korean, Chinese, Turkish and Japanese dramas, Hindi/Urdu dubbed | hi, ur, en |
 
 ### 📱 Short dramas
 
