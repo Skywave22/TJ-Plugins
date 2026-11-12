@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v23 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v24 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -61,7 +61,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **HiCine** | v12 | hicine.sbs | Bollywood and Hollywood, web series, K-drama and anime | hi, en |
 | **HiStream** 🆕 | v1 | histream.lol | Trending, Bollywood, Hindi series, Anime and 9 platform rows (Netflix, Prime, JioHotstar, ZEE5, SonyLIV…); Hindi first, up to 4K | hi, en, ta, te, ko, ja |
 | **MoviesHubHD** | v3 | movieshubhd.com | Latest, Trending, Hindi and Top Rated rows; direct streams with subtitles | hi, en |
-| **Net77** 🆕 | v3 | net77.cc | The original NetMirror: Netflix, Prime Video and JioHotstar rows (in that order); links from all three for the same title; 1080p HLS in every audio language of the title, English subtitles | hi, en, ta, te, ko, ja +more |
+| **Net77** 🆕 | v4 | net77.cc | The original NetMirror: Netflix, Prime Video and JioHotstar rows (in that order); links from all three for the same title; 1080p HLS in every audio language of the title, English subtitles | hi, en, ta, te, ko, ja +more |
 | **NetMirror** | v11 | netmirror.center | Netflix-style catalog: Bollywood, Hollywood, anime, reality TV | en, hi |
 | **RiveStream** | v6 | rivestream.ru | Movies and series, Hindi first | hi, en, ta, te +3 |
 | **ScreenScape** | v2 | screenscape.me | Trending, Top 10, Netflix/Prime/JioHotstar rows; 30+ servers per title | hi, en, ta, te, ko, ja |

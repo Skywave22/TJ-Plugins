@@ -113,6 +113,8 @@ function parseTitle(raw) {
     if (year) c = c.replace(new RegExp('\\s' + year + '\\b.*$'), ' ');
     c = c.replace(/\s+\d{1,2}(st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b.*$/i, ' ');
     c = c.replace(/(^|[^e]\s)movie\s*$/i, '$1');           // "Maa Tujhhe Salaam Movie", but keep "... The Movie"
+    c = c.replace(/[\s:–-]+(tamil|telugu|hindi|kannada|malayalam|bengali|marathi)\s+(extended|director'?s|uncut)\s+(cut|edition|version)\s*$/i, ' altcut');   // a language-only cut is another release
+    c = c.replace(/^(.{2,}?)[\s:–-]+(extended|director'?s|uncut|unrated)\s+(cut|edition|version)\s*$/i, '$1');   // "Jawan: Extended Cut" = Jawan (not "Jawan: Tamil Extended Cut")
     var clean = c.replace(TAG_RE, function (x, w, off) { return off > 0 ? ' ' : x; })
         .replace(/[(\[{]\s*[)\]}]/g, ' ').replace(/[(\[{][^)\]}]*$/, ' ').replace(/[\s:–—,-]+$/, '').replace(/\s+/g, ' ').trim();
     if (clean.length < 2) clean = decode(raw).trim();

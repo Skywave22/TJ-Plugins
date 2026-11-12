@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-12 (2)
+
+| Plugin | Change |
+|---|---|
+| **Net77** v4 | **Prime Video and JioHotstar play again** - net77.cc removed their playlists ("404"), so they now play through the NetMirror app's checked session like Netflix (The Boys S1E1: 10 links in Hindi, English, Tamil, Telugu, Malayalam; Special Ops S2E1 on JioHotstar: Hindi, Tamil, Telugu…). The checked session is only accepted for ~5 minutes, not 15 hours as assumed, so it is no longer kept for 12 h: opening any title starts a fresh check in the background, so Play no longer gets the 10-minute promo clip first and then waits another 40 seconds. |
+| **All-in-one** v24 | Rebuilt with Net77 v4. Titles that a site only has as "Extended Cut" / "Director's Cut" are matched to the film (Jawan now also gets Net77's Netflix link); language-only cuts ("Tamil Extended Cut") are not. |
+
 ### 🆕 New — 2026-11-12
 
 | Plugin | What it is |
