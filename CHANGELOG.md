@@ -2,6 +2,12 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-04 (7)
+
+| Plugin | Change |
+|---|---|
+| **ReelFren** v3 | Home and search work again: www.reelfren.com now answers "404" and api.reelfren.com "503", so the API is read from proxy.reelfren.com. RaptDrama removed (ReelFren has no video for any of its titles). |
+
 ### 🔧 Fixed — 2026-11-04 (6)
 
 | Plugin | Change |

@@ -385,7 +385,7 @@
         { name: 'PineDrama',           p: 'pinedrama', category: '0' },
         { name: 'MyDrama',             p: 'mydrama', category: 'all' },
         { name: 'RapidTV',             p: 'rapidtv' },
-        { name: 'RaptDrama',           p: 'raptdrama' },
+        // RaptDrama: removed Nov 2026 - every title answers an empty qualityList (server 1) / 502 (server 2)
         { name: 'BonusTV',             p: 'bonustv' },
         { name: 'CubeTV',              p: 'cubetv' },
         { name: 'MovieBox Shorts',     p: 'movieboxshorts', category: 'all' },
@@ -397,7 +397,7 @@
     // providers searched (the ones whose videos play; MovieBox's CDN often refuses connections)
     var SEARCH_PROVIDERS = ['reelshort', 'dramabox', 'shortmax', 'netshort', 'dramawave', 'storyreel', 'vibeshort',
         'melolo', 'moboreels', 'flareflow', 'blinkdrama', 'happyshort', 'freereels', 'reelife', 'sereal', 'shorten',
-        'candyjar', 'pinedrama', 'mydrama', 'rapidtv', 'raptdrama', 'bonustv', 'cubetv', 'movieboxshorts', 'iqiyi',
+        'candyjar', 'pinedrama', 'mydrama', 'rapidtv', 'bonustv', 'cubetv', 'movieboxshorts', 'iqiyi',
         'wetv', 'filmbox', 'anamana', 'flextv2', 'aniboy', 'moviebox', 'joyreels', 'kalostv', 'vigloo', 'flextv'];
 
     // ───────────────── helpers ─────────────────
@@ -417,7 +417,8 @@
     // (Nov 2026), so a host that answers 403/challenge/no connection/non-JSON is skipped and
     // the next one is tried; the host that worked is remembered for later calls. A real
     // provider error (e.g. 502) is the same on every host and is not retried.
-    var API_HOSTS = ['https://www.reelfren.com', 'https://proxy.reelfren.com', API];
+    // (Nov 2026: www.reelfren.com answers 404 for everything and api.reelfren.com 503 - proxy first)
+    var API_HOSTS = [PROXY, 'https://www.reelfren.com', API];
     var apiPick = 0;
     async function getJsonOnce(url, ms) {
         var r, e;
@@ -426,7 +427,9 @@
         var body = String(r.body || '');
         if (r.status !== 200) {
             e = new Error('HTTP ' + (r.status || 'no connection'));
-            e.hostIssue = !r.status || r.status === 403 || r.status === 429 || r.status === 451 || /Just a moment|cf-mitigated|challenge-platform/i.test(body);
+            // an HTML/empty error page (404 site gone, 503, Cloudflare challenge, ...) is the host's problem;
+            // a real provider error comes back as JSON from every host
+            e.hostIssue = !r.status || r.status === 403 || r.status === 429 || r.status === 451 || !/^\s*[\[{]/.test(body) || /Just a moment|cf-mitigated|challenge-platform/i.test(body);
             throw e;
         }
         try { return JSON.parse(body); } catch (x) { e = new Error('bad answer'); e.hostIssue = true; throw e; }

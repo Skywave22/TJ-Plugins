@@ -105,7 +105,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 
 | Plugin | Version | Site | What you get | Audio |
 |---|:-:|---|---|---|
-| **ReelFren** | v2 | reelfren.com | Vertical short dramas from 30+ apps (ReelShort, DramaBox, ShortMax, NetShort, DramaWave…), plus WeTV/iQIYI dramas and anime; subtitles | en + subtitles |
+| **ReelFren** | v3 | reelfren.com | Vertical short dramas from 30+ apps (ReelShort, DramaBox, ShortMax, NetShort, DramaWave…), plus WeTV/iQIYI dramas and anime; subtitles | en + subtitles |
 
 ---
 
