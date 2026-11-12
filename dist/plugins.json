@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 24,
+    "version": 25,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -123,7 +123,7 @@
   {
     "packageName": "com.cinehd.skystream",
     "name": "CineHD",
-    "version": 11,
+    "version": 12,
     "baseUrl": "https://cinehd.vc",
     "description": "CineHD (cinehd.vc) — movies & series from a TMDB catalog with many servers per title (MhPly/AwsPly Hindi, Nitro multi-audio, HDHub, Rock HLS, MovieBox, VidAPI…). Every link is checked before it is shown; Hindi first.",
     "authors": [
@@ -141,7 +141,7 @@
   {
     "packageName": "com.cinejoy.skystream",
     "name": "CineJoy",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://cinejoy.pk",
     "description": "CineJoy (cinejoy.pk) — movies & series from a TMDB catalog (Netflix/Prime rows) with many servers per title: Nitro multi-audio, MhPly/AwsPly Hindi, HDHub, VidAPI, MovieBox, Rock HLS. Links are checked before they are shown.",
     "authors": [
@@ -159,7 +159,7 @@
   {
     "packageName": "com.cinezo.skystream",
     "name": "Cinezo",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://cinezo.gd",
     "description": "Cinezo (cinezo.gd, formerly cinezo.net) - the site's catalog (Trending, Hot Today, Popular, In Theaters, On Air, Top Rated, Netflix, Prime, HBO, Disney+, Apple TV+, Hindi, genres) with direct streams from its VidNest and ScreenScape servers: Hindi dubs, multi-audio, English, up to 4K, with subtitles. Hindi first; every link is checked before it is shown.",
     "authors": [
@@ -239,7 +239,7 @@
   {
     "packageName": "com.fmoviess.skystream",
     "name": "FMoviess",
-    "version": 7,
+    "version": 8,
     "baseUrl": "https://fmoviess.tv",
     "domains": [
       {
@@ -292,7 +292,7 @@
   {
     "packageName": "com.histream.skystream",
     "name": "HiStream",
-    "version": 1,
+    "version": 2,
     "baseUrl": "https://histream.lol",
     "description": "HiStream (histream.lol) - the site's catalog (Trending, Popular series & movies, Bollywood, Hindi series, Anime, and every platform row: Netflix, Prime Video, JioHotstar, ZEE5, SonyLIV, Apple TV+, MX Player, Hoichoi, Lionsgate Play) with its player's servers: Hindi first, then English, Tamil and more, up to 4K. Every link is checked before it is shown.",
     "authors": [
@@ -409,16 +409,12 @@
   {
     "packageName": "com.movies4u.skystream",
     "name": "Movies4u",
-    "version": 2,
-    "baseUrl": "https://new2.movies4u.garden",
+    "version": 3,
+    "baseUrl": "https://new7.movies4u.garden",
     "domains": [
       {
-        "name": "Movies4u (new2.movies4u.garden)",
-        "url": "https://new2.movies4u.garden"
-      },
-      {
-        "name": "new1.movies4u.garden (primary)",
-        "url": "https://new1.movies4u.garden"
+        "name": "Movies4u (new7.movies4u.garden)",
+        "url": "https://new7.movies4u.garden"
       }
     ],
     "description": "Bollywood, Hollywood, Hindi dubbed & South movies, web series, TV shows and K-dramas from Movies4u — multi-audio player plus HubCloud/GDFlix files",
@@ -592,7 +588,7 @@
   {
     "packageName": "com.rivestream.plugin",
     "name": "RiveStream",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://rivestream.ru",
     "description": "RiveStream (rivestream.ru) - TMDB-powered catalog of movies and TV shows, streamed from rivestream's server backends (Citadel, Prvibd, River, Kutti, Gbru, HindiSk) plus MhPly, AwsPly, VidPi and HDHub as fallbacks. Hindi audio is listed first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every link is checked before it is shown; working links come first.",
     "authors": [
@@ -654,7 +650,7 @@
   {
     "packageName": "com.screenscape.skystream",
     "name": "ScreenScape",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://nxsha.space",
     "description": "ScreenScape (screenscape.me) - the site's catalog (Trending, Top 10, Netflix, Prime Video, JioHotstar, Hindi, K-Drama, Anime, Marvel, DC...) with its \"Scape\" server panel: 30+ servers per title (MbPly/MhPly/AwsPly/Citadel Hindi dubs, Nitro multi-audio, Prism, CastVid, 4K-Hub...). Hindi first; every link is checked before it is shown.",
     "authors": [
@@ -697,7 +693,7 @@
   {
     "packageName": "com.vidbox.plugin",
     "name": "Vidbox",
-    "version": 5,
+    "version": 6,
     "baseUrl": "https://vidbox.vc",
     "description": "Vidbox (vidbox.vc) - TMDB-powered catalog of movies and TV shows (vidbox uses TMDB ids, so titles match 1:1). Streams come from the Nxsha multi-language servers. Hindi audio is listed first, then English, Tamil, Telugu, Urdu, Malayalam and Bengali. Every link is checked before it is shown; working links come first.",
     "authors": [
@@ -721,7 +717,7 @@
   {
     "packageName": "com.zxcstream.skystream",
     "name": "ZXCStream",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://vidstuck.cc",
     "description": "ZXCStream (zxcstream.com) - the site's catalog (Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24, Blumhouse...) with its ad-free Main Server (vidstuck): Orion (original audio + Hindi dub, up to 1080p), Daedalus and Atlas, with subtitles. Kept under the server's rate limit so the links play.",
     "authors": [
