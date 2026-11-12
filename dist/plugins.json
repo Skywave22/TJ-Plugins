@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 21,
+    "version": 22,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -335,7 +335,7 @@
   {
     "packageName": "com.katdrama.skystream",
     "name": "KatDrama",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://new.katdrama.my",
     "domains": [
       {
@@ -490,7 +490,7 @@
   {
     "packageName": "com.pikahd.skystream",
     "name": "PikaHD",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://new.pikahd.co",
     "domains": [
       {
