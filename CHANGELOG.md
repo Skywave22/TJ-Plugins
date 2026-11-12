@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### ✨ Updated — 2026-11-04 (3)
+
+| Plugin | Change |
+|---|---|
+| **SubDubAnime** v7 | Can now collect every language version of a title in one go (Hindi Dubbed, Hindi Fan Dubbed, English Dubbed…), each link labelled with its language. Used by the new Nuvio version; nothing changes in SkyStream. |
+| **All-in-one** v18 | Rebuilt with SubDubAnime v7. |
+
 ### 🔧 Fixed — 2026-11-04 (2)
 
 | Plugin | Change |

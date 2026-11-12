@@ -656,10 +656,50 @@
         return out;
     }
 
+    // TMDB mode (used by the Nuvio port): { orig: <tmdbId>, kind: "movie"|"tv", s, e }.
+    // One title can have several catalog entries - one per language (Hindi Dubbed, English Dubbed, ...),
+    // told apart by the zero padding of "tmdbId"; "originalTmdbId" is the real TMDB id. Fetch them all.
+    function variantLang(entry) {
+        const m = String(entry.title || "").match(/\(([^()]*(?:dub|sub|hindi|english|tamil|telugu|japanese)[^()]*)\)\s*$/i);
+        if (m) return m[1].trim();
+        const l = String(entry.language || "");
+        return /^(org|original)$/i.test(l) || !l ? "" : l;
+    }
+    async function allVariants(p) {
+        const c = await catalog();
+        const cats = p.kind === "movie" ? ["movies"] : ["series", "dramas"];
+        const orig = String(p.orig).replace(/^0+/, "");
+        const found = [];
+        cats.forEach(function (cat) {
+            const all = c[cat] || {};
+            Object.keys(all).forEach(function (k) {
+                const en = all[k];
+                if (!en || !en.tmdbId) return;
+                const o = String(en.originalTmdbId || en.tmdbId).replace(/^0+/, "");
+                if (o === orig) found.push({ cat: cat, en: en });
+            });
+        });
+        if (!found.length) return { success: false, errorCode: "NOT_FOUND", message: "SubDubAnime doesn't have this title." };
+        const lists = await Promise.all(found.slice(0, 4).map(function (f) {
+            const u = JSON.stringify({ cat: f.cat, id: String(f.en.tmdbId), s: p.s, e: p.e, t: f.en.title });
+            return new Promise(function (res) { loadStreams(u, res); }).then(function (r) {
+                if (!r || r.success === false || !Array.isArray(r.data)) return [];
+                const lang = variantLang(f.en);
+                r.data.forEach(function (st) { if (lang) st.source = String(st.source || "SubDub").replace(/^SubDub/, "SubDub · " + lang); });
+                return r.data;
+            }).catch(function () { return []; });
+        }));
+        let out = [];
+        lists.forEach(function (l) { out = out.concat(l); });
+        if (!out.length) return { success: false, errorCode: "NO_STREAMS", message: "This episode is not uploaded on SubDubAnime yet." };
+        return { success: true, data: out };
+    }
+
     async function loadStreams(url, cb) {
         try {
             let p;
             try { p = JSON.parse(url); } catch (e) { p = null; }
+            if (p && p.orig) return cb(await allVariants(p));
             if (!p || !p.cat || !p.id) return cb({ success: false, errorCode: "BAD_URL", message: "Unrecognized episode url" });
 
             let apiUrl;

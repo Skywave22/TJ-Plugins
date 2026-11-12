@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v17 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v18 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -92,7 +92,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **DesiDubAnime** | v3 | desidubanime.me | Hindi, Tamil and Telugu dubbed anime | hi, ta, te |
 | **PikaHD** | v4 | pikahd.co | Anime in Hindi dubbed, dual audio and English subbed | hi, en, ja |
 | **RareAnimes** | v9 | rareanimes.mov | Hindi, Tamil, Telugu and Malayalam dubbed anime series and movies | hi, ta, te, ml |
-| **SubDubAnime** | v6 | subdubanime.site | Hindi and English dubbed anime, up to 1080p | hi, en |
+| **SubDubAnime** | v7 | subdubanime.site | Hindi and English dubbed anime, up to 1080p | hi, en |
 
 ### 🌸 Asian dramas
 
