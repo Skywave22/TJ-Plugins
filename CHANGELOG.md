@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-04 (6)
+
+| Plugin | Change |
+|---|---|
+| **NetMirror** v11 | NM Hub links were refused by the video server ("429") because the wrong Referer was sent since October; the accepted one is back. |
+| **All-in-one** v21 | Rebuilt with NetMirror v11. |
+
 ### 🔧 Fixed — 2026-11-04 (5)
 
 | Plugin | Change |

@@ -633,9 +633,10 @@
     // extension does exactly this: Referer: https://movieboxonline.net/ for
     // every hakunaymatata URL. Cloud/datacenter IPs get 426 regardless.
     function streamHeaders(u) {
-        // The file CDN now answers "426 Forbidden" to Referer movieboxonline.net (blacklisted, 2026-10);
-        // send what a browser on the play page sends: that page's origin.
-        if (/hakunaymatata\.com|aoneroom\.com/i.test(u)) return { "User-Agent": UA, "Referer": PLAY.replace(/^(https?:\/\/[^\/]+).*$/, "$1") + "/" };
+        // 429 = Referer not on the CDN's list (no Referer, the play page's own origin, www.movieboxonline.net, ...);
+        // 426 "Forbidden" = Referer accepted but the caller's network refused (cloud/datacenter IPs).
+        // https://movieboxonline.net/ (exact origin) is accepted - same as NetMirror's own browser extension.
+        if (/hakunaymatata\.com|aoneroom\.com/i.test(u)) return { "User-Agent": UA, "Referer": "https://movieboxonline.net/" };
         return { "User-Agent": UA };
     }
 
