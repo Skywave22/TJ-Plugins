@@ -1,0 +1,18 @@
+{
+  "packageName": "com.kmmovies.skystream",
+  "name": "KMMovies",
+  "version": 1,
+  "baseUrl": "https://kmmovies.beer",
+  "description": "KMMovies (kmmovies.beer, new home of Khatrimaza) — Bollywood, Hollywood, South, Hindi-dubbed and dual-audio movies plus web series. Direct KMCLOUD files (R2 / Google Drive), checked before they are shown. Series play as one file per season.",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "en",
+    "hi"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries"
+  ]
+}

@@ -20,8 +20,10 @@ const GROUP = {
   CineFreak: "hindi", KatMovieHD: "hindi", Movies4u: "hindi", SSRMovies: "hindi",
   DesiSerialOnline: "serial", DesiSerials: "serial",
   AniHype: "anime", DesiDubAnime: "anime", PikaHD: "anime", RareAnimes: "anime", SubDubAnime: "anime",
-  KatDrama: "drama", KDMaza: "drama",
+  KatDrama: "drama", KDMaza: "drama", KMMovies: "hindi",
 };
+// plugins whose series entries are whole-season files (not single episodes): used for movies only
+const PACKS = new Set(["KMMovies"]);
 // plugins with a TMDB catalog: clean titles, posters and cast, so preferred for the details page
 const TMDB = new Set(["Cinezo", "Bingr", "ScreenScape", "CineHD", "CineJoy", "Fmovies", "RiveStream", "Vidbox", "321MoviesUK", "MoviesHubHD", "ZXCStream"]);
 
@@ -38,7 +40,7 @@ for (const d of dirs) {
   let src = fs.readFileSync(path.join(ROOT, d, "plugin.js"), "utf8").replace(/^\uFEFF/, "");
   if (/\bimport\s+[\w{*]|\brequire\(/.test(src.split("\n").slice(0, 5).join("\n"))) throw new Error(d + ": modules are not supported");
   hash.update(d + "\0" + JSON.stringify(man) + "\0" + src + "\0");
-  const meta = { id: d, name: man.name, version: man.version, group: GROUP[d] || "movies", tmdb: TMDB.has(d) };
+  const meta = { id: d, name: man.name, version: man.version, group: GROUP[d] || "movies", tmdb: TMDB.has(d), packs: PACKS.has(d) };
   subs += `\n// ═════════════ ${man.name} v${man.version} (${d}/plugin.js) ═════════════\n` +
     `__AIO_SUBS.push({ meta: ${JSON.stringify(meta)}, manifest: ${JSON.stringify(Object.assign({}, man, { aio: true }))},\n` +
     `make: function (manifest, globalThis, getPreference, setPreference) {\n${src}\n} });\n`;

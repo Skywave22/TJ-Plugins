@@ -4,7 +4,7 @@
 
 **Movies, TV series, anime, Asian dramas and short dramas for [SkyStream](https://github.com/akashdh11/skystream).**
 
-![Plugins](https://img.shields.io/badge/plugins-27-6f42c1)
+![Plugins](https://img.shields.io/badge/plugins-28-6f42c1)
 ![Author](https://img.shields.io/badge/author-TJ--Plugins-0a7cff)
 [![Build](https://github.com/Skywave22/TJ-Plugins/actions/workflows/build.yml/badge.svg)](https://github.com/Skywave22/TJ-Plugins/actions/workflows/build.yml)
 
@@ -30,17 +30,17 @@
 
 ## ⭐ All-in-one
 
-**Can't decide which plugin to open? Install All-in-one.** It has 27 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
+**Can't decide which plugin to open? Install All-in-one.** It has 28 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
 
 | | |
 |---|---|
 | 🏠 **One home page** | Trending, Latest Movies and Series, Hindi, Hindi Dubbed, Netflix, Prime, K-Drama, Anime, Hindi Serials and more, filled from every site. The same title from different sites is one card. |
-| 🔎 **One search** | Searches all 27 sites at once (about 2 seconds) and merges the results. |
+| 🔎 **One search** | Searches all 28 sites at once (about 2 seconds) and merges the results. |
 | ▶️ **Every link** | When you press Play, it finds the same movie or episode on **every site that has it** and lists all working links together, 1080p and Hindi first. A popular movie often gets 50 to 70 links from 10+ sites. Collecting them takes 10 to 40 seconds. |
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v22 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v23 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -73,6 +73,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | Plugin | Version | Site | What you get | Audio |
 |---|:-:|---|---|---|
 | **CineFreak** | v10 | cinefreak.ch | Hindi, English and dual-audio movies, web series, K-drama (needs SkyStream 2.9.0+ to play) | hi, en, ml |
+| **KMMovies** 🆕 | v1 | kmmovies.beer | Bollywood, Hollywood, South, Hindi dubbed and dual-audio movies plus web series (new home of Khatrimaza); direct files up to 1080p from two servers; series play as one file per season | hi, en |
 | **KatMovieHD** | v13 | katmoviehd.top | Hollywood movies and web series in Hindi dubbed / dual audio | hi, en |
 | **Movies4u** | v2 | movies4u.garden | Bollywood, Hollywood, South, web series, TV shows; multi-audio player | hi, en, ta, te +4 |
 | **SSR Movies** | v9 | ssrmovies.surf | Hindi dubbed and dual-audio movies, web series, daily shows | hi, en |

@@ -418,6 +418,7 @@ async function episodeOn(s, itemUrl, candSh, info) {
         if (eps.length > 2 || isSeries(r.data.type) && eps.length > 1) return null;
         return eps[0].url;
     }
+    if (s.meta.packs) return null;             // its "episodes" are whole-season files
     if (info.d) {
         var byDate = eps.filter(function (e) { return e.airDate && String(e.airDate).slice(0, 10) === info.d; })[0];
         return byDate ? byDate.url : null;

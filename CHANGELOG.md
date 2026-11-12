@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🆕 New — 2026-11-12
+
+| Plugin | What it is |
+|---|---|
+| **KMMovies** v1 | [kmmovies.beer](https://kmmovies.beer) (new home of Khatrimaza) - Bollywood, Hollywood, South, Hindi dubbed, dual-audio, K-drama, anime and 4K posts with the site's rows (Latest Uploads, Trending, Bollywood, Hollywood, Dual Audio, Hindi Dubbed, South, TV Series, K-Drama, Anime, 4K) and search. Full details from the post: description, poster, backdrop, genres, cast, trailer. Each KMCLOUD file plays directly from two servers: **KMCloud** (R2 file, starts instantly) and **KMCloud Drive** (Google Drive copy), 480p / 720p / 1080p. Series: each season is one file with all its episodes. Not available: single episodes and WEB-DL / 4K files that are only on magiclinks.lol (Cloudflare check that a plugin can't pass). Many older posts only have those links. In tests: Allen 6 links, Never Surrender 6, The Body S1 6, Black Doves S2 4. |
+| **All-in-one** v23 | **KMMovies joins All-in-one** (now 28 sites) - for movies; its season files are not offered as episodes. |
+
 ### 🔧 Fixed — 2026-11-04 (8)
 
 | Plugin | Change |
