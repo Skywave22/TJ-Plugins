@@ -541,7 +541,7 @@
   {
     "packageName": "com.reelfren.skystream",
     "name": "ReelFren",
-    "version": 2,
+    "version": 3,
     "baseUrl": "https://www.reelfren.com",
     "domains": [
       {
