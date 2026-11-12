@@ -400,6 +400,10 @@
     function parseYear(rec) {
         var m = String(rec.title || '').match(/\((19\d{2}|20\d{2})\)/);
         if (m) return parseInt(m[1], 10);
+        // categories hold the release year (and sometimes a later re-upload year: "2008, 2023"):
+        // the earliest one is the release; the post date is only the upload date
+        var cy = (String(rec.categories || '').match(/\b(?:19|20)\d{2}\b/g) || []).map(Number).sort()[0];
+        if (cy) return cy;
         var y = parseInt(String(rec.date || '').slice(0, 4), 10);
         return (y > 1900 && y < 2100) ? y : undefined;
     }

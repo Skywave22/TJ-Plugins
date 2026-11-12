@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v19 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v20 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -58,7 +58,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **CineJoy** | v6 | cinejoy.pk | Movies and series with Netflix and Prime rows | en |
 | **Cinezo** | v2 | cinezo.gd | Trending, Netflix, Prime, HBO, Disney+ rows; Hindi dubs, multi-audio, up to 4K | hi, en, ta, te |
 | **FMoviess** | v7 | fmoviess.tv | Movies, series and anime | en |
-| **HiCine** | v11 | hicine.sbs | Bollywood and Hollywood, web series, K-drama and anime | hi, en |
+| **HiCine** | v12 | hicine.sbs | Bollywood and Hollywood, web series, K-drama and anime | hi, en |
 | **HiStream** 🆕 | v1 | histream.lol | Trending, Bollywood, Hindi series, Anime and 9 platform rows (Netflix, Prime, JioHotstar, ZEE5, SonyLIV…); Hindi first, up to 4K | hi, en, ta, te, ko, ja |
 | **MoviesHubHD** | v3 | movieshubhd.com | Latest, Trending, Hindi and Top Rated rows; direct streams with subtitles | hi, en |
 | **Net77** 🆕 | v3 | net77.cc | The original NetMirror: Netflix, Prime Video and JioHotstar rows (in that order); links from all three for the same title; 1080p HLS in every audio language of the title, English subtitles | hi, en, ta, te, ko, ja +more |

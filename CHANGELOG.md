@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-04 (5)
+
+| Plugin | Change |
+|---|---|
+| **HiCine** v12 | Shows the real release year (Breaking Bad showed 2023, the re-upload year, instead of 2008). |
+| **All-in-one** v20 | Rebuilt with HiCine v12. |
+
 ### 🔧 Fixed — 2026-11-04 (4)
 
 | Plugin | Change |
