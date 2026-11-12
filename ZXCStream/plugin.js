@@ -626,7 +626,7 @@
     // ─── vidstuck.cc = zxcstream.com's "Main Server" (its own ad-free player) ───
     // zxcstream.com/watch/<type>/<id> embeds vidstuck.cc/embed/... Its player asks the
     // vidstuck backend two things per server:
-    //   POST /backend/raider {id,type,server[,s,e]}   (renamed from /backend/qwerty, Nov 2026)            -> { ts, token }
+    //   POST /backend/andromeda {id,type,server[,s,e], meow: AES(JSON{id,media_type,path[,season,episode]})}  (was /backend/raider) -> { ts, token }
     //   GET  /backend/servers/<server>?id&type&server&ts&token&title&year&date[...]
     // Field names are obfuscated (map below, from their bundle) and every link comes back
     // CryptoJS-AES encrypted with a fixed passphrase. The backend wants a browser
@@ -644,13 +644,14 @@
     // 403 to every video segment, so it is left out.
     const VS = "https://vidstuck.cc";
     const VS_PASS = "7f4c9e2a81d63b05c4f7a9e8126d3b50e1a8c7f23d9465ab0c6e9f1d4a7b832c";
-    // Field names as in vidstuck's player bundle (Nov 2026: every name lost one character).
+    // Field names as in vidstuck's player bundle (they get shorter by one character now and then).
     const F = {
-        id: "a7f39c821d604e5b91e57b", type: "c81306d28147a35632e816b", path: "6b491e258392e7561a9384c",
-        s: "d8427b5c382f957c3613e85b", e: "91c6ea75d1f785c92346b713d", ts: "61d9a5274c8e3b2f38291e6",
-        token: "c492f7a183d01e36c538a716d", title: "5e28c9147a06de29f3674b392a1", year: "b731e6c94f867f8341c306e",
-        date: "e16493139e5814b3027", latest: "e953416ad739e5814b3027", imdb: "f35a8194265e871c4933a725f"
+        id: "a7f39c821d604e5b9157b", type: "c1306d28147a35632e816b", path: "6b491e28392e7561a9384c",
+        s: "d8427b5c82f957c3613e85b", e: "91c6ea5d1f785c92346b713d", ts: "61d9a5274c8e3b2f8291e6",
+        token: "c492f7a183d0e36c538a716d", title: "5e28c9147a0de29f3674b392a1", year: "b731e6c94f87f8341c306e",
+        date: "e1649139e5814b3027", latest: "e95416ad739e5814b3027", imdb: "f35a814265e871c4933a725f"
     };
+    const VS_LINK_PREFIX = "xArD_";
     const SV = {
         orion:     { id: "orion",     name: "Orion" },
         andromeda: { id: "andromeda", name: "Andromeda" },
@@ -711,7 +712,9 @@
     }
     async function vsDecrypt(b64) {
         try {
-            const bin = atob(String(b64 || "").replace(/\s+/g, ""));
+            let str = String(b64 || "").replace(/\s+/g, "");
+            if (str.indexOf(VS_LINK_PREFIX) === 0) str = decodeURIComponent(escape(atob(str.slice(VS_LINK_PREFIX.length))));
+            const bin = atob(str);
             if (bin.slice(0, 8) !== "Salted__") return "";
             const salt = bin.slice(8, 16), pass = VS_PASS;
             let d = [], prev = [];
@@ -724,6 +727,89 @@
             const plain = await crypto.decryptAES(bytesToB64(ct), bytesToB64(d.slice(0, 32)), bytesToB64(d.slice(32, 48)), { mode: "cbc" });
             return String(plain || "").trim();
         } catch (e) { return ""; }
+    }
+
+    // ── CryptoJS AES.encrypt(JSON, passphrase) - the "meow" proof the token endpoint asks for ──
+    const VS_SBOX = new Uint8Array(256);
+    (function () {
+        const exp = new Uint8Array(256), log = new Uint8Array(256);
+        let x = 1;
+        for (let i = 0; i < 255; i++) {
+            exp[i] = x; log[x] = i;
+            x = (x ^ ((x << 1) ^ (x & 0x80 ? 0x11b : 0))) & 255; // multiply by 0x03
+        }
+        exp[255] = 1; log[0] = 0; // sentinels (inverse of 1 = exp[255 - 0])
+        for (let i = 1; i < 256; i++) {
+            const s = exp[255 - log[i]];
+            VS_SBOX[i] = (s ^ ((s << 1) | (s >> 7)) ^ ((s << 2) | (s >> 6)) ^ ((s << 3) | (s >> 5)) ^ ((s << 4) | (s >> 4)) ^ 0x63) & 255;
+        }
+        VS_SBOX[0] = 0x63;
+    })();
+
+    function vsXtime(a) { return ((a << 1) ^ (a & 0x80 ? 0x11b : 0)) & 255; }
+
+    function vsExpandKey(keyBytes) {
+        const Nk = 8, Nr = 14;
+        const w = new Uint8Array(16 * (Nr + 1));
+        w.set(keyBytes);
+        let rcon = 1;
+        for (let i = Nk; i < 4 * (Nr + 1); i++) {
+            const t = [w[(i - 1) * 4], w[(i - 1) * 4 + 1], w[(i - 1) * 4 + 2], w[(i - 1) * 4 + 3]];
+            if (i % Nk === 0) {
+                const tt = t[0];
+                t[0] = VS_SBOX[t[1]] ^ rcon; t[1] = VS_SBOX[t[2]]; t[2] = VS_SBOX[t[3]]; t[3] = VS_SBOX[tt];
+                rcon = vsXtime(rcon);
+            } else if (i % Nk === 4) {
+                t[0] = VS_SBOX[t[0]]; t[1] = VS_SBOX[t[1]]; t[2] = VS_SBOX[t[2]]; t[3] = VS_SBOX[t[3]];
+            }
+            for (let j = 0; j < 4; j++) w[i * 4 + j] = w[(i - Nk) * 4 + j] ^ t[j];
+        }
+        return w;
+    }
+
+    function vsEncryptBlock(w, input) {
+        const Nr = 14;
+        const s = new Uint8Array(input);
+        function addRK(r) { for (let i = 0; i < 16; i++) s[i] ^= w[r * 16 + i]; }
+        addRK(0);
+        const t = new Uint8Array(16);
+        for (let round = 1; round <= Nr; round++) {
+            for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) t[c * 4 + r] = VS_SBOX[s[((c + r) % 4) * 4 + r]];
+            if (round < Nr) {
+                for (let c = 0; c < 4; c++) {
+                    const a0 = t[c * 4], a1 = t[c * 4 + 1], a2 = t[c * 4 + 2], a3 = t[c * 4 + 3];
+                    t[c * 4]     = vsXtime(a0) ^ (vsXtime(a1) ^ a1) ^ a2 ^ a3;
+                    t[c * 4 + 1] = a0 ^ vsXtime(a1) ^ (vsXtime(a2) ^ a2) ^ a3;
+                    t[c * 4 + 2] = a0 ^ a1 ^ vsXtime(a2) ^ (vsXtime(a3) ^ a3);
+                    t[c * 4 + 3] = (vsXtime(a0) ^ a0) ^ a1 ^ a2 ^ vsXtime(a3);
+                }
+            }
+            s.set(t);
+            addRK(round);
+        }
+        return s;
+    }
+
+
+    function vsEncrypt(text) {
+        const salt = [];
+        for (let i = 0; i < 8; i++) salt.push(Math.floor(Math.random() * 256));
+        let d = [], prev = [];
+        const saltS = String.fromCharCode.apply(null, salt);
+        while (d.length < 48) { prev = md5Raw(String.fromCharCode.apply(null, prev) + VS_PASS + saltS); d = d.concat(prev); }
+        const w = vsExpandKey(new Uint8Array(d.slice(0, 32)));
+        const raw = unescape(encodeURIComponent(text));
+        const pad = 16 - (raw.length % 16), n = raw.length + pad;
+        const out = [0x53, 0x61, 0x6c, 0x74, 0x65, 0x64, 0x5f, 0x5f].concat(salt);
+        let iv = d.slice(32, 48);
+        for (let i = 0; i < n; i += 16) {
+            const blk = new Uint8Array(16);
+            for (let j = 0; j < 16; j++) blk[j] = (i + j < raw.length ? raw.charCodeAt(i + j) : pad) ^ iv[j];
+            const e = vsEncryptBlock(w, blk);
+            iv = Array.from(e);
+            for (let j = 0; j < 16; j++) out.push(e[j]);
+        }
+        return bytesToB64(out);
     }
 
     // TMDB facts the vidstuck player sends along (title, year, release date, imdb id).
@@ -791,8 +877,11 @@
         const c = TOKENS[key];
         if (c && Date.now() - c.t < 4 * 60000) return c.tk;
         const body = {}; body[F.id] = String(p.id); body[F.type] = p.type; body[F.path] = path;
+        const proof = { id: String(p.id), media_type: p.type, path: path };
+        if (p.type === "tv") { proof.season = Number(p.s) || 1; proof.episode = Number(p.e) || 1; }
+        body.meow = vsEncrypt(JSON.stringify(proof));
         if (p.type === "tv") { body[F.s] = Number(p.s) || 1; body[F.e] = Number(p.e) || 1; }
-        const r = await vsReq("POST", VS + "/backend/raider", JSON.stringify(body));
+        const r = await vsReq("POST", VS + "/backend/andromeda", JSON.stringify(body));
         if (!r || Number(r.status) >= 400 || !r.body) return null;
         let tk = null;
         try { tk = JSON.parse(r.body); } catch (_) {}
@@ -840,7 +929,7 @@
     }
     function qualityFrom(l) {
         const m = String((l && l.link) || "").match(/\/(2160|1080|720|480|360)\//);
-        // Daedalus labels three qualities on one 720p file: trust the path
+        // a quality in the link path wins over the reported resolution
         return qualityFromHeight(m ? parseInt(m[1], 10) : parseInt(l && l.resolution, 10));
     }
 
@@ -869,49 +958,55 @@
             const info = await mediaInfo(p);
             // (no subtitle request: it costs two more vidstuck calls, and the app has its
             // own subtitle search in the player)
-            const atlasP = vsCall(p, info, "atlas", "servers");
-            const daedP = vsCall(p, info, "daedalus", "servers");
-
-            // Orion first; its Hindi dub (same token) when Orion lists one. Andromeda only as
-            // a stand-in when Orion has nothing (it serves the same MovieBox file).
+            // vidstuck's servers (Nov 2026): Orion (MovieBox MP4s, multi-audio), Berkas (HLS),
+            // Milky Way (HLS), Atlas (HLS) and Andromeda (MovieBox DASH, HEVC). Each costs two
+            // requests (token + links); vsReq keeps the total under vidstuck's rate limit.
             function empty(j) { return !j || j.success === false || !(j.links || []).length; }
+            const berkasP = vsCall(p, info, "berkas", "servers");
+            const milkyP = vsCall(p, info, "milkyway", "servers");
+            const atlasP = vsCall(p, info, "atlas", "servers");
             let orion = await vsCall(p, info, "orion", "servers");
-            let mainSv = SV.orion;
             // Orion's first lookup of a title sometimes comes back empty: one more try costs a
             // single request (the token is reused)
             if (empty(orion)) { await sleep(1500); orion = await vsCall(p, info, "orion", "servers"); }
-            if (empty(orion)) {
-                orion = await vsCall(p, info, "andromeda", "servers");
-                mainSv = SV.andromeda;
-            }
-            const hasHindi = mainSv === SV.orion && ((orion && orion.dubs) || []).some(function (d) {
+            const hasHindi = !empty(orion) && ((orion && orion.dubs) || []).some(function (d) {
                 return d && !d.original && Number(d.type) === 0 && String(d.lanCode || d.lang) === "hi";
             });
-            const hindi = hasHindi ? await vsCall(p, info, "orion", "servers", "hi") : null;
-            const res = await Promise.all([atlasP, daedP]);
-            const atlas = res[0], daed = res[1];
+            const hindiP = hasHindi ? vsCall(p, info, "orion", "servers", "hi") : null;
+            // Andromeda serves the same MovieBox title as DASH: only when Orion has nothing
+            const andrP = empty(orion) ? vsCall(p, info, "andromeda", "servers") : null;
+            const res = await Promise.all([berkasP, milkyP, atlasP, hindiP, andrP]);
+            const berkas = res[0], milky = res[1], atlas = res[2], hindi = res[3], andr = res[4];
 
-            function firstLink(j) { return (j && j.success !== false && (j.links || [])[0]) || null; }
+            function links(j) { return (j && j.success !== false && j.links) || []; }
             const out = [];
-            function push(link, label, q, needsCheck) {
+            function push(link, label, q, headers, needsCheck) {
                 if (!link || !link.link || out.some(function (s) { return s.url === link.link; })) return;
                 if (q && q !== "Auto") label += " [" + q + "]";
-                const st = mkStream({ url: link.link, source: label, quality: q || "Auto", headers: PLAY_HEADERS });
+                const st = mkStream({ url: link.link, source: label, quality: q || "Auto", headers: headers || PLAY_HEADERS });
                 st.__check = !!needsCheck;
                 out.push(st);
             }
-
-            // DASH manifests: read once for the quality label (also proves they answer)
-            const hiL = firstLink(hindi), orL = firstLink(orion);
-            const mi = await Promise.all([hiL ? mpdInfo(hiL.link) : null, orL ? mpdInfo(orL.link) : null]);
-            if (hiL && mi[0]) push(hiL, "Orion - Hindi Dub", mi[0].q);
-            if (orL && mi[1]) push(orL, mainSv.name + (mainSv === SV.orion ? " - Original Audio" : ""), mi[1].q);
-            // Daedalus: direct H.264 HLS, not on vidstuck (works on phones without HEVC)
-            const dl = firstLink(daed);
-            if (dl) push(dl, "Daedalus", qualityFrom(dl), true);
-            ((atlas && atlas.success !== false && atlas.links) || []).slice(0, 2).forEach(function (l, i) {
-                push(l, "Atlas" + (i ? " #2" : ""), qualityFrom(l));
-            });
+            // MovieBox MP4s: their CDN refuses any Referer (429), so only the User-Agent goes along
+            const MP4_HEADERS = { "User-Agent": UA };
+            function pushMp4(j, label) {
+                const l = links(j).filter(function (x) { return /^https?:/.test(x.link); })
+                    .sort(function (a, b) { return (parseInt(b.resolution, 10) || 0) - (parseInt(a.resolution, 10) || 0); });
+                const seen = {};
+                l.forEach(function (x) {
+                    const key = x.link.split("?")[0];
+                    if (seen[key]) return; seen[key] = 1;
+                    if (/\.mpd(\?|$)/i.test(key) || x.type === "dash") return;
+                    push(x, label, qualityFromHeight(parseInt(x.resolution, 10) || 0), MP4_HEADERS, Object.keys(seen).length === 1);
+                });
+            }
+            pushMp4(hindi, "Orion - Hindi Dub");
+            pushMp4(orion, "Orion - Original Audio");
+            links(berkas).slice(0, 1).forEach(function (l) { push(l, "Berkas", qualityFrom(l)); });
+            links(milky).slice(0, 1).forEach(function (l) { push(l, "Milky Way", qualityFrom(l)); });
+            links(atlas).slice(0, 2).forEach(function (l, i) { push(l, "Atlas" + (i ? " #2" : ""), qualityFrom(l)); });
+            const al = links(andr)[0];
+            if (al) { const mi = await mpdInfo(al.link); if (mi) push(al, "Andromeda", mi.q); }
 
             // Only links that are not on vidstuck are checked here (a check there costs part of
             // the rate limit the player needs); vidstuck links were just issued.

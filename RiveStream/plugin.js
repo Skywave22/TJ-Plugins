@@ -482,7 +482,7 @@
     }
 
     const NX_BASE = "https://nxsha.space";
-    const NX_PASS = "f4488ab4da401203d23baa129fc546153898162524635d6776826d0c867ccaa3";
+    let NX_PASS = "38c8cd65d781936f4b9fe1fd985234fd7335699855051abf76ea3493bcfc0120";
 
     function nxMd5(str, raw) {
         const msg = raw ? str : unescape(encodeURIComponent(str));
@@ -633,7 +633,7 @@
         return nxBytesToB64(out).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     }
 
-    async function nxDecode(b64url) {
+    async function nxDecode0(b64url) {
         try {
             let std = String(b64url).replace(/-/g, "+").replace(/_/g, "/");
             while (std.length % 4 !== 0) std += "=";
@@ -650,7 +650,55 @@
             const o = JSON.parse(String(plain));
             delete o._req_ts; delete o._req_salt;
             return o;
-        } catch (e) { return {}; }
+        } catch (e) { return null; }
+    }
+
+    // nxsha rotates its passphrase now and then. When a reply no longer decrypts, read the
+    // current one from nxsha's own player bundle (embed page -> its chunks -> the 64-hex
+    // passphrase) and keep it for the rest of the session.
+    let NX_REFRESH = null, NX_REFRESH_AT = 0;
+    function nxRefreshPass(sample) {
+        if (NX_REFRESH) return NX_REFRESH;
+        if (Date.now() - NX_REFRESH_AT < 10 * 60000) return Promise.resolve(false);
+        NX_REFRESH_AT = Date.now();
+        NX_REFRESH = (async function () {
+            const h = { "User-Agent": UA, "Referer": NX_BASE + "/" };
+            const seen = {}, cands = [];
+            async function grab(paths) {
+                const todo = paths.filter(function (p) { if (seen[p]) return false; seen[p] = 1; return true; }).slice(0, 16);
+                const bodies = await Promise.all(todo.map(function (p) {
+                    return withTimeout(http_get(NX_BASE + "/_next/" + p, h), 7000).then(function (r) { return String((r && r.body) || ""); }, function () { return ""; });
+                }));
+                const next = [];
+                bodies.forEach(function (b) {
+                    b.replace(/"([0-9a-f]{64})"/g, function (_, k) { if (cands.indexOf(k) < 0) cands.push(k); return _; });
+                    b.replace(/"(static\/chunks\/[A-Za-z0-9_.-]+\.js)"/g, function (_, c) { next.push(c); return _; });
+                });
+                return next;
+            }
+            try {
+                const pg = await withTimeout(http_get(NX_BASE + "/embed/movie/27205", h), 7000);
+                const first = [];
+                String((pg && pg.body) || "").replace(/\/_next\/(static\/chunks\/[A-Za-z0-9_.-]+\.js)/g, function (_, c) { first.push(c); return _; });
+                const more = await grab(first);
+                if (!cands.length) await grab(more);
+            } catch (e) {}
+            const old = NX_PASS;
+            for (let i = 0; i < cands.length; i++) {
+                if (cands[i] === old) continue;
+                NX_PASS = cands[i];
+                if (await nxDecode0(sample) !== null) return true;
+            }
+            NX_PASS = old;
+            return false;
+        })().then(function (ok) { NX_REFRESH = null; return ok; }, function () { NX_REFRESH = null; return false; });
+        return NX_REFRESH;
+    }
+
+    async function nxDecode(b64url) {
+        let o = await nxDecode0(b64url);
+        if (o === null && b64url && await nxRefreshPass(b64url)) o = await nxDecode0(b64url);
+        return o || {};
     }
 
 

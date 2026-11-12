@@ -24,7 +24,7 @@
  *    any violation would throw in the app and blank the whole screen.
  *
  * Usage:
- *   node tools/app-harness.mjs <pluginDir> --auto [--search "query"] [--items 3]
+ *   node tools/app-harness.mjs <pluginDir> --auto [--search "query"] [--items 3] [--from-search]
  *   node tools/app-harness.mjs <pluginDir> --fn load --q "<url>"
  */
 import fs from "node:fs";
@@ -512,7 +512,7 @@ else {
 // load + loadStreams on a few items (prefer a movie and a series)
 const pool = [];
 const seen = new Set();
-for (const it of [...homeItems, ...searchItems]) { if (it && it.url && !seen.has(it.url)) { seen.add(it.url); pool.push(it); } }
+for (const it of (flag("--from-search") ? [...searchItems, ...homeItems] : [...homeItems, ...searchItems])) { if (it && it.url && !seen.has(it.url)) { seen.add(it.url); pool.push(it); } }
 const pick = [];
 const movie = pool.find((x) => /movie/i.test(x.type || "")); const series = pool.find((x) => /series|anime|tv/i.test(x.type || ""));
 [movie, series, ...pool].forEach((x) => { if (x && !pick.includes(x) && pick.length < maxItems) pick.push(x); });

@@ -2,6 +2,16 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-12 (3)
+
+| Plugin | Change |
+|---|---|
+| **ScreenScape** v3, **RiveStream** v7, **Vidbox** v6, **Cinezo** v3, **HiStream** v2, **CineHD** v12, **CineJoy** v7 | **Links are back** - their shared server (nxsha) changed its secret key, so every title said "server did not answer" / "no server carries this title". Updated, and the plugins now **find a new key by themselves** if it changes again (tested: started with the old key, Inception still gave 18 links). Breaking Bad S1E1: 11-20 links each. |
+| **ZXCStream** v4 | **Plays again, faster, with more servers** - vidstuck.cc renamed its API and added a signed request. Now uses all its current servers: **Orion** (MP4 up to 1080p + Hindi dub), **Berkas** (1080p HLS), **Milky Way**, **Atlas**, Andromeda as backup. El Camino: 2 links in 26 s → 6 links in 3 s. |
+| **FMoviess** v8 | **Series play again** - the site dropped its vidlove server (domain is gone). Added nxsha's servers (Nitro, Mahalala, Citadel, CastVid…, Hindi and English, up to 4K) next to MoviesAPI and vixsrc. Breaking Bad S1E1: 0 → 14 links. |
+| **Movies4u** v3 | **Works again** - the site moved to **new7.movies4u.garden** (old addresses now redirect to a search page, which the plugin took for the site). It now only accepts the real site, so the automatic domain switch works next time. Jailer 2: 14 links, Rings of Power S1E1: 3. |
+| **All-in-one** v25 | Rebuilt with all of the above (Breaking Bad S1E1: 73 links). |
+
 ### 🔧 Fixed — 2026-11-12 (2)
 
 | Plugin | Change |

@@ -40,7 +40,7 @@
 
 | Plugin | Version | What you get | Audio |
 |---|:-:|---|---|
-| **All-in-one** 🆕 | v24 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
+| **All-in-one** 🆕 | v25 | All of the sites below in one plugin | hi, en, ta, te, ml, ko, ja, ur |
 
 All-in-one updates itself whenever one of the plugins inside it is updated.
 
@@ -54,19 +54,19 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 |---|:-:|---|---|---|
 | **321Movies UK** | v5 | 321movies.co.uk | Movies and series from a TMDB catalog | en, hi |
 | **Bingr** 🆕 | v1 | bingr.one | Trending, Popular, Top Rated, Action, Horror, Anime, Hindi rows; all of its servers: Prism multi-audio (Hindi, Telugu, Tamil, English, French…) up to 1080p, Edge, Nimbus, Citadel (Hindi/Tamil/Telugu/Kannada dubs); subtitles in up to 20 languages | hi, en, ta, te, kn +more |
-| **CineHD** | v11 | cinehd.vc | Movies and series, many servers per title, Hindi servers | en |
-| **CineJoy** | v6 | cinejoy.pk | Movies and series with Netflix and Prime rows | en |
-| **Cinezo** | v2 | cinezo.gd | Trending, Netflix, Prime, HBO, Disney+ rows; Hindi dubs, multi-audio, up to 4K | hi, en, ta, te |
-| **FMoviess** | v7 | fmoviess.tv | Movies, series and anime | en |
+| **CineHD** | v12 | cinehd.vc | Movies and series, many servers per title, Hindi servers | en |
+| **CineJoy** | v7 | cinejoy.pk | Movies and series with Netflix and Prime rows | en |
+| **Cinezo** | v3 | cinezo.gd | Trending, Netflix, Prime, HBO, Disney+ rows; Hindi dubs, multi-audio, up to 4K | hi, en, ta, te |
+| **FMoviess** | v8 | fmoviess.tv | Movies, series and anime | en |
 | **HiCine** | v12 | hicine.sbs | Bollywood and Hollywood, web series, K-drama and anime | hi, en |
-| **HiStream** 🆕 | v1 | histream.lol | Trending, Bollywood, Hindi series, Anime and 9 platform rows (Netflix, Prime, JioHotstar, ZEE5, SonyLIV…); Hindi first, up to 4K | hi, en, ta, te, ko, ja |
+| **HiStream** 🆕 | v2 | histream.lol | Trending, Bollywood, Hindi series, Anime and 9 platform rows (Netflix, Prime, JioHotstar, ZEE5, SonyLIV…); Hindi first, up to 4K | hi, en, ta, te, ko, ja |
 | **MoviesHubHD** | v3 | movieshubhd.com | Latest, Trending, Hindi and Top Rated rows; direct streams with subtitles | hi, en |
 | **Net77** 🆕 | v4 | net77.cc | The original NetMirror: Netflix, Prime Video and JioHotstar rows (in that order); links from all three for the same title; 1080p HLS in every audio language of the title, English subtitles | hi, en, ta, te, ko, ja +more |
 | **NetMirror** | v11 | netmirror.center | Netflix-style catalog: Bollywood, Hollywood, anime, reality TV | en, hi |
-| **RiveStream** | v6 | rivestream.ru | Movies and series, Hindi first | hi, en, ta, te +3 |
-| **ScreenScape** | v2 | screenscape.me | Trending, Top 10, Netflix/Prime/JioHotstar rows; 30+ servers per title | hi, en, ta, te, ko, ja |
-| **Vidbox** | v5 | vidbox.vc | Movies and series, Hindi first | hi, en, ta, te +3 |
-| **ZXCStream** 🆕 | v3 | zxcstream.com | Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24 rows; ad-free servers with Hindi dub, up to 1080p | en, hi |
+| **RiveStream** | v7 | rivestream.ru | Movies and series, Hindi first | hi, en, ta, te +3 |
+| **ScreenScape** | v3 | screenscape.me | Trending, Top 10, Netflix/Prime/JioHotstar rows; 30+ servers per title | hi, en, ta, te, ko, ja |
+| **Vidbox** | v6 | vidbox.vc | Movies and series, Hindi first | hi, en, ta, te +3 |
+| **ZXCStream** 🆕 | v4 | zxcstream.com | Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24 rows; ad-free servers with Hindi dub, up to 1080p | en, hi |
 
 ### 🇮🇳 Bollywood & Hindi dubbed
 
@@ -75,7 +75,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **CineFreak** | v10 | cinefreak.ch | Hindi, English and dual-audio movies, web series, K-drama (needs SkyStream 2.9.0+ to play) | hi, en, ml |
 | **KMMovies** 🆕 | v1 | kmmovies.beer | Bollywood, Hollywood, South, Hindi dubbed and dual-audio movies plus web series (new home of Khatrimaza); direct files up to 1080p from two servers; series play as one file per season | hi, en |
 | **KatMovieHD** | v13 | katmoviehd.top | Hollywood movies and web series in Hindi dubbed / dual audio | hi, en |
-| **Movies4u** | v2 | movies4u.garden | Bollywood, Hollywood, South, web series, TV shows; multi-audio player | hi, en, ta, te +4 |
+| **Movies4u** | v3 | new7.movies4u.garden | Bollywood, Hollywood, South, web series, TV shows; multi-audio player | hi, en, ta, te +4 |
 | **SSR Movies** | v9 | ssrmovies.surf | Hindi dubbed and dual-audio movies, web series, daily shows | hi, en |
 
 ### 📺 Hindi TV serials
