@@ -942,9 +942,14 @@
             var label = stripTags(m[2]);
             if (seen[m[1]] || /mega|zip|gofile|mediafire|drive|torrent/i.test(label)) continue;
             seen[m[1]] = 1;
-            var before = stripTags(content.slice(Math.max(0, m.index - 300), m.index)).split(/\n/).pop() || '';
-            var lm = (label + ' ' + before).match(WMQ_LANG);
-            lists.push({ url: m[1], lang: lm ? lm[1].charAt(0).toUpperCase() + lm[1].slice(1).toLowerCase() : 'Hindi', kind: listKind(label) });
+            // language: the button label, else the heading closest before the link ("Hindi – Download").
+            // The raw slice can start inside a tag (an <img> whose file name lists "…-English-Japanese"),
+            // so drop that cut-off tag first, and take the LAST language named before the link.
+            var raw = content.slice(Math.max(0, m.index - 600), m.index).replace(/^[^<]*>/, '');
+            var before = stripTags(raw).slice(-200);
+            var lm = label.match(WMQ_LANG), all = before.match(new RegExp(WMQ_LANG.source, 'gi'));
+            var lname = lm ? lm[1] : (all && all.length ? all[all.length - 1] : '');
+            lists.push({ url: m[1], lang: lname ? lname.charAt(0).toUpperCase() + lname.slice(1).toLowerCase() : 'Hindi', kind: listKind(label) });
         }
         lists = lists.slice(0, 8);
         var eps = {}, order = [], loose = [];

@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-04 (2)
+
+| Plugin | Change |
+|---|---|
+| **RareAnimes** v9 | **Correct audio language on older posts.** Posts that link a "WatchMultiQuality" list page (Naruto, One Piece, Doraemon and other older series) could show a Hindi dub as "Japanese": the language was read from text that happened to include a poster's file name ("…-English-Japanese.webp"). It is now taken from the heading right above the link. |
+| **All-in-one** v17 | Rebuilt with RareAnimes v9. |
+
 ### 🆕 New — 2026-11-04
 
 | Plugin | What it is |
