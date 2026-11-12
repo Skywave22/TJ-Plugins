@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 20,
+    "version": 21,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -471,7 +471,7 @@
   {
     "packageName": "com.netmirror.skystream",
     "name": "NetMirror",
-    "version": 10,
+    "version": 11,
     "baseUrl": "https://netmirror.center",
     "description": "NetMirror (netmirror.center) - Netflix-style catalog: Bollywood, Hollywood, Anime and Reality TV, heavy on Hindi content. Direct files per title/episode (up to 1080p) with English subtitles where available. Every link is checked before it is shown; working links come first.",
     "authors": [
