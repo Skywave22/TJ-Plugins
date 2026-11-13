@@ -72,7 +72,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 
 | Plugin | Version | Site | What you get | Audio |
 |---|:-:|---|---|---|
-| **CineFreak** | v10 | cinefreak.ch | Hindi, English and dual-audio movies, web series, K-drama (needs SkyStream 2.9.0+ to play) | hi, en, ml |
+| **CineFreak** | v11 | cinefreak.ch | Hindi, English and dual-audio movies, web series, K-drama; files open with no check, the site player needs SkyStream 2.9.0+ | hi, en, ml |
 | **KMMovies** 🆕 | v1 | kmmovies.beer | Bollywood, Hollywood, South, Hindi dubbed and dual-audio movies plus web series (new home of Khatrimaza); direct files up to 1080p from two servers; series play as one file per season | hi, en |
 | **KatMovieHD** | v13 | katmoviehd.top | Hollywood movies and web series in Hindi dubbed / dual audio | hi, en |
 | **Movies4u** | v3 | new7.movies4u.garden | Bollywood, Hollywood, South, web series, TV shows; multi-audio player | hi, en, ta, te +4 |

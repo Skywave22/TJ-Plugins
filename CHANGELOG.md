@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-13
+
+| Plugin | Change |
+|---|---|
+| **CineFreak** v11 | **No more check before a video, and dead files are no longer offered as playable** — CineCloud's unlock stopped enforcing its Turnstile, so the plugin now opens it with no sheet at all (the check is only asked if the site starts refusing again). It also copies the page's own retries (asks again for a nonce after 600 ms, resends after a `renonce`), ignores the hidden decoy buttons on the file page, and tests each file before showing it: every CineFreak title currently redirects to the same R2 bucket, which answers **403 "This bucket cannot be viewed"**, so those links used to appear and then fail with 403. When the files are down it now falls back to CineFreak's own player (`wp-json/cf/v1/pl`), which needs one Turnstile — SkyStream v2.9.0+ passes it, older versions get a clear "update SkyStream" message. |
+| **All-in-one** v26 | Rebuilt with CineFreak v11. |
+
 ### 🔧 Fixed — 2026-11-12 (3)
 
 | Plugin | Change |
