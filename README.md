@@ -4,7 +4,7 @@
 
 **Movies, TV series, anime, Asian dramas and short dramas for [SkyStream](https://github.com/akashdh11/skystream).**
 
-![Plugins](https://img.shields.io/badge/plugins-28-6f42c1)
+![Plugins](https://img.shields.io/badge/plugins-26-6f42c1)
 ![Author](https://img.shields.io/badge/author-TJ--Plugins-0a7cff)
 [![Build](https://github.com/Skywave22/TJ-Plugins/actions/workflows/build.yml/badge.svg)](https://github.com/Skywave22/TJ-Plugins/actions/workflows/build.yml)
 
@@ -30,12 +30,12 @@
 
 ## ⭐ All-in-one
 
-**Can't decide which plugin to open? Install All-in-one.** It has 28 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
+**Can't decide which plugin to open? Install All-in-one.** It has 26 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
 
 | | |
 |---|---|
 | 🏠 **One home page** | Trending, Latest Movies and Series, Hindi, Hindi Dubbed, Netflix, Prime, K-Drama, Anime, Hindi Serials and more, filled from every site. The same title from different sites is one card. |
-| 🔎 **One search** | Searches all 28 sites at once (about 2 seconds) and merges the results. |
+| 🔎 **One search** | Searches all 26 sites at once (about 2 seconds) and merges the results. |
 | ▶️ **Every link** | When you press Play, it finds the same movie or episode on **every site that has it** and lists all working links together, 1080p and Hindi first. A popular movie often gets 50 to 70 links from 10+ sites. Collecting them takes 10 to 40 seconds. |
 
 | Plugin | Version | What you get | Audio |
@@ -77,13 +77,6 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **KatMovieHD** | v13 | katmoviehd.top | Hollywood movies and web series in Hindi dubbed / dual audio | hi, en |
 | **Movies4u** | v3 | new7.movies4u.garden | Bollywood, Hollywood, South, web series, TV shows; multi-audio player | hi, en, ta, te +4 |
 | **SSR Movies** | v9 | ssrmovies.surf | Hindi dubbed and dual-audio movies, web series, daily shows | hi, en |
-
-### 📺 Hindi TV serials
-
-| Plugin | Version | Site | What you get | Audio |
-|---|:-:|---|---|---|
-| **DesiSerialOnline** | v3 | desiserialonline.su | Daily Hindi serials and reality shows | hi |
-| **DesiSerials** | v3 | desi-serials.to | Hindi serials by channel, plus completed shows | hi |
 
 ### 🍥 Anime
 
@@ -131,7 +124,6 @@ The plugins also try to work around blocks on their own:
 - **Links are checked first.** Dead links are hidden before the server list is shown, and the best quality and Hindi audio come first where there is a choice.
 - **Sites change.** If a plugin suddenly shows nothing, the site has usually moved or is down. Check for an update in Extensions.
 - **ReelFren:** a few apps (MovieBox, JoyReels, FlexTV, KalosTV, Vigloo) are currently not playing on reelfren.com itself, so the plugin says so instead of showing a broken video.
-- **DesiSerials:** each show lists its latest 180 episodes. Video hosts delete old files, so shows that ended before 2025 often won't play.
 - **RareAnimes:** most series play from the site's Pixeldrain season packs (one file per episode). A few older posts only have Mega links, which can't be streamed. Posts whose only link is the site's WatchMultiQuality player show it as "(may not play)": that player often refuses apps.
 - **NetMirror:** its video server limits how often one connection may download. If you get "too many requests", wait a minute and press Play again. Links it couldn't check are marked "(may not play)".
 - **GDFlix / HubCloud** files (KatMovieHD, SSR Movies, KDramaMaza, PikaHD, KatDrama, Movies4u) play in the app. Desktop test tools may get a Cloudflare check on them.

@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🗑️ Removed — 2026-11-13
+
+| Plugin | Change |
+|---|---|
+| **DesiSerials**, **DesiSerialOnline** | Removed from the repo, on request. The sites were the least reliable of the set: old episodes were mostly deleted files and the domains kept moving. |
+| **All-in-one** | Rebuilt without them — **26 plugins** now. |
+
 ### 🔧 Fixed — 2026-11-13
 
 | Plugin | Change |

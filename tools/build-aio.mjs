@@ -18,7 +18,6 @@ const GROUP = {
   HiCine: "movies", MoviesHubHD: "movies", NetMirror: "movies", RiveStream: "movies", ScreenScape: "movies",
   Vidbox: "movies", ZXCStream: "movies", Net77: "movies",
   CineFreak: "hindi", KatMovieHD: "hindi", Movies4u: "hindi", SSRMovies: "hindi",
-  DesiSerialOnline: "serial", DesiSerials: "serial",
   AniHype: "anime", DesiDubAnime: "anime", PikaHD: "anime", RareAnimes: "anime", SubDubAnime: "anime",
   KatDrama: "drama", KDMaza: "drama", KMMovies: "hindi",
 };
