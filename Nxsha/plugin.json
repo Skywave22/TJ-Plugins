@@ -1,0 +1,18 @@
+{
+  "packageName": "com.nxsha.skystream",
+  "name": "Nxsha",
+  "version": 1,
+  "baseUrl": "https://nxsha.space",
+  "description": "Nxsha — movies, TV series and anime from nxsha.space: its own home rows (trending, country top 10, latest, top rated, genre and Netflix rows) and search, with the site's multi-server links (Nitro, Citadel, Prism, HubCloud, 4K-Hub, mahalala and more) in every audio track they offer, each link checked before it is shown.",
+  "authors": [
+    "TJ-Plugins"
+  ],
+  "languages": [
+    "en",
+    "hi"
+  ],
+  "categories": [
+    "Movie",
+    "TvSeries"
+  ]
+}

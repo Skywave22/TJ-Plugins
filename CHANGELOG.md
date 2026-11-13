@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### ✨ New — 2026-11-13
+
+| Plugin | Change |
+|---|---|
+| **Nxsha** v1 | **New plugin** for **nxsha.space** (the site behind the streams five of the plugins already use). Home page is the site's own feed — Trending, your country's Top 10, Latest, Top Rated, Action, Drama, K-Dramas, Cartoon, Netflix, Classic, Hidden Gems (21 rows) — and search reads the site's own results (Inception: 13 results). Links come from all its servers (Nitro, Citadel, Prism, HubCloud, 4K-Hub, mahalala, CastVid…) in every audio track the server offers; each link is checked first (Inception: 15 links, all four probed playable; Breaking Bad S1E1: 18). |
+| **All-in-one** v30 | Rebuilt with Nxsha — **27 plugins** (The Odyssey: 97 links). |
+
 ### 🔧 Fixed — 2026-11-13 (2)
 
 | Plugin | Change |
