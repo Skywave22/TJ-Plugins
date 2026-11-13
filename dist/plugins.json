@@ -2,9 +2,9 @@
   {
     "packageName": "com.movies321uk.skystream",
     "name": "321Movies UK",
-    "version": 5,
-    "baseUrl": "https://321movies.co.uk",
-    "description": "321Movies UK — movies & TV series from 321movies.co.uk (TMDB catalog). Real HLS sources from the site's own player (Cascade, StreamAggregator, Surge, Movy…), each probed before it is offered; Hindi audio first.",
+    "version": 6,
+    "baseUrl": "https://321movies.xyz",
+    "description": "321Movies UK — movies & TV series from 321movies.xyz (the new home of 321movies.co.uk; TMDB catalog). Real HLS sources from the site's own player (Cascade, StreamAggregator, Surge, Movy…), each probed before it is offered; Hindi audio first.",
     "authors": [
       "TJ-Plugins"
     ],
@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 27,
+    "version": 29,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
