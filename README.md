@@ -4,7 +4,7 @@
 
 **Movies, TV series, anime, Asian dramas and short dramas for [SkyStream](https://github.com/akashdh11/skystream).**
 
-![Plugins](https://img.shields.io/badge/plugins-27-6f42c1)
+![Plugins](https://img.shields.io/badge/plugins-28-6f42c1)
 ![Author](https://img.shields.io/badge/author-TJ--Plugins-0a7cff)
 [![Build](https://github.com/Skywave22/TJ-Plugins/actions/workflows/build.yml/badge.svg)](https://github.com/Skywave22/TJ-Plugins/actions/workflows/build.yml)
 
@@ -30,12 +30,12 @@
 
 ## ⭐ All-in-one
 
-**Can't decide which plugin to open? Install All-in-one.** It has 27 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
+**Can't decide which plugin to open? Install All-in-one.** It has 28 of the plugins below built in (everything except ReelFren and HiStream, whose servers are already in it through ScreenScape) and combines them:
 
 | | |
 |---|---|
 | 🏠 **One home page** | Trending, Latest Movies and Series, Hindi, Hindi Dubbed, Netflix, Prime, K-Drama, Anime, Hindi Serials and more, filled from every site. The same title from different sites is one card. |
-| 🔎 **One search** | Searches all 27 sites at once (about 2 seconds) and merges the results. |
+| 🔎 **One search** | Searches all 28 sites at once (about 2 seconds) and merges the results. |
 | ▶️ **Every link** | When you press Play, it finds the same movie or episode on **every site that has it** and lists all working links together, 1080p and Hindi first. A popular movie often gets 50 to 70 links from 10+ sites. Collecting them takes 10 to 40 seconds. |
 
 | Plugin | Version | What you get | Audio |
@@ -67,6 +67,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 | **ScreenScape** | v3 | screenscape.me | Trending, Top 10, Netflix/Prime/JioHotstar rows; 30+ servers per title | hi, en, ta, te, ko, ja |
 | **Vidbox** | v6 | vidbox.vc | Movies and series, Hindi first | hi, en, ta, te +3 |
 | **Nxsha** 🆕 | v1 | nxsha.space | Movies, series and anime: the site's own rows (trending, country top 10, latest, top rated, genres, Netflix) and search; links from all its servers (Nitro, Citadel, Prism, HubCloud, 4K-Hub, mahalala…) in every audio track | en, hi, ta, te |
+| **Zenix** 🆕 | v1 | zenix.website | Movies and series: Top Rated, Top 10 on Netflix, Popular on Hotstar and Prime Video, Trending, New Releases; the site player's Orion links in every audio track (Original, Hindi, Tamil, Telugu, French, Spanish… up to 1080p) | en, hi, ta, te |
 | **ZXCStream** 🆕 | v4 | zxcstream.com | Top 10, Netflix, HBO, Disney+, Apple TV+, Marvel, A24 rows; ad-free servers with Hindi dub, up to 1080p | en, hi |
 
 ### 🇮🇳 Bollywood & Hindi dubbed

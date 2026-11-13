@@ -2,7 +2,14 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
-### ✨ New — 2026-11-13
+### ✨ New — 2026-11-13 (2)
+
+| Plugin | Change |
+|---|---|
+| **Zenix** v1 | **New plugin** for **zenix.website**. Home rows are the site's own (Top Rated Movies and Series, Top 10 on Netflix, Popular on Hotstar, Popular on Prime Video, Trending Now, New Releases) and search reads its results page (Inception: 13). Playback goes through the site's own player service (`embed.vidrift.in`: boot → source → Orion), so links carry every audio track the provider has — Original, Hindi, Tamil, Telugu, French, Spanish — up to 1080p, each checked first (Inception: 4 links, all playable; Breaking Bad S1E1: 4). |
+| **All-in-one** | Rebuilt with Zenix — **28 plugins**. |
+
+
 
 | Plugin | Change |
 |---|---|
