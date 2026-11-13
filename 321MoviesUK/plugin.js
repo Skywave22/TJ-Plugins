@@ -1,8 +1,8 @@
 /**
- * SkyStream provider plugin — 321movies.co.uk
+ * SkyStream provider plugin — 321movies.xyz (321movies.co.uk now redirects here)
  *
  * How this plugin gets its data (all verified against the live site, Sept 2026):
- *  - 321movies.co.uk is a client-rendered Next.js app: its HTML contains no links, so DOM
+ *  - 321movies.xyz is a client-rendered Next.js app: its HTML contains no links, so DOM
  *    scraping is useless. Its catalogue is the TMDB v3 API, using the public read token that
  *    the site itself ships inside its browser bundle (NEXT_PUBLIC_TMDB_ACCESS_TOKEN).
  *  - Playable sources come from the site's own player API:
@@ -348,13 +348,15 @@
     var TMDB_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJiYmYxODFkOTRiMzk2MTg1ZDBhYmQ5NzA5M2ZkNDhlMCIsIm5iZiI6MTY5MjUzNzk2MS45MTgwMDAyLCJzdWIiOiI2NGUyMTQ2OTM3MTA5NzAxMWM1NDk3YjgiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.t4GsujVl9LceOrnPmx-WDdncTSAx60QBLAoaiuTCvXI";
     var PLAYER_KEY = "j7wYkYhVgQn5x2L6k2M8hVQfD4zN3bP1aR7uT0cXyE6dZX4sWAd87JKMN8HHGG654GVCFRLMNBOPUY7LK";
     var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+    // All-in-one gives every embedded plugin 30 s; the app gives 90 s. Stay under both.
+    var IN_AIO = typeof manifest !== "undefined" && !!manifest && manifest.aio === true;
 
     // Sources the site's player marks as most reliable are tried first.
     var PREFERRED = ["rivestream", "streamaggregator", "peestream", "movy", "pstream", "frame", "bcine", "cinesrc", "vidgod"];
     var MAX_STREAMS = 16;
 
     function site() {
-        var b = (typeof manifest !== "undefined" && manifest.baseUrl) ? manifest.baseUrl : "https://321movies.co.uk";
+        var b = (typeof manifest !== "undefined" && manifest.baseUrl) ? manifest.baseUrl : "https://321movies.xyz";
         return String(b).replace(/\/+$/, "");
     }
     function hdr(extra) {
@@ -644,8 +646,8 @@
      * dead    -> definitive failure (404/410/451/5xx, DNS error, HTML error page)
      * unknown -> 401/403/429/timeout: often a datacenter/IP block that works on a phone
      */
-    async function probe(streamUrl, headers) {
-        var r = await req(streamUrl, Object.assign({}, headers, { Accept: "*/*", Range: "bytes=0-2047" }), 9000);
+    async function probe(streamUrl, headers, ms) {
+        var r = await req(streamUrl, Object.assign({}, headers, { Accept: "*/*", Range: "bytes=0-2047" }), ms || 9000);
         if (r.status === 200 || r.status === 206) {
             var head = String(r.body || "").replace(/^\uFEFF/, "").replace(/^\s+/, "");
             if (/^#EXTM3U/.test(head)) return "ok";
@@ -672,11 +674,14 @@
      * timeout); the server keeps working and caches the answer, so the retry returns in
      * well under a second. Hence: several short attempts, never one long one.
      */
-    async function playerPlaylist(S, q) {
+    async function playerPlaylist(S, q, deadline) {
         var url = S + "/api/player/vixsrc-playlist?" + q;
         var h = { Accept: "application/json", Referer: S + "/", Origin: S };
+        deadline = deadline || (Date.now() + 60000);
         for (var i = 0; i < 4; i++) {
-            var r = await req(url, hdr(h), 15000);
+            var left = deadline - Date.now() - 6000;                 // keep time for the link checks
+            if (left < 4000) break;
+            var r = await req(url, hdr(h), Math.min(15000, left));
             if (r.status === 200) {
                 try {
                     var j = JSON.parse(r.body);
@@ -684,6 +689,7 @@
                 } catch (e) { /* retry */ }
             }
             if (r.status === 404) return null;
+            if (deadline - Date.now() < 9000) break;
             await new Promise(function (ok) { setTimeout(ok, 2000); });
         }
         return null;
@@ -692,12 +698,14 @@
     async function loadStreams(url, cb) {
         var ref = reference(url);
         if (!ref) return fail(cb, "BAD_URL", "Unrecognised 321movies URL: " + url);
+        var t0 = Date.now();
+        var deadline = t0 + (IN_AIO ? 24000 : 60000);   // All-in-one cuts at 30 s
         try {
             var S = site();
             var q = "type=" + ref.type + "&id=" + ref.id;
             if (ref.type === "tv") q += "&season=" + (ref.season || 1) + "&episode=" + (ref.episode || 1);
 
-            var payload = await playerPlaylist(S, q);
+            var payload = await playerPlaylist(S, q, deadline);
             if (!payload) return fail(cb, "PLAYER_OFFLINE", "321movies' player returned no sources for this title right now. Try again in a minute.");
 
             var seen = {}, cands = [], encoded = 0;
@@ -722,7 +730,8 @@
 
             // The player's CDNs/proxies check the site's Referer/Origin (verified: 403 without, 200 with).
             var headers = { "User-Agent": UA, Referer: S + "/", Origin: S };
-            var verdicts = await Promise.all(cands.map(function (c) { return probe(c.url, headers); }));
+            var probeMs = Math.max(4000, Math.min(9000, deadline - Date.now() - 1500));
+            var verdicts = await Promise.all(cands.map(function (c) { return probe(c.url, headers, probeMs); }));
 
             var ok = [], unknown = [];
             cands.forEach(function (c, i) {

@@ -419,6 +419,8 @@ async function probeStream(s) {
       if (lines[0]) {
         const next = new URL(lines[0].trim(), res.request?.res?.responseUrl || url).href;
         const r2 = await axios.get(next, { headers: Object.assign({ Range: "bytes=0-2047" }, headers), responseType: "arraybuffer", timeout: 15000, validateStatus: () => true, maxContentLength: 4 * 1024 * 1024 }).catch((e) => ({ status: 0, e }));
+        // a segment larger than the probe cap (servers that ignore Range) is media, not a failure
+        if (r2 && r2.e && /maxContentLength/i.test(String(r2.e.message))) return { ok: true, why: "HLS playlist (segment streams a large body)" };
         if (!r2.status || r2.status >= 400) return { ok: false, why: `m3u8 ok but child ${r2.status || r2.e?.code} (${short(next)})` };
       }
       return { ok: true, why: "HLS playlist" };

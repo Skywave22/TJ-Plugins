@@ -52,7 +52,7 @@ All-in-one updates itself whenever one of the plugins inside it is updated.
 
 | Plugin | Version | Site | What you get | Audio |
 |---|:-:|---|---|---|
-| **321Movies UK** | v5 | 321movies.co.uk | Movies and series from a TMDB catalog | en, hi |
+| **321Movies UK** | v6 | 321movies.xyz | Movies and series from a TMDB catalog | en, hi |
 | **Bingr** 🆕 | v1 | bingr.one | Trending, Popular, Top Rated, Action, Horror, Anime, Hindi rows; all of its servers: Prism multi-audio (Hindi, Telugu, Tamil, English, French…) up to 1080p, Edge, Nimbus, Citadel (Hindi/Tamil/Telugu/Kannada dubs); subtitles in up to 20 languages | hi, en, ta, te, kn +more |
 | **CineHD** | v12 | cinehd.vc | Movies and series, many servers per title, Hindi servers | en |
 | **CineJoy** | v7 | cinejoy.pk | Movies and series with Netflix and Prime rows | en |

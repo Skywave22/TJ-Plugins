@@ -2,6 +2,13 @@
 
 Release notes for TJ-Plugins, newest first. The plugin list and install steps are in the [README](README.md).
 
+### 🔧 Fixed — 2026-11-13 (2)
+
+| Plugin | Change |
+|---|---|
+| **321Movies UK** v6 | **Works again on its new address** — 321movies.co.uk now only redirects to **321movies.xyz**, and the site's player API (`/api/player/vixsrc-playlist`) answers there again (Inception: 6 HLS sources, Cascade 1080p playable). Tested: Trending 7 rows × 20, search, load and streams all pass. |
+| **All-in-one** | Rebuilt with 321Movies UK v6. |
+
 ### 🗑️ Removed — 2026-11-13
 
 | Plugin | Change |
