@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 29,
+    "version": 30,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -465,6 +465,25 @@
       "TvSeries"
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.netmirror.skystream.sky"
+  },
+  {
+    "packageName": "com.nxsha.skystream",
+    "name": "Nxsha",
+    "version": 1,
+    "baseUrl": "https://nxsha.space",
+    "description": "Nxsha — movies, TV series and anime from nxsha.space: its own home rows (trending, country top 10, latest, top rated, genre and Netflix rows) and search, with the site's multi-server links (Nitro, Citadel, Prism, HubCloud, 4K-Hub, mahalala and more) in every audio track they offer, each link checked before it is shown.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.nxsha.skystream.sky"
   },
   {
     "packageName": "com.pikahd.skystream",
