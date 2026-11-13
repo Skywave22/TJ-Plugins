@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 30,
+    "version": 31,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -716,5 +716,26 @@
       "Anime"
     ],
     "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.zxcstream.skystream.sky"
+  },
+  {
+    "packageName": "com.zenix.skystream",
+    "name": "Zenix",
+    "version": 1,
+    "baseUrl": "https://zenix.website",
+    "description": "Zenix — movies and web series from zenix.website: its own home rows (Top Rated, Top 10 on Netflix, Popular on Hotstar and Prime Video, Trending Now, New Releases) and search, with the site player's Orion links in every audio track it offers (Original, Hindi, Tamil, Telugu, French, Spanish… up to 1080p), each link checked before it is shown.",
+    "authors": [
+      "TJ-Plugins"
+    ],
+    "languages": [
+      "en",
+      "hi",
+      "ta",
+      "te"
+    ],
+    "categories": [
+      "Movie",
+      "TvSeries"
+    ],
+    "url": "https://raw.githubusercontent.com/Skywave22/TJ-Plugins/main/dist/com.zenix.skystream.sky"
   }
 ]
