@@ -480,6 +480,10 @@
 
     var SERVER_PREFERENCE = ['fsl', 'server1', 'fsl2', 'pixel'];
 
+    // How many link-workers answered "confirmed dead" (empty tokens) during the
+    // current loadStreams call — used only to word the error message correctly.
+    var deadWorkerHits = 0;
+
     // Fetch worker tokens once, shared by both resolvers.
     // Throws Error('DEAD') when the worker confirms the link is gone (empty tokens).
     async function fetchWorkerTokens(workerUrl) {
@@ -756,7 +760,8 @@
         var ctx;
         try {
             ctx = await fetchWorkerTokens(workerUrl);
-        } catch (_) {
+        } catch (e) {
+            if (e && e.dead) deadWorkerHits++;
             return null;
         }
         if (!ctx) return null;
@@ -788,7 +793,7 @@
                 var got = await resolveWorker(target.workerUrl, target.quality, target.size, false, target.lang);
                 if (got.length) return got;
             } catch (e) {
-                if (e && e.dead) return []; // confirmed dead — stop retrying
+                if (e && e.dead) { deadWorkerHits++; return []; } // confirmed dead — stop retrying
             }
             if (tries < 2) await sleep(350);
         }
@@ -1191,6 +1196,7 @@
             // Hindi (and Hindi dual-audio) first — it becomes the default server
             targets = sortTargetsByPreference(targets);
 
+            deadWorkerHits = 0;
             var streams = [];
             if (bulkMode) {
                 // "All Episodes": one server per episode; keep results INDEXED so the
@@ -1227,6 +1233,12 @@
             });
 
             if (!unique.length) {
+                if (deadWorkerHits >= targets.length) {
+                    // Every link on the page is confirmed gone by HiCine's own link
+                    // worker (empty token list) — this is the site's outage, not ours.
+                    return cb({ success: false, errorCode: 'NO_STREAMS',
+                                message: 'HiCine\'s own file servers are offline for this title — its link worker returns no files, so no player can play it right now. Try again later or use another provider.' });
+                }
                 return cb({ success: false, errorCode: 'NO_STREAMS',
                             message: 'HiCine servers did not respond (links may be dead or rate-limited) — please retry.' });
             }
