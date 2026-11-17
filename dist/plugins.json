@@ -21,7 +21,7 @@
   {
     "packageName": "com.allinone.tjplugins",
     "name": "All-in-one",
-    "version": 31,
+    "version": 32,
     "baseUrl": "https://github.com/Skywave22/TJ-Plugins",
     "description": "Every TJ-Plugins source in one: merged home rows, one search across 23 sites, and every working link for a title collected from all sites that have it (movies, series, Hindi dubbed, anime, K-drama, Hindi serials).",
     "authors": [
@@ -229,7 +229,7 @@
   {
     "packageName": "com.hicine.skystream",
     "name": "HiCine",
-    "version": 12,
+    "version": 13,
     "baseUrl": "https://api.hicine.sbs",
     "domains": [
       {
